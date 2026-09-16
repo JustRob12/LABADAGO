@@ -58,9 +58,13 @@ create table if not exists public.laundry_shops (
   total_reviews int default 0,
   washer_count int default 6,
   dryer_count int default 6,
+  images text[] default '{}',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Ensure images column exists if table was created previously
+alter table public.laundry_shops add column if not exists images text[] default '{}';
 
 create index if not exists idx_shops_owner on public.laundry_shops(owner_id);
 create index if not exists idx_shops_location on public.laundry_shops(latitude, longitude);

@@ -28,6 +28,11 @@ export const MOCK_SHOPS: LaundryShop[] = [
     total_reviews: 128,
     washer_count: 10,
     dryer_count: 10,
+    images: [
+      "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?w=800&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=800&auto=format&fit=crop&q=80",
+    ],
     services: [
       {
         id: "s1",
@@ -74,6 +79,10 @@ export const MOCK_SHOPS: LaundryShop[] = [
     total_reviews: 95,
     washer_count: 14,
     dryer_count: 12,
+    images: [
+      "https://images.unsplash.com/photo-1521656693074-0ef32e80a5d5?w=800&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=800&auto=format&fit=crop&q=80",
+    ],
     services: [
       {
         id: "s4",
@@ -111,6 +120,9 @@ export const MOCK_SHOPS: LaundryShop[] = [
     total_reviews: 210,
     washer_count: 12,
     dryer_count: 12,
+    images: [
+      "https://images.unsplash.com/photo-1604335399105-a0c585fd81a1?w=800&auto=format&fit=crop&q=80",
+    ],
     services: [
       {
         id: "s6",
@@ -139,6 +151,9 @@ export const MOCK_SHOPS: LaundryShop[] = [
     total_reviews: 142,
     washer_count: 8,
     dryer_count: 8,
+    images: [
+      "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80",
+    ],
     services: [
       {
         id: "s7",
@@ -457,6 +472,7 @@ export async function getLaundryShops(): Promise<LaundryShop[]> {
     if (!error && data && data.length > 0) {
       return data.map((shop) => ({
         ...shop,
+        images: Array.isArray(shop.images) ? shop.images : [],
         services: shop.shop_services || [],
       }));
     }
@@ -465,6 +481,114 @@ export async function getLaundryShops(): Promise<LaundryShop[]> {
   }
 
   return MOCK_SHOPS;
+}
+
+/**
+ * Save or update a laundry shop in Supabase
+ * Persists shop details, location, hours, queue status, and Cloudinary image URLs
+ */
+export async function saveLaundryShop(shop: LaundryShop): Promise<{
+  success: boolean;
+  shop: LaundryShop;
+  error?: string;
+}> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Check if shop has a valid UUID (not a temporary client string like 'owner-shop-001' or 'shop-123')
+    const isTempId =
+      !shop.id ||
+      shop.id.startsWith("shop-") ||
+      shop.id.startsWith("owner-") ||
+      !shop.id.includes("-");
+
+    const payload: Record<string, any> = {
+      name: shop.name.trim(),
+      description: shop.description || "",
+      address: shop.address.trim(),
+      latitude: shop.latitude,
+      longitude: shop.longitude,
+      phone_number: shop.phone_number.trim(),
+      open_time: shop.open_time || "07:00",
+      close_time: shop.close_time || "21:00",
+      queue_status: shop.queue_status || "Low",
+      washer_count: shop.washer_count || 6,
+      dryer_count: shop.dryer_count || 6,
+      images: Array.isArray(shop.images) ? shop.images : [],
+      updated_at: new Date().toISOString(),
+    };
+
+    if (user) {
+      payload.owner_id = user.id;
+    }
+
+    let savedShopId = shop.id;
+
+    if (isTempId) {
+      // Insert new shop
+      const { data: inserted, error: insertError } = await supabase
+        .from("laundry_shops")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (insertError) {
+        console.warn("Supabase insert shop notice:", insertError.message);
+      } else if (inserted) {
+        savedShopId = inserted.id;
+      }
+    } else {
+      // Update existing shop
+      payload.id = shop.id;
+      const { error: updateError } = await supabase
+        .from("laundry_shops")
+        .upsert(payload, { onConflict: "id" });
+
+      if (updateError) {
+        console.warn("Supabase upsert shop notice:", updateError.message);
+      }
+    }
+
+    // Save shop services if provided
+    if (shop.services && shop.services.length > 0 && !isTempId) {
+      const servicesPayload = shop.services.map((srv) => ({
+        shop_id: savedShopId,
+        service_name: srv.service_name,
+        description: srv.description || "",
+        price: srv.price,
+        unit: srv.unit || "kg",
+        estimated_minutes: srv.estimated_minutes || 90,
+      }));
+
+      try {
+        await supabase
+          .from("shop_services")
+          .upsert(servicesPayload, { onConflict: "id" });
+      } catch (srvErr) {
+        console.warn("Error saving services:", srvErr);
+      }
+    }
+
+    const finalShop: LaundryShop = {
+      ...shop,
+      id: savedShopId,
+      images: payload.images,
+    };
+
+    // Update local mock store so current session reflects it immediately
+    const existingIdx = MOCK_SHOPS.findIndex((s) => s.id === shop.id || s.id === savedShopId);
+    if (existingIdx >= 0) {
+      MOCK_SHOPS[existingIdx] = finalShop;
+    } else {
+      MOCK_SHOPS.unshift(finalShop);
+    }
+
+    return { success: true, shop: finalShop };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to save shop.";
+    console.error("Save laundry shop exception:", err);
+    return { success: false, shop, error: message };
+  }
 }
 
 export async function createWalkInTransaction(

@@ -91,6 +91,7 @@ export interface LaundryShop {
   total_reviews: number;
   washer_count: number;
   dryer_count: number;
+  images?: string[];
   services?: ShopService[];
   distance_km?: number;
 }

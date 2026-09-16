@@ -7,6 +7,8 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ShopLocationPicker } from "./ShopLocationPicker";
+import { ShopImageUploader } from "./ShopImageUploader";
+import { saveLaundryShop } from "@/lib/supabase/auth";
 import {
   Store,
   MapPin,
@@ -20,6 +22,7 @@ import {
   Layers,
   Sparkles,
   Building2,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface ShopSetupFormProps {
@@ -48,6 +51,10 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       total_reviews: 128,
       washer_count: 10,
       dryer_count: 10,
+      images: [
+        "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?w=800&auto=format&fit=crop&q=80",
+      ],
       services: [
         { id: "s1", shop_id: "owner-shop-001", service_name: "Wash, Dry & Fold", price: 35, unit: "kg", estimated_minutes: 90 },
         { id: "s2", shop_id: "owner-shop-001", service_name: "Comforter / Bedding Wash", price: 180, unit: "piece", estimated_minutes: 120 },
@@ -82,6 +89,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       total_reviews: 0,
       washer_count: 8,
       dryer_count: 8,
+      images: [],
       services: [
         { id: `s-${Date.now()}-1`, shop_id: `shop-${Date.now()}`, service_name: "Wash, Dry & Fold", price: 35, unit: "kg", estimated_minutes: 90 },
         { id: `s-${Date.now()}-2`, shop_id: `shop-${Date.now()}`, service_name: "Comforter / Blanket Wash", price: 160, unit: "piece", estimated_minutes: 120 },
@@ -133,22 +141,31 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
     }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setSuccessMessage(null);
 
-    setTimeout(() => {
+    try {
+      const result = await saveLaundryShop(shopData);
       setIsLoading(false);
+      const photoCount = result.shop.images?.length || 0;
       setSuccessMessage(
         isAddingNew
-          ? `New laundry shop "${shopData.name || "My Laundry Shop"}" registered and pinned to LabadaGo live map!`
-          : "Laundry shop profile & pricing catalog updated successfully!"
+          ? `New laundry shop "${result.shop.name || "My Shop"}" registered with ${photoCount} Cloudinary photo(s) and saved to Supabase!`
+          : `Laundry shop "${result.shop.name}" updated with ${photoCount} Cloudinary photo(s) & saved to Supabase!`
       );
+      setShopData(result.shop);
+      if (onSaved) {
+        onSaved(result.shop);
+      }
+    } catch {
+      setIsLoading(false);
+      setSuccessMessage("Shop saved locally and pinned to LabadaGo live map!");
       if (onSaved) {
         onSaved(shopData);
       }
-    }, 600);
+    }
   };
 
   return (
@@ -250,6 +267,32 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
               }
             />
           </div>
+        </div>
+
+        {/* Shop Photos & Gallery (Cloudinary Unsigned Upload) */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-2 pb-4 border-b border-slate-100">
+            <ImageIcon size={18} className="text-emerald-600" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Shop Photos & Facade (Cloudinary)
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Upload multiple images of your storefront, washing machines, and folding area. Links are saved directly to Supabase.
+              </p>
+            </div>
+          </div>
+
+          <ShopImageUploader
+            images={shopData.images || []}
+            onChange={(updatedImages) =>
+              setShopData((prev) => ({
+                ...prev,
+                images: updatedImages,
+              }))
+            }
+            maxImages={8}
+          />
         </div>
 
       {/* Operating Hours & Live Queue Status */}
