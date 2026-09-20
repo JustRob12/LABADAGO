@@ -387,6 +387,10 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 processCodeOrPayload(decodedText);
               }}
               onClose={() => setIsCameraActive(false)}
+              incomingPasses={incomingWalkIns.map((t) => ({
+                tracking_number: t.tracking_number,
+                customer_name: t.customer_name,
+              }))}
             />
           </div>
         )}

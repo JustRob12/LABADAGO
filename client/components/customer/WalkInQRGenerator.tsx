@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
 import { LaundryShop, ShopService, UserProfile, WalkInQRPayload, LaundryTransaction } from "@/types/auth";
 import { createWalkInTransaction } from "@/lib/supabase/auth";
@@ -108,9 +109,10 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
         };
       }
 
-      const qrDataUrl = await QRCode.toDataURL(JSON.stringify(payloadToUse), {
-        width: 320,
+      const qrDataUrl = await QRCode.toDataURL(payloadToUse.trackingNumber, {
+        width: 360,
         margin: 2,
+        errorCorrectionLevel: "H",
         color: {
           dark: "#0F172A",
           light: "#FFFFFF",
@@ -170,10 +172,11 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     };
 
     try {
-      // 1. Generate high-resolution QR code data URL
-      const qrDataUrl = await QRCode.toDataURL(JSON.stringify(payload), {
-        width: 320,
+      // 1. Generate high-resolution, fast-scanning QR code (encodes tracking number with Level H 30% error recovery)
+      const qrDataUrl = await QRCode.toDataURL(payload.trackingNumber, {
+        width: 360,
         margin: 2,
+        errorCorrectionLevel: "H",
         color: {
           dark: "#0F172A",
           light: "#FFFFFF",
@@ -249,7 +252,29 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
         )}
       </div>
 
-      {shops.length === 0 ? (
+      {!user || user.id === "guest-customer" ? (
+        <div className="py-12 px-4 text-center max-w-md mx-auto space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+            <User size={26} />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">Account Required</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Guest access is not permitted. Please sign in to your registered account or create an account to generate a scannable Walk-In Fast Pass.
+          </p>
+          <div className="flex items-center justify-center gap-2.5 pt-2">
+            <Link href="/login?redirect=/customer?tab=qr">
+              <Button variant="primary" size="md" className="text-xs">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/register">
+              <Button variant="success" size="md" className="text-xs">
+                Create Account
+              </Button>
+            </Link>
+          </div>
+        </div>
+      ) : shops.length === 0 ? (
         <div className="py-12 px-4 text-center max-w-md mx-auto space-y-3">
           <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
             <Store size={22} />

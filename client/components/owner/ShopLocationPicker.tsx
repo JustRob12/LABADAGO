@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { LocateFixed, MapPin, Navigation, Compass, AlertCircle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { patchLeafletPos } from "@/lib/utils/leafletPatch";
 
 interface ShopLocationPickerProps {
   latitude: number;
@@ -43,9 +44,16 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
         const L = (await import("leaflet")).default;
         if (!isMounted || !mapContainerRef.current) return;
 
+        patchLeafletPos(L);
+
         // Clean up previous map if exists
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
+          try {
+            mapInstanceRef.current.stop();
+          } catch (_) {}
+          try {
+            mapInstanceRef.current.remove();
+          } catch (_) {}
           mapInstanceRef.current = null;
         }
 
@@ -131,7 +139,12 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
         markerRef.current = null;
       }
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.stop();
+        } catch (_) {}
+        try {
+          mapInstanceRef.current.remove();
+        } catch (_) {}
         mapInstanceRef.current = null;
       }
     };
@@ -139,9 +152,11 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
 
   // 2. Sync marker position when external coords change
   useEffect(() => {
-    if (markerRef.current && mapInstanceRef.current && latitude && longitude) {
+    if (markerRef.current && mapInstanceRef.current && mapInstanceRef.current._container && latitude && longitude) {
       markerRef.current.setLatLng([latitude, longitude]);
-      mapInstanceRef.current.setView([latitude, longitude], 15, { animate: false });
+      try {
+        mapInstanceRef.current.setView([latitude, longitude], 15, { animate: false });
+      } catch (_) {}
     }
   }, [latitude, longitude]);
 
@@ -166,9 +181,11 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
         setGpsStatus(`GPS detected with ±${accuracy}m accuracy at ${detectedLat}°, ${detectedLng}°`);
         setIsLocating(false);
 
-        if (mapInstanceRef.current && markerRef.current) {
+        if (mapInstanceRef.current && mapInstanceRef.current._container && markerRef.current) {
           markerRef.current.setLatLng([detectedLat, detectedLng]);
-          mapInstanceRef.current.setView([detectedLat, detectedLng], 16, { animate: false });
+          try {
+            mapInstanceRef.current.setView([detectedLat, detectedLng], 16, { animate: false });
+          } catch (_) {}
         }
       },
       (err) => {

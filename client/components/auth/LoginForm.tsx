@@ -1,16 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signInUser } from "@/lib/supabase/auth";
+import { UserRole } from "@/types/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 
-export const LoginForm: React.FC = () => {
+function LoginFormInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get("redirect");
+  const messageParam = searchParams.get("message");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -52,10 +56,16 @@ export const LoginForm: React.FC = () => {
         return;
       }
 
-      setSuccessMessage("Login successful! Redirecting to dashboard...");
+      setSuccessMessage("Login successful! Redirecting...");
       setTimeout(() => {
-        router.push("/dashboard");
-      }, 800);
+        if (redirectParam) {
+          router.push(redirectParam);
+        } else if (result.user?.role === UserRole.OWNER) {
+          router.push("/owner");
+        } else {
+          router.push("/customer");
+        }
+      }, 700);
     } catch {
       setErrorMessage("Failed to sign in. Please try again.");
       setIsLoading(false);
@@ -64,6 +74,9 @@ export const LoginForm: React.FC = () => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {messageParam && !errorMessage && !successMessage && (
+        <Alert type="info" message={messageParam} />
+      )}
       {errorMessage && <Alert type="error" message={errorMessage} />}
       {successMessage && <Alert type="success" message={successMessage} />}
 
@@ -133,5 +146,13 @@ export const LoginForm: React.FC = () => {
         </p>
       </div>
     </form>
+  );
+}
+
+export const LoginForm: React.FC = () => {
+  return (
+    <Suspense fallback={<div className="p-4 text-center text-xs text-slate-400">Loading login...</div>}>
+      <LoginFormInner />
+    </Suspense>
   );
 };

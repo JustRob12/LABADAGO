@@ -55,6 +55,11 @@ function OwnerContent() {
           getLaundryTransactions(),
         ]);
 
+        if (!profile) {
+          router.push("/login?redirect=/owner&message=" + encodeURIComponent("Please sign in to your shop owner account."));
+          return;
+        }
+
         setUser(profile);
         setShops(shopsList);
         if (shopsList.length > 0) {

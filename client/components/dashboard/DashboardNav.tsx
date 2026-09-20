@@ -30,7 +30,7 @@ const DashboardNavFallback: React.FC<DashboardNavProps> = () => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <BrandLogo href="/customer" />
+        <BrandLogo href="/" />
         <div className="w-8 h-8 rounded-full bg-slate-100 animate-pulse" />
       </div>
     </header>

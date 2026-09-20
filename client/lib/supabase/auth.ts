@@ -199,16 +199,8 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     }
 
     if (authError || !user) {
-      // Return clean guest profile for unauthenticated browsing
-      return {
-        id: "guest-customer",
-        email: null,
-        full_name: "Guest Customer",
-        date_of_birth: "",
-        phone_number: "",
-        gender: "Prefer not to say",
-        role: savedRole !== null ? savedRole : UserRole.COSTUMER,
-      };
+      // Do not allow guest browsing on authenticated pages - return null so auth guards require an account
+      return null;
     }
 
     // Try fetching from public.profiles table
@@ -435,7 +427,7 @@ export async function createWalkInTransaction(
   try {
     await supabase.from("transactions").insert({
       tracking_number: newTx.tracking_number,
-      customer_id: newTx.customer_id === "guest-costumer-001" ? null : newTx.customer_id,
+      customer_id: newTx.customer_id,
       shop_id: newTx.shop_id,
       customer_name: newTx.customer_name,
       customer_phone: newTx.customer_phone,
@@ -463,7 +455,7 @@ export async function getLaundryTransactions(
   try {
     let query = supabase.from("transactions").select("*").order("created_at", { ascending: false });
 
-    if (customerId && customerId !== "guest-costumer-001") {
+    if (customerId) {
       query = query.eq("customer_id", customerId);
     }
     if (shopId) {

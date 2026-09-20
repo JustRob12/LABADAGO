@@ -11,7 +11,7 @@ import { ShopCard } from "@/components/customer/ShopCard";
 import { WalkInQRGenerator } from "@/components/customer/WalkInQRGenerator";
 import { CustomerOrderTracker } from "@/components/customer/CustomerOrderTracker";
 import { Button } from "@/components/ui/Button";
-import { MapPin, QrCode, Package, Loader2, Sparkles, Store, Target, SlidersHorizontal } from "lucide-react";
+import { MapPin, QrCode, Package, Loader2, Sparkles, Store, Target, SlidersHorizontal, User } from "lucide-react";
 
 function CustomerContent() {
   const router = useRouter();
@@ -51,6 +51,11 @@ function CustomerContent() {
           getLaundryShops(),
           getLaundryTransactions(),
         ]);
+
+        if (!profile) {
+          router.push("/login?redirect=/customer&message=" + encodeURIComponent("Please sign in or create an account to access the Customer Portal."));
+          return;
+        }
 
         setUser(profile);
         setShops(shopsList);

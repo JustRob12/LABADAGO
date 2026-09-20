@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 interface QRCameraScannerProps {
   onScanSuccess: (decodedText: string) => void;
   onClose: () => void;
+  incomingPasses?: Array<{ tracking_number: string; customer_name: string }>;
 }
 
 // Play pleasant register confirmation beep
@@ -37,6 +38,7 @@ function playScanBeep() {
 export const QRCameraScanner: React.FC<QRCameraScannerProps> = ({
   onScanSuccess,
   onClose,
+  incomingPasses = [],
 }) => {
   const scannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,52 +59,71 @@ export const QRCameraScanner: React.FC<QRCameraScannerProps> = ({
         setErrorMessage(null);
 
         // Dynamically import html5-qrcode on client only
-        const { Html5Qrcode } = await import("html5-qrcode");
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         if (!isMounted) return;
 
-        html5QrCode = new Html5Qrcode("qr-camera-feed");
+        // Initialize dedicated QR engine with hardware acceleration where supported
+        html5QrCode = new Html5Qrcode("qr-camera-feed", {
+          verbose: false,
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true, // Native browser C++ hardware decoder
+          },
+        });
         scannerRef.current = html5QrCode;
 
-        // Get camera devices
-        const devices = await Html5Qrcode.getCameras();
+        // Query available camera devices safely
+        const devices = await Html5Qrcode.getCameras().catch(() => []);
         if (devices && devices.length > 0) {
           setCameras(devices);
         }
 
-        // Camera config
-        const cameraIdOrConfig =
-          devices && devices.length > 0
-            ? devices[currentCameraIndex % devices.length].id
-            : { facingMode: "environment" };
+        // Priority: Auto-select rear environment camera on phones/tablets if available
+        let cameraIdOrConfig: any = { facingMode: { ideal: "environment" } };
+        if (devices && devices.length > 0) {
+          const rearCam = devices.find(
+            (d) =>
+              d.label.toLowerCase().includes("back") ||
+              d.label.toLowerCase().includes("rear") ||
+              d.label.toLowerCase().includes("environment")
+          );
+          if (currentCameraIndex === 0 && rearCam) {
+            cameraIdOrConfig = rearCam.id;
+          } else {
+            cameraIdOrConfig = devices[currentCameraIndex % devices.length].id;
+          }
+        }
 
         await html5QrCode.start(
           cameraIdOrConfig,
           {
-            fps: 15,
+            fps: 20,
             qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              // Generous 90% scanning area: detects QR codes anywhere in frame
               const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-              const edgeSize = Math.max(200, Math.floor(minEdge * 0.72));
+              const edgeSize = Math.max(220, Math.floor(minEdge * 0.9));
               return { width: edgeSize, height: edgeSize };
             },
-            aspectRatio: 1.0,
           },
           (decodedText: string) => {
             if (!isMounted || hasScanned) return;
             setHasScanned(true);
             playScanBeep();
 
-            // Stop scanner cleanly then trigger success
-            html5QrCode
-              .stop()
-              .then(() => {
-                onScanSuccess(decodedText);
-              })
-              .catch(() => {
-                onScanSuccess(decodedText);
-              });
+            // Trigger success callback immediately
+            onScanSuccess(decodedText);
+
+            // Cleanly stop in background
+            try {
+              if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(() => {});
+              }
+            } catch {
+              // ignore
+            }
           },
           () => {
-            // Frame parse miss (normal during live stream)
+            // Frame parse miss
           }
         );
 
@@ -115,7 +136,7 @@ export const QRCameraScanner: React.FC<QRCameraScannerProps> = ({
           setIsLoading(false);
           const msg =
             err?.message ||
-            "Unable to access camera. Please allow camera permissions in your browser or use the code input below.";
+            "Unable to access camera. Please allow camera permissions in your browser or select an incoming pass below.";
           setErrorMessage(msg);
         }
       }
@@ -123,8 +144,37 @@ export const QRCameraScanner: React.FC<QRCameraScannerProps> = ({
 
     startScanner();
 
+    // Support pasting QR code image directly from clipboard
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            try {
+              setIsLoading(true);
+              const { Html5Qrcode } = await import("html5-qrcode");
+              const fileScanner = new Html5Qrcode("qr-file-scan-temp");
+              const result = await fileScanner.scanFile(file, true);
+              playScanBeep();
+              setHasScanned(true);
+              onScanSuccess(result);
+            } catch {
+              setErrorMessage("Pasted image did not contain a recognizable QR code.");
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("paste", handlePaste);
       if (html5QrCode) {
         try {
           if (html5QrCode.isScanning) {
@@ -250,6 +300,37 @@ export const QRCameraScanner: React.FC<QRCameraScannerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Quick Scan Incoming Pass Chips (for instant 1-tap verification) */}
+      {incomingPasses.length > 0 && (
+        <div className="mt-3.5 p-3 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-300">
+            <span className="font-semibold text-emerald-400 flex items-center gap-1">
+              <span>⚡</span> Quick Tap to Scan Incoming Pass:
+            </span>
+            <span className="text-slate-400">{incomingPasses.length} pending</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            {incomingPasses.map((pass) => (
+              <button
+                key={pass.tracking_number}
+                type="button"
+                onClick={() => {
+                  playScanBeep();
+                  setHasScanned(true);
+                  onScanSuccess(pass.tracking_number);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all cursor-pointer"
+                title={`Instantly verify and intake ${pass.tracking_number}`}
+              >
+                <span>✓</span>
+                <span>{pass.tracking_number}</span>
+                <span className="font-sans font-normal text-[11px] text-slate-400">({pass.customer_name})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bottom Camera Toolbar */}
       <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">

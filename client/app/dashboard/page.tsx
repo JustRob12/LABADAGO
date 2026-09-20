@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getCurrentUserProfile, switchUserRole } from "@/lib/supabase/auth";
 import { UserProfile, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 
 function DashboardContent() {
+  const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,6 +32,10 @@ function DashboardContent() {
       setIsLoading(true);
       try {
         const profile = await getCurrentUserProfile();
+        if (!profile) {
+          router.push("/login?redirect=/dashboard&message=" + encodeURIComponent("Please sign in to view your profile and account dashboard."));
+          return;
+        }
         setUser(profile);
       } catch (err) {
         console.error("Failed to load user profile:", err);
@@ -39,7 +45,7 @@ function DashboardContent() {
     }
 
     loadUser();
-  }, []);
+  }, [router]);
 
   const isOwner = user?.role === UserRole.OWNER;
 

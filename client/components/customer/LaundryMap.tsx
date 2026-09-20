@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { LaundryShop } from "@/types/auth";
 import { Navigation, Compass, LocateFixed, Loader2, Plus, Minus, X } from "lucide-react";
+import { patchLeafletPos } from "@/lib/utils/leafletPatch";
 
 interface LaundryMapProps {
   shops: LaundryShop[];
@@ -52,6 +53,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   const leafletModuleRef = useRef<any>(null);
   const lastFittedShopIdRef = useRef<string | null>(null);
   const lastRadiusRef = useRef<number | null>(null);
+  const resizeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [liveLocation, setLiveLocation] = useState<[number, number] | null>(
     initialUserLocation || [14.6500, 121.0500] // Default Metro Manila reference
@@ -100,11 +102,19 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         const L = (await import("leaflet")).default;
         if (!isMounted || !mapContainerRef.current) return;
 
+        // Apply crash guard against _leaflet_pos access on detached/animating elements
+        patchLeafletPos(L);
+
         leafletModuleRef.current = L;
 
         // Cleanup existing map if any
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
+          try {
+            mapInstanceRef.current.stop();
+          } catch (_) {}
+          try {
+            mapInstanceRef.current.remove();
+          } catch (_) {}
           mapInstanceRef.current = null;
         }
 
@@ -137,9 +147,14 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         mapInstanceRef.current = map;
 
         // Invalidate size to ensure dragging bounds and tiles calculate properly
-        setTimeout(() => {
-          if (map) {
-            map.invalidateSize();
+        if (resizeTimerRef.current) {
+          clearTimeout(resizeTimerRef.current);
+        }
+        resizeTimerRef.current = setTimeout(() => {
+          if (isMounted && mapInstanceRef.current && mapInstanceRef.current._container) {
+            try {
+              mapInstanceRef.current.invalidateSize();
+            } catch (_) {}
           }
         }, 200);
       } catch (err) {
@@ -151,24 +166,41 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
     return () => {
       isMounted = false;
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
       if (routeLayerGroupRef.current) {
-        routeLayerGroupRef.current.clearLayers();
+        try {
+          routeLayerGroupRef.current.clearLayers();
+        } catch (_) {}
         routeLayerGroupRef.current = null;
       }
       if (shopsLayerGroupRef.current) {
-        shopsLayerGroupRef.current.clearLayers();
+        try {
+          shopsLayerGroupRef.current.clearLayers();
+        } catch (_) {}
         shopsLayerGroupRef.current = null;
       }
       if (userLayerGroupRef.current) {
-        userLayerGroupRef.current.clearLayers();
+        try {
+          userLayerGroupRef.current.clearLayers();
+        } catch (_) {}
         userLayerGroupRef.current = null;
       }
       if (radiusLayerGroupRef.current) {
-        radiusLayerGroupRef.current.clearLayers();
+        try {
+          radiusLayerGroupRef.current.clearLayers();
+        } catch (_) {}
         radiusLayerGroupRef.current = null;
       }
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.stop();
+        } catch (_) {}
+        try {
+          mapInstanceRef.current.remove();
+        } catch (_) {}
         mapInstanceRef.current = null;
       }
     };
@@ -177,7 +209,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   // 2. Render / Update Customer Live Location Marker
   useEffect(() => {
     const L = leafletModuleRef.current;
-    if (!L || !mapInstanceRef.current || !userLayerGroupRef.current || !liveLocation) return;
+    if (!L || !mapInstanceRef.current || !mapInstanceRef.current._container || !userLayerGroupRef.current || !liveLocation) return;
 
     userLayerGroupRef.current.clearLayers();
 
@@ -208,7 +240,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   // 3. Render / Update Shop Markers
   useEffect(() => {
     const L = leafletModuleRef.current;
-    if (!L || !mapInstanceRef.current || !shopsLayerGroupRef.current) return;
+    if (!L || !mapInstanceRef.current || !mapInstanceRef.current._container || !shopsLayerGroupRef.current) return;
 
     shopsLayerGroupRef.current.clearLayers();
 
@@ -278,9 +310,13 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     if (!liveLocation) {
       if (selectedShop.id !== lastFittedShopIdRef.current) {
         lastFittedShopIdRef.current = selectedShop.id;
-        mapInstanceRef.current.setView([selectedShop.latitude, selectedShop.longitude], 14, {
-          animate: true,
-        });
+        if (mapInstanceRef.current && mapInstanceRef.current._container) {
+          try {
+            mapInstanceRef.current.setView([selectedShop.latitude, selectedShop.longitude], 14, {
+              animate: false,
+            });
+          } catch (_) {}
+        }
       }
       return;
     }
@@ -343,7 +379,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
     // Draw straight-line fallback immediately while OSRM calculates
     const drawStraightFallback = () => {
-      if (!routeLayerGroupRef.current || !mapInstanceRef.current) return;
+      if (!routeLayerGroupRef.current || !mapInstanceRef.current || !mapInstanceRef.current._container) return;
       routeLayerGroupRef.current.clearLayers();
 
       const fallbackPolyline = L.polyline(
@@ -368,11 +404,13 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       if (selectedShop.id !== lastFittedShopIdRef.current) {
         lastFittedShopIdRef.current = selectedShop.id;
         try {
-          mapInstanceRef.current.fitBounds(fallbackPolyline.getBounds(), {
-            padding: [60, 60],
-            maxZoom: 15,
-            animate: true,
-          });
+          if (mapInstanceRef.current && mapInstanceRef.current._container) {
+            mapInstanceRef.current.fitBounds(fallbackPolyline.getBounds(), {
+              padding: [60, 60],
+              maxZoom: 15,
+              animate: false,
+            });
+          }
         } catch (err) {
           console.warn("Could not fitBounds:", err);
         }
@@ -390,7 +428,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         return res.json();
       })
       .then((data) => {
-        if (isCancelled || !routeLayerGroupRef.current || !mapInstanceRef.current) return;
+        if (isCancelled || !routeLayerGroupRef.current || !mapInstanceRef.current || !mapInstanceRef.current._container) return;
 
         if (data.code === "Ok" && data.routes && data.routes.length > 0) {
           const route = data.routes[0];
@@ -438,11 +476,13 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           if (selectedShop.id !== lastFittedShopIdRef.current) {
             lastFittedShopIdRef.current = selectedShop.id;
             try {
-              mapInstanceRef.current.fitBounds(roadPolyline.getBounds(), {
-                padding: [60, 60],
-                maxZoom: 16,
-                animate: true,
-              });
+              if (mapInstanceRef.current && mapInstanceRef.current._container) {
+                mapInstanceRef.current.fitBounds(roadPolyline.getBounds(), {
+                  padding: [60, 60],
+                  maxZoom: 16,
+                  animate: false,
+                });
+              }
             } catch (err) {
               console.warn("Could not fitBounds to road:", err);
             }
@@ -464,7 +504,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   // 5. Render / Update Facebook Marketplace Style Radius Circle
   useEffect(() => {
     const L = leafletModuleRef.current;
-    if (!L || !mapInstanceRef.current || !radiusLayerGroupRef.current) return;
+    if (!L || !mapInstanceRef.current || !mapInstanceRef.current._container || !radiusLayerGroupRef.current) return;
 
     radiusLayerGroupRef.current.clearLayers();
 
@@ -495,13 +535,13 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     radiusLayerGroupRef.current.addLayer(outerRing);
 
     // Fit map bounds when radius is explicitly changed and no shop is currently selected
-    if (radiusKm !== lastRadiusRef.current && mapInstanceRef.current && !selectedShop) {
+    if (radiusKm !== lastRadiusRef.current && mapInstanceRef.current && mapInstanceRef.current._container && !selectedShop) {
       lastRadiusRef.current = radiusKm;
       try {
         mapInstanceRef.current.fitBounds(radiusCircle.getBounds(), {
           padding: [30, 30],
           maxZoom: 15,
-          animate: true,
+          animate: false,
         });
       } catch (err) {
         console.warn("Could not fitBounds to radius circle:", err);
@@ -517,13 +557,17 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   }, [selectedShop]);
 
   const handleZoomIn = () => {
-    if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.zoomIn();
+    if (!mapInstanceRef.current || !mapInstanceRef.current._container) return;
+    try {
+      mapInstanceRef.current.zoomIn();
+    } catch (_) {}
   };
 
   const handleZoomOut = () => {
-    if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.zoomOut();
+    if (!mapInstanceRef.current || !mapInstanceRef.current._container) return;
+    try {
+      mapInstanceRef.current.zoomOut();
+    } catch (_) {}
   };
 
   const handleLocateMe = () => {
@@ -536,8 +580,10 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         setLiveLocation(coords);
         if (onUserLocationDetected) onUserLocationDetected(coords);
 
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView(coords, 14, { animate: false });
+        if (mapInstanceRef.current && mapInstanceRef.current._container) {
+          try {
+            mapInstanceRef.current.setView(coords, 14, { animate: false });
+          } catch (_) {}
         }
         setIsLocating(false);
       },
@@ -550,8 +596,10 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   };
 
   const handleCenterAll = () => {
-    if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.setView([14.5800, 121.0350], 12, { animate: false });
+    if (!mapInstanceRef.current || !mapInstanceRef.current._container) return;
+    try {
+      mapInstanceRef.current.setView([14.5800, 121.0350], 12, { animate: false });
+    } catch (_) {}
   };
 
   return (
