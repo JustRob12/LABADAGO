@@ -61,7 +61,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           <span className="text-emerald-500 ml-0.5">Go</span>
         </div>
         {showSubtitle && (
-          <span className={`text-slate-400 font-medium tracking-wide uppercase ${sizeClasses.subText}`}>
+          <span className={`hidden sm:block text-slate-400 font-medium tracking-wide uppercase ${sizeClasses.subText}`}>
             Fresh • Clean • On-the-Go
           </span>
         )}

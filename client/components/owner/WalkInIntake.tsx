@@ -38,8 +38,13 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   const [scannedTx, setScannedTx] = useState<LaundryTransaction | null>(null);
   const [actualWeight, setActualWeight] = useState<string>("5.0");
   const [selectedPaymentTiming, setSelectedPaymentTiming] = useState<"pay_first" | "pay_on_complete">("pay_on_complete");
+  const [walkInFilter, setWalkInFilter] = useState<"pending" | "all">("pending");
   const [intakeSuccess, setIntakeSuccess] = useState<string | null>(null);
   const [smsNotification, setSmsNotification] = useState<string | null>(null);
+
+  const incomingWalkIns = transactions.filter((t) => t.is_walkin && t.status === "Pending");
+  const allWalkIns = transactions.filter((t) => t.is_walkin);
+  const displayedWalkIns = walkInFilter === "pending" ? incomingWalkIns : allWalkIns;
 
   const weightNum = parseFloat(actualWeight);
   const validWeight = isNaN(weightNum) || weightNum <= 0 ? (scannedTx?.weight_kg || 1) : weightNum;
@@ -229,6 +234,120 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
     <div className="space-y-6">
       {intakeSuccess && <Alert type="success" message={intakeSuccess} />}
       {smsNotification && <Alert type="info" message={smsNotification} />}
+
+      {/* Incoming Walk-In Fast Passes Section */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
+              <QrCode size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                Incoming Walk-In Fast Passes
+                {incomingWalkIns.length > 0 && (
+                  <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full animate-pulse">
+                    {incomingWalkIns.length} Awaiting Intake
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-slate-500">
+                Customers who generated a QR pass for counter drop-off. Tap &quot;Quick Intake &amp; Weigh&quot; to intake with 1 click.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setWalkInFilter("pending")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-all ${
+                walkInFilter === "pending"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Awaiting Scan ({incomingWalkIns.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setWalkInFilter("all")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-all ${
+                walkInFilter === "all"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              All Walk-Ins ({allWalkIns.length})
+            </button>
+          </div>
+        </div>
+
+        {displayedWalkIns.length === 0 ? (
+          <div className="py-6 text-center text-slate-400 text-xs">
+            {walkInFilter === "pending"
+              ? "No pending walk-in passes awaiting counter scan right now."
+              : "No walk-in fast passes have been generated yet."}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {displayedWalkIns.map((tx) => (
+              <div
+                key={tx.id}
+                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-blue-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {tx.tracking_number}
+                    </span>
+                    {tx.status === "Pending" ? (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        Awaiting Scan
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                        {tx.status}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-bold text-slate-900 text-xs">{tx.customer_name}</p>
+                    <p className="text-[11px] text-slate-500">{tx.customer_phone}</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-medium truncate max-w-[140px]">
+                      {tx.service_name}
+                    </span>
+                    <span className="font-bold text-slate-900">
+                      {tx.weight_kg} kg • ₱{tx.total_amount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/60">
+                  <Button
+                    type="button"
+                    variant={tx.status === "Pending" ? "primary" : "outline"}
+                    size="sm"
+                    className="w-full text-xs font-semibold"
+                    leftIcon={tx.status === "Pending" ? <ScanLine size={13} /> : <CheckCircle2 size={13} />}
+                    onClick={() => {
+                      processCodeOrPayload(tx.tracking_number);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    {tx.status === "Pending" ? "Quick Intake & Weigh" : "View / Edit Order"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Counter QR Scanner / Code Entry Tool */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -512,7 +631,14 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 transactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-3 font-mono font-bold text-blue-600">
-                      {tx.tracking_number}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{tx.tracking_number}</span>
+                        {tx.is_walkin && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded w-fit">
+                            Walk-In QR Pass
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3">
                       <p className="font-semibold text-slate-900">{tx.customer_name}</p>

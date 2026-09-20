@@ -377,8 +377,10 @@ function CustomerContent() {
                 user={user}
                 shops={shops}
                 initialShopId={selectedShop?.id}
+                transactions={transactions}
                 onTransactionCreated={refreshTransactions}
                 onReturnToMap={() => handleTabChange("map")}
+                onViewOrderTracker={() => handleTabChange("orders")}
               />
             )}
 
