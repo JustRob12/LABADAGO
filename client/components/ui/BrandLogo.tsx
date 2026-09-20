@@ -6,6 +6,7 @@ interface BrandLogoProps {
   size?: "sm" | "md" | "lg" | "xl";
   showSubtitle?: boolean;
   clickable?: boolean;
+  href?: string;
   className?: string;
 }
 
@@ -13,6 +14,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   size = "md",
   showSubtitle = false,
   clickable = true,
+  href = "/customer",
   className = "",
 }) => {
   const sizeClasses = {
@@ -69,7 +71,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
   if (clickable) {
     return (
-      <Link href="/" className="inline-block transition-opacity hover:opacity-90">
+      <Link href={href} className="inline-block transition-opacity hover:opacity-90">
         {content}
       </Link>
     );

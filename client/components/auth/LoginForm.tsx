@@ -73,7 +73,7 @@ export const LoginForm: React.FC = () => {
         name="email"
         type="email"
         label="Email Address"
-        placeholder="juan.delacruz@example.com"
+        placeholder="your.email@gmail.com"
         value={formData.email}
         onChange={handleChange}
         leftIcon={<Mail size={16} />}

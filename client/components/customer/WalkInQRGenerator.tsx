@@ -19,6 +19,8 @@ import {
   Phone,
   Store,
   RefreshCw,
+  ArrowLeft,
+  MapPin,
 } from "lucide-react";
 
 interface WalkInQRGeneratorProps {
@@ -26,6 +28,7 @@ interface WalkInQRGeneratorProps {
   shops: LaundryShop[];
   initialShopId?: string;
   onTransactionCreated?: () => void;
+  onReturnToMap?: () => void;
 }
 
 export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
@@ -33,6 +36,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   shops,
   initialShopId,
   onTransactionCreated,
+  onReturnToMap,
 }) => {
   const [selectedShopId, setSelectedShopId] = useState<string>(
     initialShopId || (shops.length > 0 ? shops[0].id : "")
@@ -42,15 +46,12 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
 
   const availableServices = activeShop?.services && activeShop.services.length > 0
     ? activeShop.services
-    : [
-        { id: "s1", shop_id: selectedShopId, service_name: "Wash, Dry & Fold", price: 35, unit: "kg", estimated_minutes: 90 },
-        { id: "s2", shop_id: selectedShopId, service_name: "Comforter / Bedding", price: 180, unit: "piece", estimated_minutes: 120 },
-      ];
+    : [];
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>(
-    availableServices[0]?.id || "s1"
+    availableServices[0]?.id || ""
   );
-  const [estimatedWeight, setEstimatedWeight] = useState<number>(5.0);
+  const [estimatedWeight, setEstimatedWeight] = useState<string>("5.0");
   const [specialNotes, setSpecialNotes] = useState<string>("");
 
   const [generatedQRUrl, setGeneratedQRUrl] = useState<string | null>(null);
@@ -68,7 +69,9 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   const activeService =
     availableServices.find((s) => s.id === selectedServiceId) || availableServices[0];
 
-  const estimatedAmount = activeService ? activeService.price * estimatedWeight : 0;
+  const weightNum = parseFloat(estimatedWeight);
+  const validWeight = isNaN(weightNum) ? 0 : weightNum;
+  const estimatedAmount = activeService ? activeService.price * validWeight : 0;
 
   const handleGenerateQR = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,16 +79,18 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     setSuccessMessage(null);
 
     const trackingNumber = `LBD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const finalWeight = parseFloat(estimatedWeight);
+    const validFinalWeight = isNaN(finalWeight) || finalWeight <= 0 ? 1.0 : finalWeight;
 
     const payload: WalkInQRPayload = {
       trackingNumber,
       customerId: user?.id || "guest-customer",
       customerName: user?.full_name || "Walk-In Customer",
-      customerPhone: user?.phone_number || "0912 345 6789",
+      customerPhone: user?.phone_number || "",
       shopId: activeShop?.id || selectedShopId,
       shopName: activeShop?.name || "LabadaGo Laundry",
       serviceName: activeService?.service_name || "Wash, Dry & Fold",
-      estimatedWeight,
+      estimatedWeight: validFinalWeight,
       estimatedAmount,
       specialNotes: specialNotes.trim() || undefined,
       createdAt: new Date().toISOString(),
@@ -129,51 +134,91 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-      <div className="flex items-center gap-3 pb-5 border-b border-slate-100">
-        <div className="w-10 h-10 rounded-lg border border-slate-200 bg-slate-50 text-emerald-600 flex items-center justify-center">
-          <QrCode size={20} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg border border-slate-200 bg-slate-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <QrCode size={20} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Walk-In Fast Pass (QR Code Generator)
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Pre-fill your laundry request and generate a scannable QR pass for seamless shop drop-off.
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-bold text-slate-900 tracking-tight">
-            Walk-In Fast Pass (QR Code Generator)
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Pre-fill your laundry request and generate a scannable QR pass for seamless shop drop-off.
-          </p>
-        </div>
+
+        {onReturnToMap && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onReturnToMap}
+            leftIcon={<ArrowLeft size={14} />}
+            className="text-xs self-start sm:self-auto shrink-0"
+          >
+            Return to Map & Shops
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6">
-        {/* Form Column */}
-        <form onSubmit={handleGenerateQR} className="lg:col-span-7 space-y-4">
-          {successMessage && <Alert type="success" message={successMessage} />}
-
-          {/* Customer Autofill preview */}
-          <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 text-xs flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <User size={14} className="text-blue-600 shrink-0" />
-              <div>
-                <span className="font-semibold text-slate-900">{user?.full_name || "Juan Dela Cruz"}</span>
-                <span className="text-slate-400 ml-1.5">• {user?.phone_number || "0912 345 6789"}</span>
-              </div>
-            </div>
-            <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-              Registered Profile
-            </span>
+      {shops.length === 0 ? (
+        <div className="py-12 px-4 text-center max-w-md mx-auto space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+            <Store size={22} />
           </div>
+          <h3 className="text-sm font-bold text-slate-800">No Laundry Shops Available</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            There are currently no partner laundry shops registered in the system. As soon as a shop is registered by an owner, you can select it to generate your walk-in pass.
+          </p>
+          {onReturnToMap && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReturnToMap}
+              leftIcon={<MapPin size={14} />}
+              className="text-xs mt-2"
+            >
+              Back to Map View
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6">
+          {/* Form Column */}
+          <form onSubmit={handleGenerateQR} className="lg:col-span-7 space-y-4">
+            {successMessage && <Alert type="success" message={successMessage} />}
 
-          {/* Laundry Shop Selection */}
-          <Select
-            label="Select Laundry Shop"
-            value={selectedShopId}
-            onChange={(e) => setSelectedShopId(e.target.value)}
-            options={shops.map((s) => ({
-              value: s.id,
-              label: `${s.name} (${s.queue_status} Queue)`,
-            }))}
-            leftIcon={<Store size={15} />}
-            required
-          />
+            {/* Customer Autofill preview */}
+            <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <User size={14} className="text-blue-600 shrink-0" />
+                <div>
+                  <span className="font-semibold text-slate-900">{user?.full_name || "Valued Customer"}</span>
+                  {user?.phone_number && (
+                    <span className="text-slate-400 ml-1.5">• {user.phone_number}</span>
+                  )}
+                </div>
+              </div>
+              <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                Registered Profile
+              </span>
+            </div>
+
+            {/* Laundry Shop Selection */}
+            <Select
+              label="Select Laundry Shop"
+              value={selectedShopId}
+              onChange={(e) => setSelectedShopId(e.target.value)}
+              options={shops.map((s) => ({
+                value: s.id,
+                label: `${s.name} (${s.queue_status} Queue)`,
+              }))}
+              leftIcon={<Store size={15} />}
+              required
+            />
 
           {/* Service Selection */}
           <Select
@@ -193,11 +238,28 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
             <Input
               type="number"
               step="0.5"
-              min="1"
+              min="0.5"
               max="50"
+              placeholder="e.g. 5"
               label="Estimated Weight (kg)"
               value={estimatedWeight}
-              onChange={(e) => setEstimatedWeight(parseFloat(e.target.value) || 1)}
+              onChange={(e) => setEstimatedWeight(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  (e.key === "Backspace" || e.key === "Delete") &&
+                  (estimatedWeight === "0" || estimatedWeight === "0.0" || estimatedWeight === "0.")
+                ) {
+                  e.preventDefault();
+                  setEstimatedWeight("");
+                }
+              }}
+              onFocus={(e) => {
+                if (e.target.value === "0" || e.target.value === "0.0") {
+                  setEstimatedWeight("");
+                } else {
+                  e.target.select();
+                }
+              }}
               required
             />
 
@@ -294,6 +356,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
           )}
         </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+);
 };

@@ -144,7 +144,7 @@ export const RegisterForm: React.FC = () => {
         name="fullName"
         type="text"
         label="Full Name"
-        placeholder="Juan Dela Cruz"
+        placeholder="Enter your full name"
         value={formData.fullName}
         onChange={handleChange}
         leftIcon={<User size={15} />}
@@ -181,7 +181,7 @@ export const RegisterForm: React.FC = () => {
         name="phoneNumber"
         type="tel"
         label="Phone Number"
-        placeholder="0912 345 6789"
+        placeholder="09XXXXXXXXX"
         value={formData.phoneNumber}
         onChange={handleChange}
         leftIcon={<Phone size={15} />}
@@ -194,7 +194,7 @@ export const RegisterForm: React.FC = () => {
         name="email"
         type="email"
         label="Email Address"
-        placeholder="juan.delacruz@example.com"
+        placeholder="your.email@gmail.com"
         value={formData.email}
         onChange={handleChange}
         leftIcon={<Mail size={15} />}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { getCurrentUserProfile, switchUserRole } from "@/lib/supabase/auth";
 import { UserProfile, UserRole } from "@/types/auth";
@@ -21,7 +21,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -228,5 +228,13 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs text-slate-500">Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }

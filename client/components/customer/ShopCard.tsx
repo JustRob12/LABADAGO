@@ -1,6 +1,7 @@
 import React from "react";
 import { LaundryShop } from "@/types/auth";
 import { Button } from "@/components/ui/Button";
+import { formatTo12Hour } from "@/components/owner/ShopSetupForm";
 import {
   MapPin,
   Clock,
@@ -154,7 +155,7 @@ export const ShopCard: React.FC<ShopCardProps> = ({
 
           <span className="flex items-center gap-1 text-[11px]">
             <Clock size={12} className="text-slate-400" />
-            {shop.open_time} - {shop.close_time}
+            {formatTo12Hour(shop.open_time)} – {formatTo12Hour(shop.close_time)}
           </span>
 
           <span className="flex items-center gap-1 text-[11px]">

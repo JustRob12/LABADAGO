@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { LaundryTransaction } from "@/types/auth";
 import {
   TrendingUp,
   DollarSign,
@@ -13,28 +14,41 @@ import {
   Layers,
   CheckCircle2,
   AlertTriangle,
+  BarChart3,
+  Store,
 } from "lucide-react";
 
-export const OwnerAnalyticsDashboard: React.FC = () => {
+interface OwnerAnalyticsDashboardProps {
+  transactions?: LaundryTransaction[];
+}
+
+export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = ({
+  transactions = [],
+}) => {
   const [timeRange, setTimeRange] = useState<"week" | "month" | "year">("week");
 
-  // Weekly sales data
-  const revenueData = [
-    { day: "Mon", revenue: 5200, orders: 18, height: "65%" },
-    { day: "Tue", revenue: 4800, orders: 16, height: "60%" },
-    { day: "Wed", revenue: 6400, orders: 22, height: "80%" },
-    { day: "Thu", revenue: 5900, orders: 20, height: "72%" },
-    { day: "Fri", revenue: 7800, orders: 27, height: "95%" },
-    { day: "Sat", revenue: 8200, orders: 29, height: "100%" },
-    { day: "Sun", revenue: 7100, orders: 25, height: "88%" },
-  ];
+  // Calculate actual revenue from real transactions
+  const totalRevenue = transactions.reduce((sum, tx) => {
+    if (tx.payment_status === "Paid" || tx.status === "Completed") {
+      return sum + (Number(tx.total_amount) || 0);
+    }
+    return sum;
+  }, 0);
 
-  const servicePerformance = [
-    { name: "Wash, Dry & Fold", percentage: 54, revenue: "₱24,510", count: 98, color: "bg-blue-600" },
-    { name: "Comforter / Bedding", percentage: 26, revenue: "₱11,800", count: 42, color: "bg-emerald-600" },
-    { name: "Steam Press & Ironing", percentage: 12, revenue: "₱5,440", count: 22, color: "bg-indigo-600" },
-    { name: "Express Priority Wash", percentage: 8, revenue: "₱3,650", count: 14, color: "bg-amber-500" },
-  ];
+  const completedOrders = transactions.filter(
+    (tx) => tx.status === "Completed" || tx.status === "Ready"
+  ).length;
+
+  const activeOrders = transactions.filter(
+    (tx) => tx.status !== "Completed" && tx.status !== "Cancelled"
+  ).length;
+
+  // Unique customer count
+  const uniqueCustomers = new Set(
+    transactions.map((tx) => tx.customer_phone || tx.customer_name).filter(Boolean)
+  ).size;
+
+  const hasData = transactions.length > 0;
 
   return (
     <div className="space-y-6">
@@ -42,10 +56,10 @@ export const OwnerAnalyticsDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">
-            Business Analytics & Forecasting
+            Business Analytics & Performance
           </h2>
           <p className="text-xs text-slate-500">
-            Real-time performance reports, sales trends, and operational forecasting.
+            Real-time shop sales, queue throughput, and customer volume.
           </p>
         </div>
 
@@ -67,7 +81,7 @@ export const OwnerAnalyticsDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Overview Cards (Clean shadcn style) */}
+      {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Revenue */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
@@ -78,12 +92,13 @@ export const OwnerAnalyticsDashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">₱45,400</span>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center">
-              <ArrowUpRight size={12} /> +14.8%
+            <span className="text-2xl font-bold tracking-tight text-slate-900">
+              ₱{totalRevenue.toFixed(2)}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">vs. previous period</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {hasData ? `${transactions.length} total orders logged` : "No paid orders yet"}
+          </p>
         </div>
 
         {/* Total Orders Completed */}
@@ -95,162 +110,95 @@ export const OwnerAnalyticsDashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">176</span>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center">
-              <ArrowUpRight size={12} /> +22 loads
+            <span className="text-2xl font-bold tracking-tight text-slate-900">
+              {completedOrders}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Avg 25.1 orders / day</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {activeOrders > 0 ? `${activeOrders} orders in progress` : "No orders in queue"}
+          </p>
         </div>
 
-        {/* Customer Retention */}
+        {/* Unique Customers */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Customer Retention</span>
+            <span className="text-xs font-medium text-slate-500">Customers Served</span>
             <div className="w-8 h-8 rounded-md border border-slate-200 bg-slate-50 text-indigo-600 flex items-center justify-center">
               <Users size={15} />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">76.4%</span>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center">
-              <ArrowUpRight size={12} /> +3.2%
+            <span className="text-2xl font-bold tracking-tight text-slate-900">
+              {uniqueCustomers}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">112 repeat customers</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {uniqueCustomers > 0 ? "Walk-in & registered users" : "Awaiting first customer"}
+          </p>
         </div>
 
-        {/* Average Turnaround */}
+        {/* Active Machines / Turnaround */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Avg. Turnaround</span>
+            <span className="text-xs font-medium text-slate-500">Queue Status</span>
             <div className="w-8 h-8 rounded-md border border-slate-200 bg-slate-50 text-amber-600 flex items-center justify-center">
               <Clock size={15} />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">78 min</span>
-            <span className="text-[11px] font-semibold text-emerald-600">Optimal</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900">
+              {activeOrders > 5 ? "Busy" : activeOrders > 0 ? "Moderate" : "Available"}
+            </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Wash, dry & fold cycle</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {activeOrders > 0 ? `${activeOrders} loads currently washing/drying` : "Machines ready for walk-in"}
+          </p>
         </div>
       </div>
 
-      {/* Grid: Sales Chart + Service Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Sales Revenue Trend Chart */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      {!hasData ? (
+        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+            <BarChart3 size={24} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">No Sales Data Yet</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+              Sales trends, daily throughput charts, and operational insights will populate here automatically as customers generate QR fast passes and drop off laundry loads.
+            </p>
+          </div>
+        </div>
+      ) : (
+        /* Real Orders Activity Table when transactions exist */
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Daily Revenue Performance</h3>
-              <p className="text-xs text-slate-500">Sales and order throughput across the week</p>
+              <h3 className="text-sm font-bold text-slate-900">Recent Service Activity</h3>
+              <p className="text-xs text-slate-500">Latest completed and in-progress laundry loads</p>
             </div>
-            <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-              Peak: Sat (₱8,200)
+            <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
+              {transactions.length} Total Logs
             </span>
           </div>
 
-          {/* CSS/SVG Bar Chart */}
-          <div className="pt-4">
-            <div className="h-48 flex items-end justify-between gap-3 px-2 border-b border-slate-100 pb-2">
-              {revenueData.map((item) => (
-                <div key={item.day} className="flex-1 flex flex-col items-center gap-2 group">
-                  <span className="text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    ₱{item.revenue}
-                  </span>
-                  <div className="w-full max-w-[36px] bg-slate-100 rounded-t-md relative flex items-end h-40">
-                    <div
-                      style={{ height: item.height }}
-                      className="w-full bg-blue-600 group-hover:bg-emerald-600 rounded-t-md transition-all duration-300"
-                    />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">{item.day}</span>
+          <div className="divide-y divide-slate-100">
+            {transactions.slice(0, 5).map((tx) => (
+              <div key={tx.id} className="py-3 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-semibold text-slate-900">{tx.service_name} • {tx.weight_kg} kg</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 font-mono">{tx.tracking_number} • {tx.customer_name}</p>
                 </div>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-              <span>Monday: 18 loads</span>
-              <span>Weekend surge: ~54 loads</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Service Performance Distribution */}
-        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <div className="pb-3 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-900">Service Breakdown</h3>
-            <p className="text-xs text-slate-500">Revenue contribution per laundry service</p>
-          </div>
-
-          <div className="space-y-3.5 pt-1">
-            {servicePerformance.map((srv) => (
-              <div key={srv.name} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-800">{srv.name}</span>
-                  <span className="font-bold text-slate-900">
-                    {srv.revenue} <span className="text-slate-400 font-normal">({srv.percentage}%)</span>
+                <div className="text-right">
+                  <p className="font-bold text-slate-900">₱{tx.total_amount.toFixed(2)}</p>
+                  <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    {tx.status}
                   </span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    style={{ width: `${srv.percentage}%` }}
-                    className={`h-full ${srv.color} rounded-full`}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 text-right">{srv.count} total loads completed</p>
               </div>
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Forecasting & Operational Insights */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-          <Sparkles size={16} className="text-emerald-600" />
-          <h3 className="text-sm font-bold text-slate-900">
-            Smart Forecasting & Operational Insights
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          {/* Insight 1 */}
-          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/60 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-blue-700 font-semibold">
-              <Clock size={14} />
-              <span>Tomorrow&apos;s Projected Demand</span>
-            </div>
-            <p className="text-xl font-bold text-slate-900">~26 to 30 Loads</p>
-            <p className="text-slate-500 text-[11px] leading-relaxed">
-              Based on historical Wednesday trends and student housing area activity.
-            </p>
-          </div>
-
-          {/* Insight 2 */}
-          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/60 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-              <TrendingUp size={14} />
-              <span>Peak Operational Window</span>
-            </div>
-            <p className="text-xl font-bold text-slate-900">2:00 PM – 6:30 PM</p>
-            <p className="text-slate-500 text-[11px] leading-relaxed">
-              Highest walk-in drop-offs occur late afternoon. Recommend 2 staff on duty.
-            </p>
-          </div>
-
-          {/* Insight 3 */}
-          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/60 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-amber-700 font-semibold">
-              <AlertTriangle size={14} />
-              <span>Machine & Inventory Maintenance</span>
-            </div>
-            <p className="text-xl font-bold text-slate-900">Dryers #3 & #4</p>
-            <p className="text-slate-500 text-[11px] leading-relaxed">
-              Reached 60 run cycles. Lint filter inspection and detergent restock recommended.
-            </p>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

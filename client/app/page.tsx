@@ -12,6 +12,7 @@ import {
   LogIn,
   LayoutDashboard,
   CheckCircle2,
+  MapPin,
 } from "lucide-react";
 
 export default function Home() {
@@ -20,9 +21,19 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <BrandLogo size="md" showSubtitle />
+          <BrandLogo size="md" showSubtitle href="/" />
 
           <div className="flex items-center gap-2.5">
+            <Link href="/customer">
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<MapPin size={14} className="text-blue-600" />}
+                className="hidden sm:inline-flex"
+              >
+                Explore Map
+              </Button>
+            </Link>
             <Link href="/login">
               <Button
                 variant="outline"
@@ -62,31 +73,32 @@ export default function Home() {
 
         {/* Subtitle */}
         <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl leading-relaxed">
-          Skip the hassle of washing and folding. Register in seconds, schedule your pickup,
-          and enjoy fresh, impeccably cleaned clothes returned to your door.
+          Skip the hassle of washing and folding. Locate nearby laundry shops on the interactive map,
+          generate walk-in fast passes, and track orders in real time.
         </p>
 
         {/* Primary Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <Link href="/customer" className="w-full sm:w-auto">
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full sm:w-auto px-6 text-sm bg-blue-600 hover:bg-blue-700"
+              leftIcon={<MapPin size={16} />}
+              rightIcon={<ArrowRight size={16} />}
+            >
+              Explore Laundry Map & Shops
+            </Button>
+          </Link>
+
           <Link href="/register" className="w-full sm:w-auto">
             <Button
               variant="success"
               size="lg"
               className="w-full sm:w-auto px-6 text-sm"
-              rightIcon={<ArrowRight size={16} />}
+              leftIcon={<UserPlus size={16} />}
             >
               Get Started (Register)
-            </Button>
-          </Link>
-
-          <Link href="/login" className="w-full sm:w-auto">
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full sm:w-auto px-6 text-sm"
-              leftIcon={<LogIn size={16} />}
-            >
-              Customer Login
             </Button>
           </Link>
 
@@ -97,7 +109,7 @@ export default function Home() {
               className="w-full sm:w-auto px-5 text-sm"
               leftIcon={<LayoutDashboard size={16} />}
             >
-              View Dashboard
+              Dashboard
             </Button>
           </Link>
         </div>

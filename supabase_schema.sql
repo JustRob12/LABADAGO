@@ -153,7 +153,7 @@ drop policy if exists "Reviews insertable by authenticated customer" on public.r
 
 -- Profiles policies
 create policy "Profiles are viewable by owner or admin" on public.profiles
-  for select using (auth.uid() = id or (select role from public.profiles where id = auth.uid()) = 0);
+  for select using (auth.uid() = id);
 
 create policy "Profiles updateable by user" on public.profiles
   for update using (auth.uid() = id);
@@ -166,10 +166,10 @@ create policy "Shops are publicly viewable" on public.laundry_shops
   for select using (true);
 
 create policy "Shops editable by owner" on public.laundry_shops
-  for update using (auth.uid() = owner_id or (select role from public.profiles where id = auth.uid()) = 0);
+  for update using (auth.uid() = owner_id);
 
 create policy "Shops insertable by owner" on public.laundry_shops
-  for insert with check (auth.uid() = owner_id or (select role from public.profiles where id = auth.uid()) in (0, 1));
+  for insert with check (auth.uid() = owner_id);
 
 -- Shop Services policies
 create policy "Services viewable by all" on public.shop_services
@@ -190,8 +190,7 @@ create policy "Transactions viewable by customer and shop owner" on public.trans
     exists (
       select 1 from public.laundry_shops
       where laundry_shops.id = transactions.shop_id and laundry_shops.owner_id = auth.uid()
-    ) or
-    (select role from public.profiles where id = auth.uid()) = 0
+    )
   );
 
 create policy "Transactions insertable by authenticated users" on public.transactions
@@ -202,7 +201,7 @@ create policy "Transactions updateable by shop owner" on public.transactions
     exists (
       select 1 from public.laundry_shops
       where laundry_shops.id = transactions.shop_id and laundry_shops.owner_id = auth.uid()
-    ) or (select role from public.profiles where id = auth.uid()) = 0
+    )
   );
 
 -- Reviews policies
@@ -238,27 +237,11 @@ end;
 $$ language plpgsql security definer;
 
 -- ------------------------------------------------------------------------------
--- 8. User creation trigger from auth.users
+-- 8. Automated Profile Sync Trigger on Signup
 -- ------------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger as $$
-declare
-  _full_name text;
-  _date_of_birth date;
-  _phone_number text;
-  _gender text;
 begin
-  _full_name := coalesce(new.raw_user_meta_data->>'full_name', 'Customer');
-  
-  begin
-    _date_of_birth := (new.raw_user_meta_data->>'date_of_birth')::date;
-  exception when others then
-    _date_of_birth := current_date;
-  end;
-
-  _phone_number := coalesce(new.raw_user_meta_data->>'phone_number', '');
-  _gender := coalesce(new.raw_user_meta_data->>'gender', 'Prefer not to say');
-
   insert into public.profiles (
     id,
     email,
@@ -266,16 +249,20 @@ begin
     date_of_birth,
     phone_number,
     gender,
-    role
+    role,
+    created_at,
+    updated_at
   )
   values (
     new.id,
     new.email,
-    _full_name,
-    _date_of_birth,
-    _phone_number,
-    _gender,
-    2 -- Costumer role (0: Admin, 1: Owner, 2: Costumer)
+    coalesce(new.raw_user_meta_data->>'full_name', 'Customer'),
+    coalesce((new.raw_user_meta_data->>'date_of_birth')::date, '2000-01-01'::date),
+    coalesce(new.raw_user_meta_data->>'phone_number', ''),
+    coalesce(new.raw_user_meta_data->>'gender', 'Prefer not to say'),
+    coalesce((new.raw_user_meta_data->>'role')::smallint, 2), -- Default 2: Costumer
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
   )
   on conflict (id) do update
   set
@@ -296,109 +283,6 @@ create trigger on_auth_user_created
   for each row
   execute function public.handle_new_user();
 
--- ------------------------------------------------------------------------------
--- 9. Sample Seed Data (For Map visualization, walk-in QR, and Owner testing)
--- ------------------------------------------------------------------------------
-insert into public.laundry_shops (
-  id,
-  name,
-  description,
-  address,
-  latitude,
-  longitude,
-  phone_number,
-  open_time,
-  close_time,
-  queue_status,
-  is_open,
-  rating,
-  total_reviews,
-  washer_count,
-  dryer_count
-)
-values
-(
-  '11111111-1111-1111-1111-111111111111',
-  'LabadaGo Express - Katipunan',
-  'Premium express wash, dry, and fold service with eco-friendly detergent and fast turnaround.',
-  '345 Katipunan Ave, Loyola Heights, Quezon City',
-  14.6402,
-  121.0744,
-  '0917-111-2233',
-  '07:00',
-  '21:00',
-  'Low',
-  true,
-  4.9,
-  128,
-  10,
-  10
-),
-(
-  '22222222-2222-2222-2222-222222222222',
-  'FreshBubble Laundromat - BGC',
-  'Self-service coin-op and drop-off full service. Free high-speed WiFi and coffee lounge while waiting.',
-  '7th Ave cor 30th St, Bonifacio Global City, Taguig',
-  14.5518,
-  121.0503,
-  '0917-444-5566',
-  '06:00',
-  '23:00',
-  'Moderate',
-  true,
-  4.8,
-  95,
-  14,
-  12
-),
-(
-  '33333333-3333-3333-3333-333333333333',
-  'LabadaGo Central Hub - Makati',
-  'Commercial and household laundry with sanitization and steam pressing. Same-day delivery available.',
-  '120 Dela Rosa St, Legazpi Village, Makati City',
-  14.5562,
-  121.0168,
-  '0917-777-8899',
-  '07:00',
-  '20:00',
-  'Busy',
-  true,
-  4.7,
-  210,
-  12,
-  12
-),
-(
-  '44444444-4444-4444-4444-444444444444',
-  'CleanSpin Laundry Station - Taft',
-  'Student-friendly prices, student discounts, and fast QR code walk-in drop off service.',
-  '2400 Taft Ave, Malate, Manila',
-  14.5678,
-  120.9934,
-  '0918-222-3344',
-  '06:30',
-  '22:00',
-  'Low',
-  true,
-  4.9,
-  142,
-  8,
-  8
-)
-on conflict (id) do nothing;
-
--- Sample services for the shops
-insert into public.shop_services (shop_id, service_name, description, price, unit, estimated_minutes)
-values
-('11111111-1111-1111-1111-111111111111', 'Wash, Dry & Fold', 'Standard everyday clothes washing and crisp folding.', 35.00, 'kg', 90),
-('11111111-1111-1111-1111-111111111111', 'Comforter / Bedding Wash', 'Heavy duvet and blanket sanitizing & drying.', 180.00, 'piece', 120),
-('11111111-1111-1111-1111-111111111111', 'Pressing & Ironing', 'Steam press for formal shirts and uniform trousers.', 25.00, 'piece', 45),
-('22222222-2222-2222-2222-222222222222', 'Full Service Premium Wash', 'Hypoallergenic detergent with fabric conditioner.', 40.00, 'kg', 90),
-('22222222-2222-2222-2222-222222222222', 'Express Wash (Under 1 Hr)', 'Priority queue machine wash and rapid warm air dry.', 55.00, 'kg', 50),
-('33333333-3333-3333-3333-333333333333', 'Wash & Fold Standard', 'Thorough wash and precision folded.', 38.00, 'kg', 90),
-('44444444-4444-4444-4444-444444444444', 'Student Wash & Fold', 'Budget-friendly student package.', 30.00, 'kg', 90)
-on conflict do nothing;
-
 -- ==============================================================================
--- End of Database Schema
+-- End of Database Schema (Clean production-ready without mock seed data)
 -- ==============================================================================

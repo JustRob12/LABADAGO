@@ -5,221 +5,16 @@ import {
   UserProfile,
   UserRole,
   LaundryShop,
+  ShopService,
   LaundryTransaction,
   WalkInQRPayload,
   OrderStatus,
+  PaymentStatus,
 } from "@/types/auth";
 
-// Default fallback mock shops (realistic Metro Manila locations)
-export const MOCK_SHOPS: LaundryShop[] = [
-  {
-    id: "11111111-1111-1111-1111-111111111111",
-    name: "LabadaGo Express - Katipunan",
-    description: "Premium express wash, dry, and fold service with eco-friendly detergent and fast turnaround.",
-    address: "345 Katipunan Ave, Loyola Heights, Quezon City",
-    latitude: 14.6402,
-    longitude: 121.0744,
-    phone_number: "0917-111-2233",
-    open_time: "07:00",
-    close_time: "21:00",
-    queue_status: "Low",
-    is_open: true,
-    rating: 4.9,
-    total_reviews: 128,
-    washer_count: 10,
-    dryer_count: 10,
-    images: [
-      "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?w=800&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=800&auto=format&fit=crop&q=80",
-    ],
-    services: [
-      {
-        id: "s1",
-        shop_id: "11111111-1111-1111-1111-111111111111",
-        service_name: "Wash, Dry & Fold",
-        description: "Standard everyday clothes washing and crisp folding.",
-        price: 35,
-        unit: "kg",
-        estimated_minutes: 90,
-      },
-      {
-        id: "s2",
-        shop_id: "11111111-1111-1111-1111-111111111111",
-        service_name: "Comforter / Bedding Wash",
-        description: "Heavy duvet and blanket sanitizing & drying.",
-        price: 180,
-        unit: "piece",
-        estimated_minutes: 120,
-      },
-      {
-        id: "s3",
-        shop_id: "11111111-1111-1111-1111-111111111111",
-        service_name: "Pressing & Ironing",
-        description: "Steam press for formal shirts and uniform trousers.",
-        price: 25,
-        unit: "piece",
-        estimated_minutes: 45,
-      },
-    ],
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222222",
-    name: "FreshBubble Laundromat - BGC",
-    description: "Self-service coin-op and drop-off full service. Free high-speed WiFi and coffee lounge.",
-    address: "7th Ave cor 30th St, Bonifacio Global City, Taguig",
-    latitude: 14.5518,
-    longitude: 121.0503,
-    phone_number: "0917-444-5566",
-    open_time: "06:00",
-    close_time: "23:00",
-    queue_status: "Moderate",
-    is_open: true,
-    rating: 4.8,
-    total_reviews: 95,
-    washer_count: 14,
-    dryer_count: 12,
-    images: [
-      "https://images.unsplash.com/photo-1521656693074-0ef32e80a5d5?w=800&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=800&auto=format&fit=crop&q=80",
-    ],
-    services: [
-      {
-        id: "s4",
-        shop_id: "22222222-2222-2222-2222-222222222222",
-        service_name: "Full Service Premium Wash",
-        description: "Hypoallergenic detergent with fabric conditioner.",
-        price: 40,
-        unit: "kg",
-        estimated_minutes: 90,
-      },
-      {
-        id: "s5",
-        shop_id: "22222222-2222-2222-2222-222222222222",
-        service_name: "Express Wash (Under 1 Hr)",
-        description: "Priority queue machine wash and rapid warm air dry.",
-        price: 55,
-        unit: "kg",
-        estimated_minutes: 50,
-      },
-    ],
-  },
-  {
-    id: "33333333-3333-3333-3333-333333333333",
-    name: "LabadaGo Central Hub - Makati",
-    description: "Commercial and household laundry with sanitization and steam pressing. Same-day pickup.",
-    address: "120 Dela Rosa St, Legazpi Village, Makati City",
-    latitude: 14.5562,
-    longitude: 121.0168,
-    phone_number: "0917-777-8899",
-    open_time: "07:00",
-    close_time: "20:00",
-    queue_status: "Busy",
-    is_open: true,
-    rating: 4.7,
-    total_reviews: 210,
-    washer_count: 12,
-    dryer_count: 12,
-    images: [
-      "https://images.unsplash.com/photo-1604335399105-a0c585fd81a1?w=800&auto=format&fit=crop&q=80",
-    ],
-    services: [
-      {
-        id: "s6",
-        shop_id: "33333333-3333-3333-3333-333333333333",
-        service_name: "Wash & Fold Standard",
-        description: "Thorough wash and precision folded.",
-        price: 38,
-        unit: "kg",
-        estimated_minutes: 90,
-      },
-    ],
-  },
-  {
-    id: "44444444-4444-4444-4444-444444444444",
-    name: "CleanSpin Laundry Station - Taft",
-    description: "Student-friendly prices, student discounts, and fast QR code walk-in drop off service.",
-    address: "2400 Taft Ave, Malate, Manila",
-    latitude: 14.5678,
-    longitude: 120.9934,
-    phone_number: "0918-222-3344",
-    open_time: "06:30",
-    close_time: "22:00",
-    queue_status: "Low",
-    is_open: true,
-    rating: 4.9,
-    total_reviews: 142,
-    washer_count: 8,
-    dryer_count: 8,
-    images: [
-      "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80",
-    ],
-    services: [
-      {
-        id: "s7",
-        shop_id: "44444444-4444-4444-4444-444444444444",
-        service_name: "Student Wash & Fold",
-        description: "Budget-friendly student package.",
-        price: 30,
-        unit: "kg",
-        estimated_minutes: 90,
-      },
-    ],
-  },
-];
-
-// Initial mock orders to demonstrate live order tracking and owner queue
-let localTransactionsStore: LaundryTransaction[] = [
-  {
-    id: "tx-1001",
-    tracking_number: "LBD-84920",
-    customer_id: "demo-customer",
-    shop_id: "11111111-1111-1111-1111-111111111111",
-    shop_name: "LabadaGo Express - Katipunan",
-    customer_name: "Juan Dela Cruz",
-    customer_phone: "0912 345 6789",
-    service_name: "Wash, Dry & Fold",
-    weight_kg: 6.5,
-    total_amount: 227.5,
-    status: "Washing",
-    payment_status: "Paid",
-    is_walkin: true,
-    created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    special_notes: "Please use hypoallergenic fabric softener",
-  },
-  {
-    id: "tx-1002",
-    tracking_number: "LBD-84915",
-    customer_id: "demo-customer",
-    shop_id: "11111111-1111-1111-1111-111111111111",
-    shop_name: "LabadaGo Express - Katipunan",
-    customer_name: "Maria Santos",
-    customer_phone: "0917 888 9900",
-    service_name: "Comforter / Bedding Wash",
-    weight_kg: 4.0,
-    total_amount: 180.0,
-    status: "Drying",
-    payment_status: "Paid",
-    is_walkin: true,
-    created_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "tx-1003",
-    tracking_number: "LBD-84880",
-    customer_id: "demo-customer",
-    shop_id: "22222222-2222-2222-2222-222222222222",
-    shop_name: "FreshBubble Laundromat - BGC",
-    customer_name: "Juan Dela Cruz",
-    customer_phone: "0912 345 6789",
-    service_name: "Full Service Premium Wash",
-    weight_kg: 8.0,
-    total_amount: 320.0,
-    status: "Completed",
-    payment_status: "Paid",
-    is_walkin: false,
-    created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-  },
-];
+// In-memory fallback stores for session
+let localShopsStore: LaundryShop[] = [];
+let localTransactionsStore: LaundryTransaction[] = [];
 
 /**
  * Register a new user with Supabase Auth
@@ -404,13 +199,13 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     }
 
     if (authError || !user) {
-      // Return guest demo user if available
+      // Return clean guest profile for unauthenticated browsing
       return {
-        id: "guest-costumer-001",
-        email: "demo.user@labadago.com",
-        full_name: "Valued Customer",
-        date_of_birth: "2000-01-01",
-        phone_number: "0912 345 6789",
+        id: "guest-customer",
+        email: null,
+        full_name: "Guest Customer",
+        date_of_birth: "",
+        phone_number: "",
         gender: "Prefer not to say",
         role: savedRole !== null ? savedRole : UserRole.COSTUMER,
       };
@@ -476,11 +271,11 @@ export async function getLaundryShops(): Promise<LaundryShop[]> {
         services: shop.shop_services || [],
       }));
     }
-  } catch {
-    // fallback
+  } catch (err) {
+    console.error("Error fetching shops:", err);
   }
 
-  return MOCK_SHOPS;
+  return localShopsStore;
 }
 
 /**
@@ -549,21 +344,44 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
       }
     }
 
-    // Save shop services if provided
-    if (shop.services && shop.services.length > 0 && !isTempId) {
-      const servicesPayload = shop.services.map((srv) => ({
-        shop_id: savedShopId,
-        service_name: srv.service_name,
-        description: srv.description || "",
-        price: srv.price,
-        unit: srv.unit || "kg",
-        estimated_minutes: srv.estimated_minutes || 90,
-      }));
+    // Save shop services if provided (for both new and existing shops)
+    let savedServices: ShopService[] = shop.services || [];
 
+    if (savedShopId && shop.services) {
       try {
-        await supabase
-          .from("shop_services")
-          .upsert(servicesPayload, { onConflict: "id" });
+        // Cleanly delete previous services for this shop to avoid duplicates
+        await supabase.from("shop_services").delete().eq("shop_id", savedShopId);
+
+        if (shop.services.length > 0) {
+          const servicesPayload = shop.services.map((srv) => {
+            const item: Record<string, any> = {
+              shop_id: savedShopId,
+              service_name: srv.service_name.trim(),
+              description: srv.description || "",
+              price: Number(srv.price) || 0,
+              unit: srv.unit || "kg",
+              estimated_minutes: srv.estimated_minutes || 90,
+              is_available: srv.is_available !== false,
+            };
+            // Only preserve UUID if it's already a valid 36-char Postgres UUID
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (srv.id && uuidRegex.test(srv.id)) {
+              item.id = srv.id;
+            }
+            return item;
+          });
+
+          const { data: insertedServices, error: srvError } = await supabase
+            .from("shop_services")
+            .insert(servicesPayload)
+            .select();
+
+          if (srvError) {
+            console.warn("Supabase save services error:", srvError.message);
+          } else if (insertedServices && insertedServices.length > 0) {
+            savedServices = insertedServices;
+          }
+        }
       } catch (srvErr) {
         console.warn("Error saving services:", srvErr);
       }
@@ -573,14 +391,15 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
       ...shop,
       id: savedShopId,
       images: payload.images,
+      services: savedServices,
     };
 
-    // Update local mock store so current session reflects it immediately
-    const existingIdx = MOCK_SHOPS.findIndex((s) => s.id === shop.id || s.id === savedShopId);
+    // Update local store so current session reflects it immediately
+    const existingIdx = localShopsStore.findIndex((s) => s.id === shop.id || s.id === savedShopId);
     if (existingIdx >= 0) {
-      MOCK_SHOPS[existingIdx] = finalShop;
+      localShopsStore[existingIdx] = finalShop;
     } else {
-      MOCK_SHOPS.unshift(finalShop);
+      localShopsStore.unshift(finalShop);
     }
 
     return { success: true, shop: finalShop };
@@ -605,7 +424,7 @@ export async function createWalkInTransaction(
     service_name: payload.serviceName,
     weight_kg: payload.estimatedWeight,
     total_amount: payload.estimatedAmount,
-    status: "Received",
+    status: "Pending", // Initially Pending until scanned by owner at counter!
     payment_status: "Unpaid",
     is_walkin: true,
     qr_data: JSON.stringify(payload),
@@ -667,20 +486,101 @@ export async function getLaundryTransactions(
 
 export async function updateTransactionStatus(
   txId: string,
-  newStatus: OrderStatus
+  newStatus: OrderStatus,
+  weightKg?: number,
+  paymentStatus?: PaymentStatus,
+  totalAmount?: number,
+  specialNotes?: string
 ): Promise<boolean> {
+  const updatePayload: Record<string, unknown> = {
+    status: newStatus,
+    updated_at: new Date().toISOString(),
+  };
+  if (weightKg !== undefined && !isNaN(weightKg)) {
+    updatePayload.weight_kg = weightKg;
+  }
+  if (paymentStatus !== undefined) {
+    updatePayload.payment_status = paymentStatus;
+  }
+  if (totalAmount !== undefined && !isNaN(totalAmount)) {
+    updatePayload.total_amount = totalAmount;
+  }
+  if (specialNotes !== undefined) {
+    updatePayload.special_notes = specialNotes;
+  }
+
   try {
-    await supabase
+    // Try matching by id first
+    const res = await supabase
       .from("transactions")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", txId);
+
+    // If not found by uuid, try matching by tracking_number
+    if (res.error || !res.count) {
+      await supabase
+        .from("transactions")
+        .update(updatePayload)
+        .eq("tracking_number", txId);
+    }
   } catch {
     // ignore
   }
 
   localTransactionsStore = localTransactionsStore.map((tx) =>
     tx.id === txId || tx.tracking_number === txId
-      ? { ...tx, status: newStatus, updated_at: new Date().toISOString() }
+      ? {
+          ...tx,
+          status: newStatus,
+          weight_kg: weightKg !== undefined && !isNaN(weightKg) ? weightKg : tx.weight_kg,
+          payment_status: paymentStatus !== undefined ? paymentStatus : tx.payment_status,
+          total_amount: totalAmount !== undefined && !isNaN(totalAmount) ? totalAmount : tx.total_amount,
+          special_notes: specialNotes !== undefined ? specialNotes : tx.special_notes,
+          updated_at: new Date().toISOString(),
+        }
+      : tx
+  );
+
+  return true;
+}
+
+export async function updateTransactionPayment(
+  txId: string,
+  paymentStatus: PaymentStatus,
+  specialNotes?: string
+): Promise<boolean> {
+  const updatePayload: Record<string, unknown> = {
+    payment_status: paymentStatus,
+    updated_at: new Date().toISOString(),
+  };
+  if (specialNotes !== undefined) {
+    updatePayload.special_notes = specialNotes;
+  }
+
+  try {
+    const res = await supabase
+      .from("transactions")
+      .update(updatePayload)
+      .eq("id", txId);
+
+    if (res.error || !res.count) {
+      await supabase
+        .from("transactions")
+        .update(updatePayload)
+        .eq("tracking_number", txId);
+    }
+  } catch {
+    // ignore
+  }
+
+  localTransactionsStore = localTransactionsStore.map((tx) =>
+    tx.id === txId || tx.tracking_number === txId
+      ? {
+          ...tx,
+          payment_status: paymentStatus,
+          special_notes: specialNotes !== undefined ? specialNotes : tx.special_notes,
+          updated_at: new Date().toISOString(),
+        }
       : tx
   );
 

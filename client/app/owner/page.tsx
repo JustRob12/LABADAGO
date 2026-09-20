@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getCurrentUserProfile, getLaundryShops, getLaundryTransactions } from "@/lib/supabase/auth";
 import { UserProfile, LaundryShop, LaundryTransaction, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
@@ -11,6 +11,7 @@ import { ShopSetupForm } from "@/components/owner/ShopSetupForm";
 import { BarChart3, ScanLine, Settings, Store, Loader2 } from "lucide-react";
 
 function OwnerContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") || "analytics";
 
@@ -20,15 +21,29 @@ function OwnerContent() {
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [shop, setShop] = useState<LaundryShop | null>(null);
+  const [shops, setShops] = useState<LaundryShop[]>([]);
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "scanner" || tabParam === "setup" || tabParam === "analytics") {
-      setActiveTab(tabParam);
+    if (tabParam === "scanner") {
+      setActiveTab("scanner");
+    } else if (tabParam === "setup") {
+      setActiveTab("setup");
+    } else {
+      setActiveTab("analytics");
     }
   }, [searchParams]);
+
+  const handleTabChange = (tab: "analytics" | "scanner" | "setup") => {
+    setActiveTab(tab);
+    if (tab === "analytics") {
+      router.push("/owner", { scroll: false });
+    } else {
+      router.push(`/owner?tab=${tab}`, { scroll: false });
+    }
+  };
 
   useEffect(() => {
     async function loadOwnerData() {
@@ -41,6 +56,7 @@ function OwnerContent() {
         ]);
 
         setUser(profile);
+        setShops(shopsList);
         if (shopsList.length > 0) {
           setShop(shopsList[0]);
         }
@@ -81,11 +97,11 @@ function OwnerContent() {
             </p>
           </div>
 
-          {/* Owner Tab Navigation */}
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-2xs">
+          {/* Owner Tab Navigation (Hidden on mobile/tablet since bottom floating nav handles tabs) */}
+          <div className="hidden lg:inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-2xs">
             <button
               type="button"
-              onClick={() => setActiveTab("analytics")}
+              onClick={() => handleTabChange("analytics")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
                 activeTab === "analytics"
                   ? "bg-emerald-600 text-white shadow-2xs font-semibold"
@@ -98,7 +114,7 @@ function OwnerContent() {
 
             <button
               type="button"
-              onClick={() => setActiveTab("scanner")}
+              onClick={() => handleTabChange("scanner")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
                 activeTab === "scanner"
                   ? "bg-blue-600 text-white shadow-2xs font-semibold"
@@ -111,7 +127,7 @@ function OwnerContent() {
 
             <button
               type="button"
-              onClick={() => setActiveTab("setup")}
+              onClick={() => handleTabChange("setup")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
                 activeTab === "setup"
                   ? "bg-slate-900 text-white shadow-2xs font-semibold"
@@ -133,7 +149,7 @@ function OwnerContent() {
         ) : (
           <>
             {/* Tab 1: Business Analytics */}
-            {activeTab === "analytics" && <OwnerAnalyticsDashboard />}
+            {activeTab === "analytics" && <OwnerAnalyticsDashboard transactions={transactions} />}
 
             {/* Tab 2: Walk-In QR Intake & Live Orders */}
             {activeTab === "scanner" && (
@@ -146,8 +162,20 @@ function OwnerContent() {
             {/* Tab 3: Shop Setup */}
             {activeTab === "setup" && (
               <ShopSetupForm
+                shops={shops}
                 initialShop={shop || undefined}
-                onSaved={(updated) => setShop(updated)}
+                onSaved={(updated) => {
+                  setShop(updated);
+                  setShops((prev) => {
+                    const idx = prev.findIndex((s) => s.id === updated.id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = updated;
+                      return next;
+                    }
+                    return [updated, ...prev];
+                  });
+                }}
               />
             )}
           </>

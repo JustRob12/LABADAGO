@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { signOutUser, switchUserRole } from "@/lib/supabase/auth";
 import { UserProfile, UserRole } from "@/types/auth";
@@ -26,27 +26,32 @@ interface DashboardNavProps {
   onRoleSwitched?: (role: UserRole) => void;
 }
 
-export const DashboardNav: React.FC<DashboardNavProps> = ({
+const DashboardNavFallback: React.FC<DashboardNavProps> = () => {
+  return (
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <BrandLogo href="/customer" />
+        <div className="w-8 h-8 rounded-full bg-slate-100 animate-pulse" />
+      </div>
+    </header>
+  );
+};
+
+const DashboardNavContent: React.FC<DashboardNavProps> = ({
   user,
   onLoggedOut,
   onRoleSwitched,
 }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const [currentTab, setCurrentTab] = useState("");
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab") || "";
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isOwner = user?.role === UserRole.OWNER || pathname?.startsWith("/owner");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setCurrentTab(params.get("tab") || "");
-    }
-  }, [pathname]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -267,6 +272,17 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
 
                 {/* Navigation Items */}
                 <div className="py-1">
+                  {!isOwner && (
+                    <Link
+                      href="/customer"
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+                    >
+                      <MapPin size={14} className="text-blue-600" />
+                      <span>Customer Map & Shops</span>
+                    </Link>
+                  )}
+
                   <Link
                     href="/dashboard"
                     onClick={() => setDropdownOpen(false)}
@@ -333,7 +349,7 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
             <Link
               href="/customer"
               className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${
-                pathname === "/customer" && !currentTab
+                pathname === "/customer" && (!currentTab || currentTab === "map")
                   ? "text-blue-600 font-bold bg-blue-50"
                   : "text-slate-500 hover:text-slate-900"
               }`}
@@ -384,7 +400,7 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
             <Link
               href="/owner"
               className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${
-                pathname === "/owner" && !currentTab
+                pathname === "/owner" && (!currentTab || currentTab === "analytics")
                   ? "text-emerald-600 font-bold bg-emerald-50"
                   : "text-slate-500 hover:text-slate-900"
               }`}
@@ -432,5 +448,13 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
         )}
       </div>
     </>
+  );
+};
+
+export const DashboardNav: React.FC<DashboardNavProps> = (props) => {
+  return (
+    <React.Suspense fallback={<DashboardNavFallback {...props} />}>
+      <DashboardNavContent {...props} />
+    </React.Suspense>
   );
 };
