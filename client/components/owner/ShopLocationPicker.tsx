@@ -66,10 +66,16 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
           scrollWheelZoom: false,
         });
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        const cartoApiKey = process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
+        const tileUrl = cartoApiKey
+          ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoApiKey}`
+          : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+
+        L.tileLayer(tileUrl, {
           attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          maxZoom: 19,
+            '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="http://www.openstreetmap.org/about/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+          subdomains: "abcd",
+          maxZoom: 20,
         }).addTo(map);
 
         mapInstanceRef.current = map;

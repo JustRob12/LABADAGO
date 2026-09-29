@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ShopLocationPicker } from "./ShopLocationPicker";
 import { ShopImageUploader } from "./ShopImageUploader";
-import { saveLaundryShop, getLaundryShops } from "@/lib/supabase/auth";
+import { saveLaundryShop, getLaundryShops, deleteLaundryShop } from "@/lib/supabase/auth";
 import {
   Store,
   MapPin,
@@ -27,6 +27,7 @@ import {
   ArrowRight,
   Pencil,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 
 export function formatTo12Hour(timeStr?: string): string {
@@ -43,15 +44,19 @@ export function formatTo12Hour(timeStr?: string): string {
 }
 
 interface ShopSetupFormProps {
+  ownerId?: string;
   shops?: LaundryShop[];
   initialShop?: LaundryShop;
   onSaved?: (shop: LaundryShop) => void;
+  onDeleted?: (shopId: string) => void;
 }
 
 export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
+  ownerId,
   shops,
   initialShop,
   onSaved,
+  onDeleted,
 }) => {
   const [branchList, setBranchList] = useState<LaundryShop[]>(() => {
     if (shops && shops.length > 0) return shops;
@@ -62,11 +67,14 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
   const [viewMode, setViewMode] = useState<"list" | "form">("list");
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [shopData, setShopData] = useState<LaundryShop>(
     initialShop || {
       id: `shop-${Date.now()}`,
+      owner_id: ownerId || null,
       name: "",
       description: "",
       address: "",
@@ -92,32 +100,36 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
   // Keep branchList synchronized with props
   useEffect(() => {
-    if (shops && shops.length > 0) {
+    if (shops) {
       setBranchList(shops);
     }
   }, [shops]);
 
-  // Fallback load if branchList is still empty
+  // Load only this owner's shops if props were not provided at all
   useEffect(() => {
-    if ((!shops || shops.length === 0) && (!initialShop || !initialShop.name)) {
-      getLaundryShops().then((loaded) => {
-        if (loaded && loaded.length > 0) {
+    if (shops === undefined && ownerId) {
+      getLaundryShops(ownerId).then((loaded) => {
+        if (loaded) {
           setBranchList(loaded);
-          if (!initialShop) {
+          if (!initialShop && loaded.length > 0) {
             setShopData(loaded[0]);
           }
         }
       });
     }
-  }, [shops, initialShop]);
+  }, [shops, ownerId, initialShop]);
+
 
   const handleShowBranchesList = () => {
     setViewMode("list");
     setIsAddingNew(false);
     setSuccessMessage(null);
+    setErrorMessage(null);
   };
 
   const handleSelectShopToEdit = (branch: LaundryShop) => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
     setShopData({
       ...branch,
       images: branch.images || [],
@@ -129,14 +141,16 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
     });
     setIsAddingNew(false);
     setViewMode("form");
-    setSuccessMessage(null);
   };
 
   const handleAddNewShopClick = () => {
     setIsAddingNew(true);
     setViewMode("form");
+    setErrorMessage(null);
+    setSuccessMessage(null);
     setShopData({
       id: `shop-${Date.now()}`,
+      owner_id: ownerId || null,
       name: "",
       description: "",
       address: "",
@@ -154,7 +168,33 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       images: [],
       services: [],
     });
+  };
+
+  const handleDeleteBranch = async (branchId: string, branchName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${branchName}"? This cannot be undone.`)) {
+      return;
+    }
+    setIsDeleting(true);
+    setErrorMessage(null);
     setSuccessMessage(null);
+    try {
+      const res = await deleteLaundryShop(branchId);
+      if (!res.success) {
+        setErrorMessage(res.error || "Failed to delete branch.");
+        setIsDeleting(false);
+        return;
+      }
+      setBranchList((prev) => prev.filter((b) => b.id !== branchId));
+      if (onDeleted) {
+        onDeleted(branchId);
+      }
+      setViewMode("list");
+      setSuccessMessage(`Branch "${branchName}" was successfully deleted.`);
+    } catch {
+      setErrorMessage("An error occurred while deleting the branch.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const queueOptions: { value: QueueStatus; label: string }[] = [
@@ -197,6 +237,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
     e.preventDefault();
     setIsLoading(true);
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     // Auto-commit any typed service that wasn't submitted with the "+ Add" button yet
     let currentServices = [...(shopData.services || [])];
@@ -217,12 +258,17 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
     const dataToSave: LaundryShop = {
       ...shopData,
+      owner_id: shopData.owner_id || ownerId || null,
       services: currentServices,
     };
 
     try {
       const result = await saveLaundryShop(dataToSave);
       setIsLoading(false);
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to save laundry shop.");
+        return;
+      }
       const photoCount = result.shop.images?.length || 0;
       const srvCount = result.shop.services?.length || 0;
       setSuccessMessage(
@@ -243,23 +289,13 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       if (onSaved) {
         onSaved(result.shop);
       }
-    } catch {
+    } catch (err: unknown) {
       setIsLoading(false);
-      setSuccessMessage("Shop saved locally and pinned to LabadaGo live map!");
-      setBranchList((prev) => {
-        const idx = prev.findIndex((s) => s.id === dataToSave.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = dataToSave;
-          return next;
-        }
-        return [dataToSave, ...prev];
-      });
-      if (onSaved) {
-        onSaved(dataToSave);
-      }
+      const msg = err instanceof Error ? err.message : "Failed to save shop.";
+      setErrorMessage(msg);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -320,6 +356,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
         /* ==================== BRANCHES LIST VIEW ==================== */
         <div className="space-y-4">
           {successMessage && <Alert type="success" message={successMessage} />}
+          {errorMessage && <Alert type="error" message={errorMessage} />}
 
           {branchList.length === 0 ? (
             <div className="text-center p-12 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -485,9 +522,23 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
                           <Pencil size={13} />
                           Click to Edit Branch
                         </span>
-                        <span className="p-1.5 rounded-lg bg-slate-50 group-hover:bg-emerald-600 group-hover:text-white text-slate-400 transition-colors">
-                          <ArrowRight size={13} />
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBranch(branch.id, branch.name);
+                            }}
+                            disabled={isDeleting}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete this branch"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                          <span className="p-1.5 rounded-lg bg-slate-50 group-hover:bg-emerald-600 group-hover:text-white text-slate-400 transition-colors">
+                            <ArrowRight size={13} />
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -524,6 +575,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
           <form onSubmit={handleSave} className="space-y-6">
             {successMessage && <Alert type="success" message={successMessage} />}
+            {errorMessage && <Alert type="error" message={errorMessage} />}
 
         {/* Basic Shop Information */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
@@ -918,16 +970,31 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       </div>
 
       {/* Form Action Buttons */}
-      <div className="flex items-center justify-between gap-3 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          onClick={handleShowBranchesList}
-          leftIcon={<ArrowLeft size={16} />}
-        >
-          Back to Branches
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={handleShowBranchesList}
+            leftIcon={<ArrowLeft size={16} />}
+          >
+            Back to Branches
+          </Button>
+
+          {!isAddingNew && shopData.id && (
+            <Button
+              type="button"
+              variant="danger"
+              size="lg"
+              isLoading={isDeleting}
+              onClick={() => handleDeleteBranch(shopData.id, shopData.name)}
+              leftIcon={<Trash2 size={16} />}
+            >
+              Delete Branch
+            </Button>
+          )}
+        </div>
 
         <Button
           type="submit"

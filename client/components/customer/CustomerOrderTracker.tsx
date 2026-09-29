@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LaundryTransaction, OrderStatus } from "@/types/auth";
 import { Button } from "@/components/ui/Button";
+import { submitShopReview } from "@/lib/supabase/auth";
 import QRCode from "qrcode";
 import {
   Package,
@@ -20,6 +21,9 @@ import {
   Shirt,
   Sparkles,
   CreditCard,
+  MessageSquare,
+  Loader2,
+  Check,
 } from "lucide-react";
 
 interface CustomerOrderTrackerProps {
@@ -44,14 +48,72 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
   onReturnToMap,
 }) => {
   const [ratedOrders, setRatedOrders] = useState<{ [id: string]: number }>({});
-  const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
+  const [reviewTx, setReviewTx] = useState<LaundryTransaction | null>(null);
+  const [reviewStars, setReviewStars] = useState(5);
+  const [hoverStars, setHoverStars] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewSuccessMessage, setReviewSuccessMessage] = useState<string | null>(null);
   const [viewingQrTx, setViewingQrTx] = useState<LaundryTransaction | null>(null);
   const [qrModalUrl, setQrModalUrl] = useState<string | null>(null);
 
-  const handleRate = (orderId: string, stars: number) => {
-    setRatedOrders((prev) => ({ ...prev, [orderId]: stars }));
-    setActiveFeedbackId(orderId);
+  // Load previously persisted ratings from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("labadago_rated_orders");
+      if (stored) {
+        setRatedOrders(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleOpenReviewModal = (tx: LaundryTransaction, initialStars: number = 5) => {
+    setReviewTx(tx);
+    setReviewStars(ratedOrders[tx.id] || initialStars);
+    setFeedbackComment("");
+    setReviewSuccessMessage(null);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewTx) return;
+    setIsSubmittingReview(true);
+    try {
+      const result = await submitShopReview({
+        shopId: reviewTx.shop_id,
+        rating: reviewStars,
+        comment: feedbackComment,
+        orderId: reviewTx.id,
+        customerName: reviewTx.customer_name,
+      });
+
+      const updated = { ...ratedOrders, [reviewTx.id]: reviewStars };
+      setRatedOrders(updated);
+      try {
+        localStorage.setItem("labadago_rated_orders", JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+
+      setReviewSuccessMessage(
+        `Thank you! Your ${reviewStars}-star rating was saved for ${reviewTx.shop_name || "the shop"}.`
+      );
+
+      // Trigger global event so shop cards & map update ratings live
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("labadago:rating-updated"));
+      }
+
+      setTimeout(() => {
+        setReviewTx(null);
+        setReviewSuccessMessage(null);
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to submit rating:", err);
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const handleOpenQrModal = async (tx: LaundryTransaction) => {
@@ -382,6 +444,15 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
                 <div className="flex flex-wrap items-center gap-3">
                   <span>Weight: <strong className="text-slate-800">{tx.weight_kg} kg</strong></span>
+
+                  {/* Machine Number Badge if assigned by staff */}
+                  {tx.machine_number && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                      <Sparkles size={11} className="text-cyan-600" />
+                      Machine #{tx.machine_number}
+                    </span>
+                  )}
+
                   <div className="flex items-center gap-1.5">
                     <CreditCard size={13} className="text-slate-400" />
                     <span>Payment:</span>
@@ -400,31 +471,46 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                   <span>Type: <strong className="text-slate-800">{tx.is_walkin ? "Walk-In QR" : "Online"}</strong></span>
                 </div>
 
-                {/* Rating trigger for completed orders */}
+                {/* Rating trigger for completed/ready orders */}
                 {(tx.status === "Completed" || tx.status === "Ready") && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] text-slate-400 mr-1">Rating:</span>
-                    {[1, 2, 3, 4, 5].map((star) => (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-slate-400">Rating:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => handleOpenReviewModal(tx, star)}
+                          className="cursor-pointer transition-transform hover:scale-125 p-0.5"
+                          title={`Rate ${star} stars`}
+                        >
+                          <Star
+                            size={15}
+                            className={`${
+                              (ratedOrders[tx.id] || 0) >= star
+                                ? "text-amber-400 fill-amber-400"
+                                : "text-slate-300 hover:text-amber-200"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    {ratedOrders[tx.id] ? (
                       <button
-                        key={star}
                         type="button"
-                        onClick={() => handleRate(tx.id, star)}
-                        className="cursor-pointer transition-transform hover:scale-110"
+                        onClick={() => handleOpenReviewModal(tx, ratedOrders[tx.id])}
+                        className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors"
                       >
-                        <Star
-                          size={14}
-                          className={`${
-                            (ratedOrders[tx.id] || 0) >= star
-                              ? "text-amber-400 fill-amber-400"
-                              : "text-slate-300"
-                          }`}
-                        />
+                        Rated ★{ratedOrders[tx.id]}
                       </button>
-                    ))}
-                    {ratedOrders[tx.id] && (
-                      <span className="text-[11px] font-bold text-emerald-600 ml-1">
-                        Thank you!
-                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReviewModal(tx, 5)}
+                        className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer ml-1"
+                      >
+                        Write review
+                      </button>
                     )}
                   </div>
                 )}
@@ -432,6 +518,126 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
             </div>
           );
         })
+      )}
+
+      {/* Rating & Review Feedback Modal */}
+      {reviewTx && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Star size={18} className="text-amber-500 fill-amber-500" />
+                <h4 className="text-sm font-bold text-slate-900">Rate Laundry Experience</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewTx(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="text-center space-y-1">
+              <h5 className="text-sm font-bold text-slate-900">
+                {reviewTx.shop_name || "Laundry Partner Shop"}
+              </h5>
+              <p className="text-xs text-slate-500">
+                Order <span className="font-mono font-medium text-slate-700">{reviewTx.tracking_number}</span> • {reviewTx.service_name}
+              </p>
+            </div>
+
+            {reviewSuccessMessage ? (
+              <div className="py-6 text-center space-y-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                <CheckCircle2 size={32} className="text-emerald-600 mx-auto" />
+                <p className="text-xs font-bold text-emerald-900">{reviewSuccessMessage}</p>
+                <p className="text-[11px] text-emerald-700">Thank you for helping us maintain high service quality!</p>
+              </div>
+            ) : (
+              <>
+                {/* 5-Star Interactive Rating Selector */}
+                <div className="py-2 text-center space-y-1.5 bg-slate-50/80 rounded-xl border border-slate-100 p-3">
+                  <div className="flex items-center justify-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const isFilled = (hoverStars || reviewStars) >= star;
+                      return (
+                        <button
+                          key={star}
+                          type="button"
+                          onMouseEnter={() => setHoverStars(star)}
+                          onMouseLeave={() => setHoverStars(0)}
+                          onClick={() => setReviewStars(star)}
+                          className="cursor-pointer transition-transform hover:scale-125 p-1"
+                          aria-label={`Select ${star} stars`}
+                        >
+                          <Star
+                            size={28}
+                            className={`transition-colors ${
+                              isFilled
+                                ? "text-amber-400 fill-amber-400 drop-shadow-xs"
+                                : "text-slate-300"
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className="inline-block text-xs font-bold text-slate-700">
+                    {{
+                      1: "★ 1.0 - Poor Service",
+                      2: "★ 2.0 - Needs Improvement",
+                      3: "★ 3.0 - Satisfactory / Okay",
+                      4: "★ 4.0 - Very Good Service",
+                      5: "★ 5.0 - Exceptional Experience!",
+                    }[hoverStars || reviewStars] || "Select rating"}
+                  </span>
+                </div>
+
+                {/* Optional Review Comment */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Service Feedback <span className="text-slate-400 text-[11px]">(Optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={feedbackComment}
+                    onChange={(e) => setFeedbackComment(e.target.value)}
+                    placeholder="Tell other customers about the wash quality, turnaround time, folding, or staff friendliness..."
+                    className="w-full text-xs rounded-xl border border-slate-200 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReviewTx(null)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={isSubmittingReview}
+                    onClick={handleSubmitReview}
+                    className="flex-1"
+                  >
+                    {isSubmittingReview ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 size={13} className="animate-spin" /> Saving...
+                      </span>
+                    ) : (
+                      "Submit Rating"
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* QR Fast Pass Preview Modal */}

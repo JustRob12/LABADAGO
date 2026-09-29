@@ -1,6 +1,6 @@
 import React from "react";
 import { UserRole, ROLE_LABELS, ROLE_BADGE_COLORS } from "@/types/auth";
-import { Shield, Sparkles, Store } from "lucide-react";
+import { Shield, Sparkles, Store, ScanLine } from "lucide-react";
 
 interface RoleBadgeProps {
   role: UserRole | number;
@@ -28,6 +28,7 @@ export const RoleBadge: React.FC<RoleBadgeProps> = ({
     [UserRole.ADMIN]: <Shield size={size === "sm" ? 11 : 13} className="text-indigo-600 shrink-0" />,
     [UserRole.OWNER]: <Store size={size === "sm" ? 11 : 13} className="text-amber-600 shrink-0" />,
     [UserRole.COSTUMER]: <Sparkles size={size === "sm" ? 11 : 13} className="text-emerald-600 shrink-0" />,
+    [UserRole.STAFF]: <ScanLine size={size === "sm" ? 11 : 13} className="text-teal-600 shrink-0" />,
   }[userRole];
 
   return (

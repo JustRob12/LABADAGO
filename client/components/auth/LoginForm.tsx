@@ -60,6 +60,8 @@ function LoginFormInner() {
       setTimeout(() => {
         if (redirectParam) {
           router.push(redirectParam);
+        } else if (result.user?.role === UserRole.STAFF) {
+          router.push("/staff");
         } else if (result.user?.role === UserRole.OWNER) {
           router.push("/owner");
         } else {

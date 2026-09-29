@@ -10,11 +10,16 @@ import {
   WalkInQRPayload,
   OrderStatus,
   PaymentStatus,
+  BranchStaffMember,
+  ShopReview,
 } from "@/types/auth";
 
 // In-memory fallback stores for session
 let localShopsStore: LaundryShop[] = [];
 let localTransactionsStore: LaundryTransaction[] = [];
+let localStaffStore: BranchStaffMember[] = [];
+let localReviewsStore: ShopReview[] = [];
+let localProfilesStore: UserProfile[] = [];
 
 /**
  * Register a new user with Supabase Auth
@@ -65,6 +70,11 @@ export async function signUpUser(data: RegisterFormData): Promise<{
       gender: data.gender,
       role: UserRole.COSTUMER,
     };
+
+    // Keep in local profiles store for quick lookups
+    const pIdx = localProfilesStore.findIndex((p) => p.id === userId);
+    if (pIdx >= 0) localProfilesStore[pIdx] = profile;
+    else localProfilesStore.push(profile);
 
     try {
       await supabase.from("profiles").upsert(
@@ -137,6 +147,13 @@ export async function signInUser(data: LoginFormData): Promise<{
  */
 export async function signOutUser(): Promise<{ error: string | null }> {
   try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("labadago_active_role");
+      if (user?.id) {
+        localStorage.removeItem(`labadago_active_role_${user.id}`);
+      }
+    }
     const { error } = await supabase.auth.signOut();
     return { error: error ? error.message : null };
   } catch (err: unknown) {
@@ -148,6 +165,7 @@ export async function signOutUser(): Promise<{ error: string | null }> {
 
 /**
  * Switch the active user role (Customer <-> Owner)
+ * Note: Staff members are locked and CANNOT switch roles unless removed by the owner!
  */
 export async function switchUserRole(newRole: UserRole): Promise<{
   success: boolean;
@@ -157,21 +175,58 @@ export async function switchUserRole(newRole: UserRole): Promise<{
   try {
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (user) {
-      // 1. Update Supabase profiles table
-      await supabase
-        .from("profiles")
-        .update({ role: newRole })
-        .eq("id", user.id);
-
-      // 2. Also update user metadata
-      await supabase.auth.updateUser({
-        data: { role: newRole },
-      });
+    if (!user) {
+      return { success: false, role: newRole, error: "Not authenticated" };
     }
 
-    // Save active role to localStorage for instant UI responsiveness
+    // 1. Check if user is an active STAFF member
+    const { data: dbProfile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const { data: staffRecord } = await supabase
+      .from("branch_staff")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const isLockedStaff =
+      dbProfile?.role === UserRole.STAFF ||
+      !!staffRecord ||
+      localStaffStore.some((s) => s.user_id === user.id);
+
+    if (isLockedStaff) {
+      return {
+        success: false,
+        role: UserRole.STAFF,
+        error: "Staff role is locked. You cannot switch roles while assigned as Branch Staff. Only your shop owner can remove your staff role.",
+      };
+    }
+
+    if (newRole === UserRole.STAFF) {
+      return {
+        success: false,
+        role: dbProfile?.role || UserRole.COSTUMER,
+        error: "Staff role cannot be self-assigned. A shop owner must recruit and assign you to a specific branch.",
+      };
+    }
+
+    // 2. Update Supabase profiles table
+    await supabase
+      .from("profiles")
+      .update({ role: newRole })
+      .eq("id", user.id);
+
+    // 3. Also update user metadata
+    await supabase.auth.updateUser({
+      data: { role: newRole },
+    });
+
+    // Save active role to localStorage scoped to current user ID
     if (typeof window !== "undefined") {
+      localStorage.setItem(`labadago_active_role_${user.id}`, String(newRole));
       localStorage.setItem("labadago_active_role", String(newRole));
     }
 
@@ -183,41 +238,74 @@ export async function switchUserRole(newRole: UserRole): Promise<{
 }
 
 /**
- * Get current authenticated user profile with active role detection
+ * Get current authenticated user profile with active role detection and staff lock
  */
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    // Check localStorage fallback for role switch persistence
-    let savedRole: UserRole | null = null;
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("labadago_active_role");
-      if (stored !== null) {
-        savedRole = Number(stored) as UserRole;
-      }
-    }
 
     if (authError || !user) {
       // Do not allow guest browsing on authenticated pages - return null so auth guards require an account
       return null;
     }
 
+    // Check if user is assigned as staff in branch_staff
+    let staffRecord: { shop_id: string; laundry_shops?: { name?: string } } | null = null;
+    try {
+      const { data } = await supabase
+        .from("branch_staff")
+        .select("shop_id, laundry_shops(name)")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data) {
+        staffRecord = data as any;
+      }
+    } catch {
+      // ignore
+    }
+
+    const localStaff = localStaffStore.find((s) => s.user_id === user.id);
+
+    // Check localStorage fallback for role switch persistence scoped to current user
+    let savedRole: UserRole | null = null;
+    if (typeof window !== "undefined") {
+      const userStored = localStorage.getItem(`labadago_active_role_${user.id}`);
+      if (userStored !== null) {
+        savedRole = Number(userStored) as UserRole;
+      }
+    }
+
     // Try fetching from public.profiles table
     const { data: dbProfile } = await supabase
       .from("profiles")
-      .select("*")
+      .select("*, laundry_shops(name)")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    const isStaff = dbProfile?.role === UserRole.STAFF || !!staffRecord || !!localStaff;
+    const assignedShopId = staffRecord?.shop_id || localStaff?.shop_id || dbProfile?.assigned_shop_id || null;
+    const assignedShopName =
+      (staffRecord?.laundry_shops as any)?.name ||
+      localStaff?.shop_name ||
+      (dbProfile?.laundry_shops as any)?.name ||
+      null;
+
+    // If active staff, enforce staff role and remove conflicting saved role in localStorage
+    if (isStaff && typeof window !== "undefined") {
+      localStorage.removeItem(`labadago_active_role_${user.id}`);
+      localStorage.removeItem("labadago_active_role");
+    }
 
     if (dbProfile) {
-      const effectiveRole = savedRole !== null
+      const effectiveRole = isStaff
+        ? UserRole.STAFF
+        : savedRole !== null
         ? savedRole
-        : (dbProfile.role !== undefined && dbProfile.role !== null)
+        : dbProfile.role !== undefined && dbProfile.role !== null
         ? (dbProfile.role as UserRole)
         : UserRole.COSTUMER;
 
-      return {
+      const profileObj: UserProfile = {
         id: dbProfile.id,
         email: dbProfile.email || user.email || null,
         full_name: dbProfile.full_name || user.user_metadata?.full_name || "User",
@@ -225,21 +313,45 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
         phone_number: dbProfile.phone_number || user.user_metadata?.phone_number || "",
         gender: dbProfile.gender || user.user_metadata?.gender || "Prefer not to say",
         role: effectiveRole,
+        assigned_shop_id: assignedShopId,
+        assigned_shop_name: assignedShopName,
         created_at: dbProfile.created_at,
         updated_at: dbProfile.updated_at,
       };
+
+      const pIdx = localProfilesStore.findIndex((p) => p.id === user.id);
+      if (pIdx >= 0) localProfilesStore[pIdx] = profileObj;
+      else localProfilesStore.push(profileObj);
+
+      return profileObj;
     }
 
     const meta = user.user_metadata || {};
-    return {
+    const metaRole = isStaff
+      ? UserRole.STAFF
+      : savedRole !== null
+      ? savedRole
+      : meta.role !== undefined
+      ? (Number(meta.role) as UserRole)
+      : UserRole.COSTUMER;
+
+    const fallbackProfile: UserProfile = {
       id: user.id,
       email: user.email || null,
       full_name: meta.full_name || "Customer",
       date_of_birth: meta.date_of_birth || "",
       phone_number: meta.phone_number || "",
       gender: meta.gender || "Prefer not to say",
-      role: savedRole !== null ? savedRole : (meta.role !== undefined ? Number(meta.role) as UserRole : UserRole.COSTUMER),
+      role: metaRole,
+      assigned_shop_id: assignedShopId,
+      assigned_shop_name: assignedShopName,
     };
+
+    const fIdx = localProfilesStore.findIndex((p) => p.id === user.id);
+    if (fIdx >= 0) localProfilesStore[fIdx] = fallbackProfile;
+    else localProfilesStore.push(fallbackProfile);
+
+    return fallbackProfile;
   } catch (err) {
     console.error("Error fetching user profile:", err);
     return null;
@@ -250,11 +362,17 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
 // Laundry Shops & Services Helpers
 // -----------------------------------------------------------------------------
 
-export async function getLaundryShops(): Promise<LaundryShop[]> {
+export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("laundry_shops")
       .select("*, shop_services(*)");
+
+    if (ownerId) {
+      query = query.eq("owner_id", ownerId);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data && data.length > 0) {
       return data.map((shop) => ({
@@ -267,12 +385,16 @@ export async function getLaundryShops(): Promise<LaundryShop[]> {
     console.error("Error fetching shops:", err);
   }
 
+  if (ownerId) {
+    return localShopsStore.filter((s) => s.owner_id === ownerId);
+  }
   return localShopsStore;
 }
 
 /**
  * Save or update a laundry shop in Supabase
  * Persists shop details, location, hours, queue status, and Cloudinary image URLs
+ * Enforces strict ownership checks: owners can only update their own shops.
  */
 export async function saveLaundryShop(shop: LaundryShop): Promise<{
   success: boolean;
@@ -282,12 +404,46 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
   try {
     const { data: { user } } = await supabase.auth.getUser();
 
+    if (!user) {
+      return {
+        success: false,
+        shop,
+        error: "You must be signed in to register or modify a laundry shop.",
+      };
+    }
+
     // Check if shop has a valid UUID (not a temporary client string like 'owner-shop-001' or 'shop-123')
     const isTempId =
       !shop.id ||
       shop.id.startsWith("shop-") ||
       shop.id.startsWith("owner-") ||
       !shop.id.includes("-");
+
+    // Strict ownership verification: Prevent editing shops owned by another user
+    if (!isTempId) {
+      const { data: existingShop } = await supabase
+        .from("laundry_shops")
+        .select("id, owner_id")
+        .eq("id", shop.id)
+        .maybeSingle();
+
+      if (existingShop && existingShop.owner_id && existingShop.owner_id !== user.id) {
+        return {
+          success: false,
+          shop,
+          error: "Permission denied: You cannot edit another user's laundry shop.",
+        };
+      }
+
+      const localExisting = localShopsStore.find((s) => s.id === shop.id);
+      if (localExisting && localExisting.owner_id && localExisting.owner_id !== user.id) {
+        return {
+          success: false,
+          shop,
+          error: "Permission denied: You cannot edit another user's laundry shop.",
+        };
+      }
+    }
 
     const payload: Record<string, any> = {
       name: shop.name.trim(),
@@ -302,12 +458,9 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
       washer_count: shop.washer_count || 6,
       dryer_count: shop.dryer_count || 6,
       images: Array.isArray(shop.images) ? shop.images : [],
+      owner_id: user.id,
       updated_at: new Date().toISOString(),
     };
-
-    if (user) {
-      payload.owner_id = user.id;
-    }
 
     let savedShopId = shop.id;
 
@@ -325,7 +478,7 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
         savedShopId = inserted.id;
       }
     } else {
-      // Update existing shop
+      // Update existing shop (guarantee owner_id matches)
       payload.id = shop.id;
       const { error: updateError } = await supabase
         .from("laundry_shops")
@@ -333,6 +486,11 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
 
       if (updateError) {
         console.warn("Supabase upsert shop notice:", updateError.message);
+        return {
+          success: false,
+          shop,
+          error: updateError.message || "Failed to update laundry shop in database.",
+        };
       }
     }
 
@@ -382,6 +540,7 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
     const finalShop: LaundryShop = {
       ...shop,
       id: savedShopId,
+      owner_id: user.id,
       images: payload.images,
       services: savedServices,
     };
@@ -399,6 +558,45 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
     const message = err instanceof Error ? err.message : "Failed to save shop.";
     console.error("Save laundry shop exception:", err);
     return { success: false, shop, error: message };
+  }
+}
+
+/**
+ * Delete a laundry shop owned by the user
+ */
+export async function deleteLaundryShop(shopId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "You must be signed in to delete a shop." };
+    }
+
+    // Verify ownership
+    const { data: existing } = await supabase
+      .from("laundry_shops")
+      .select("id, owner_id")
+      .eq("id", shopId)
+      .maybeSingle();
+
+    if (existing && existing.owner_id && existing.owner_id !== user.id) {
+      return { success: false, error: "Unauthorized: You cannot delete another owner's shop." };
+    }
+
+    const { error: delError } = await supabase
+      .from("laundry_shops")
+      .delete()
+      .eq("id", shopId)
+      .eq("owner_id", user.id);
+
+    if (delError) {
+      return { success: false, error: delError.message };
+    }
+
+    localShopsStore = localShopsStore.filter((s) => s.id !== shopId);
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to delete shop";
+    return { success: false, error: message };
   }
 }
 
@@ -450,9 +648,15 @@ export async function createWalkInTransaction(
 
 export async function getLaundryTransactions(
   customerId?: string,
-  shopId?: string
+  shopId?: string,
+  ownerShopIds?: string[]
 ): Promise<LaundryTransaction[]> {
   try {
+    // If querying for an owner who has 0 registered shops, return empty list immediately
+    if (ownerShopIds && ownerShopIds.length === 0) {
+      return [];
+    }
+
     let query = supabase.from("transactions").select("*").order("created_at", { ascending: false });
 
     if (customerId) {
@@ -460,6 +664,8 @@ export async function getLaundryTransactions(
     }
     if (shopId) {
       query = query.eq("shop_id", shopId);
+    } else if (ownerShopIds && ownerShopIds.length > 0) {
+      query = query.in("shop_id", ownerShopIds);
     }
 
     const { data, error } = await query;
@@ -470,11 +676,62 @@ export async function getLaundryTransactions(
     // fallback
   }
 
+  if (customerId) {
+    return localTransactionsStore.filter((tx) => tx.customer_id === customerId);
+  }
   if (shopId) {
     return localTransactionsStore.filter((tx) => tx.shop_id === shopId);
   }
+  if (ownerShopIds) {
+    return localTransactionsStore.filter((tx) => ownerShopIds.includes(tx.shop_id));
+  }
   return localTransactionsStore;
 }
+
+/**
+ * Look up a transaction by tracking number across the database,
+ * retrieving its associated shop name and details to verify shop affiliation.
+ */
+export async function getTransactionByTrackingNumber(
+  trackingNumber: string
+): Promise<{ transaction: LaundryTransaction | null; error?: string }> {
+  const cleanQuery = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!cleanQuery) return { transaction: null };
+
+  try {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*, laundry_shops(name, address)")
+      .ilike("tracking_number", cleanQuery)
+      .maybeSingle();
+
+    if (!error && data) {
+      const shopInfo = data.laundry_shops as { name?: string; address?: string } | null;
+      const resolvedShopName = shopInfo?.name || data.shop_name || "Another Laundry Shop";
+      return {
+        transaction: {
+          ...data,
+          shop_name: resolvedShopName,
+        },
+      };
+    }
+  } catch (err) {
+    console.error("Error looking up transaction by tracking number:", err);
+  }
+
+  // Fallback search in localTransactionsStore
+  const localFound = localTransactionsStore.find(
+    (t) => t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanQuery
+  );
+
+  if (localFound) {
+    return { transaction: localFound };
+  }
+
+  return { transaction: null };
+}
+
+
 
 export async function updateTransactionStatus(
   txId: string,
@@ -482,7 +739,10 @@ export async function updateTransactionStatus(
   weightKg?: number,
   paymentStatus?: PaymentStatus,
   totalAmount?: number,
-  specialNotes?: string
+  specialNotes?: string,
+  machineNumber?: string,
+  staffId?: string,
+  staffName?: string
 ): Promise<boolean> {
   const updatePayload: Record<string, unknown> = {
     status: newStatus,
@@ -499,6 +759,12 @@ export async function updateTransactionStatus(
   }
   if (specialNotes !== undefined) {
     updatePayload.special_notes = specialNotes;
+  }
+  if (machineNumber !== undefined) {
+    updatePayload.machine_number = machineNumber;
+  }
+  if (staffId !== undefined) {
+    updatePayload.staff_id = staffId;
   }
 
   try {
@@ -528,6 +794,9 @@ export async function updateTransactionStatus(
           payment_status: paymentStatus !== undefined ? paymentStatus : tx.payment_status,
           total_amount: totalAmount !== undefined && !isNaN(totalAmount) ? totalAmount : tx.total_amount,
           special_notes: specialNotes !== undefined ? specialNotes : tx.special_notes,
+          machine_number: machineNumber !== undefined ? machineNumber : tx.machine_number,
+          staff_id: staffId !== undefined ? staffId : tx.staff_id,
+          staff_name: staffName !== undefined ? staffName : tx.staff_name,
           updated_at: new Date().toISOString(),
         }
       : tx
@@ -577,4 +846,412 @@ export async function updateTransactionPayment(
   );
 
   return true;
+}
+
+// -----------------------------------------------------------------------------
+// Staff Management Helpers (Owner / Admin Side)
+// -----------------------------------------------------------------------------
+
+export interface MemberSearchResult {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_number: string;
+  role: UserRole;
+  assigned_shop_id?: string | null;
+  assigned_shop_name?: string | null;
+}
+
+/**
+ * Search existing registered LabadaGo members so the owner can recruit them as staff.
+ */
+export async function searchMembers(query: string): Promise<MemberSearchResult[]> {
+  const term = query.trim().toLowerCase();
+  if (!term) return [];
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // 1. Try Supabase RPC search function if available
+    const { data: rpcData, error: rpcError } = await supabase.rpc("search_labadago_members", {
+      search_term: term,
+    });
+
+    if (!rpcError && rpcData && Array.isArray(rpcData)) {
+      return rpcData
+        .filter((m: any) => m.id !== user?.id)
+        .map((m: any) => ({
+          id: m.id,
+          full_name: m.full_name,
+          email: m.email || null,
+          phone_number: m.phone_number || "",
+          role: Number(m.role) as UserRole,
+          assigned_shop_id: m.assigned_shop_id || null,
+          assigned_shop_name: m.assigned_shop_name || null,
+        }));
+    }
+
+    // 2. Direct profiles table query
+    const { data: profiles, error: profError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone_number, role, assigned_shop_id, laundry_shops(name)")
+      .or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone_number.ilike.%${term}%`)
+      .limit(15);
+
+    if (!profError && profiles && profiles.length > 0) {
+      return profiles
+        .filter((p) => p.id !== user?.id)
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.full_name,
+          email: p.email,
+          phone_number: p.phone_number,
+          role: Number(p.role) as UserRole,
+          assigned_shop_id: p.assigned_shop_id,
+          assigned_shop_name: p.laundry_shops?.name || null,
+        }));
+    }
+  } catch (err) {
+    console.warn("Member search database notice, checking local profiles:", err);
+  }
+
+  // 3. Fallback search in local profiles store
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  return localProfilesStore
+    .filter((p) => p.id !== currentUser?.id)
+    .filter(
+      (p) =>
+        p.full_name.toLowerCase().includes(term) ||
+        (p.email && p.email.toLowerCase().includes(term)) ||
+        p.phone_number.includes(term)
+    )
+    .map((p) => ({
+      id: p.id,
+      full_name: p.full_name,
+      email: p.email,
+      phone_number: p.phone_number,
+      role: p.role,
+      assigned_shop_id: p.assigned_shop_id,
+      assigned_shop_name: p.assigned_shop_name,
+    }));
+}
+
+/**
+ * Fetch staff assigned to a specific shop, or all staff across an owner's branches
+ */
+export async function getBranchStaff(
+  shopId?: string,
+  ownerId?: string
+): Promise<BranchStaffMember[]> {
+  try {
+    let query = supabase
+      .from("branch_staff")
+      .select(
+        "id, shop_id, user_id, role_title, assigned_by, created_at, laundry_shops(name, owner_id), profiles(full_name, email, phone_number)"
+      );
+
+    if (shopId) {
+      query = query.eq("shop_id", shopId);
+    }
+
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      const list: BranchStaffMember[] = data
+        .filter((item: any) => {
+          if (ownerId && item.laundry_shops?.owner_id !== ownerId) return false;
+          return true;
+        })
+        .map((item: any) => ({
+          id: item.id,
+          shop_id: item.shop_id,
+          shop_name: item.laundry_shops?.name || "Laundry Shop",
+          user_id: item.user_id,
+          full_name: item.profiles?.full_name || "Branch Staff",
+          email: item.profiles?.email || null,
+          phone_number: item.profiles?.phone_number || "",
+          role_title: item.role_title || "Counter Staff",
+          assigned_by: item.assigned_by,
+          created_at: item.created_at,
+        }));
+      return list;
+    }
+  } catch (err) {
+    console.warn("Error fetching branch staff from Supabase:", err);
+  }
+
+  if (shopId) {
+    return localStaffStore.filter((s) => s.shop_id === shopId);
+  }
+  return localStaffStore;
+}
+
+/**
+ * Assign a registered LabadaGo member as staff of a specific branch
+ */
+export async function assignStaffToBranch(
+  shopId: string,
+  userId: string,
+  roleTitle: string = "Counter Staff"
+): Promise<{ success: boolean; staff?: BranchStaffMember; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // 1. Try Supabase RPC
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc("assign_branch_staff", {
+        target_shop_id: shopId,
+        target_user_id: userId,
+        p_role_title: roleTitle,
+      });
+
+      if (!rpcErr && rpcRes?.success) {
+        // RPC handled it cleanly
+      } else {
+        // Direct database upsert
+        await supabase.from("branch_staff").upsert(
+          {
+            shop_id: shopId,
+            user_id: userId,
+            assigned_by: user.id,
+            role_title: roleTitle,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+
+        await supabase
+          .from("profiles")
+          .update({ role: UserRole.STAFF, assigned_shop_id: shopId })
+          .eq("id", userId);
+      }
+    } catch {
+      // ignore
+    }
+
+    // Resolve shop name
+    const allShops = await getLaundryShops();
+    const shop = allShops.find((s) => s.id === shopId);
+
+    // Update in-memory fallback stores
+    const profile = localProfilesStore.find((p) => p.id === userId);
+    if (profile) {
+      profile.role = UserRole.STAFF;
+      profile.assigned_shop_id = shopId;
+      profile.assigned_shop_name = shop?.name || "Laundry Shop";
+    }
+
+    const staffMember: BranchStaffMember = {
+      id: `staff-${Date.now()}`,
+      shop_id: shopId,
+      shop_name: shop?.name || "Laundry Shop",
+      user_id: userId,
+      full_name: profile?.full_name || "Branch Staff",
+      email: profile?.email || null,
+      phone_number: profile?.phone_number || "",
+      role_title: roleTitle,
+      assigned_by: user.id,
+      created_at: new Date().toISOString(),
+    };
+
+    localStaffStore = localStaffStore.filter((s) => s.user_id !== userId);
+    localStaffStore.push(staffMember);
+
+    return { success: true, staff: staffMember };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to assign staff member.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Remove a staff member from a branch, reverting their role back to Customer
+ */
+export async function removeStaffFromBranch(
+  userId: string,
+  shopId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // 1. Try Supabase RPC
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc("remove_branch_staff", {
+        target_user_id: userId,
+        target_shop_id: shopId,
+      });
+
+      if (!rpcErr && rpcRes?.success) {
+        // RPC handled it cleanly
+      } else {
+        // Direct database deletes
+        await supabase
+          .from("branch_staff")
+          .delete()
+          .eq("user_id", userId)
+          .eq("shop_id", shopId);
+
+        await supabase
+          .from("profiles")
+          .update({ role: UserRole.COSTUMER, assigned_shop_id: null })
+          .eq("id", userId);
+      }
+    } catch {
+      // ignore
+    }
+
+    // Revert local stores
+    localStaffStore = localStaffStore.filter((s) => s.user_id !== userId);
+    const profile = localProfilesStore.find((p) => p.id === userId);
+    if (profile) {
+      profile.role = UserRole.COSTUMER;
+      profile.assigned_shop_id = null;
+      profile.assigned_shop_name = null;
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to remove staff.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Get the shop details assigned to a staff member
+ */
+export async function getStaffAssignedShop(userId: string): Promise<LaundryShop | null> {
+  try {
+    const { data: staffData } = await supabase
+      .from("branch_staff")
+      .select("shop_id, laundry_shops(*, shop_services(*))")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (staffData && staffData.laundry_shops) {
+      const shop = staffData.laundry_shops as any;
+      return {
+        ...shop,
+        images: Array.isArray(shop.images) ? shop.images : [],
+        services: shop.shop_services || [],
+      };
+    }
+  } catch {
+    // fallback
+  }
+
+  const localAssigned = localStaffStore.find((s) => s.user_id === userId);
+  if (localAssigned) {
+    const shops = await getLaundryShops();
+    return shops.find((s) => s.id === localAssigned.shop_id) || null;
+  }
+
+  return null;
+}
+
+// -----------------------------------------------------------------------------
+// Reviews and Rating Helpers
+// -----------------------------------------------------------------------------
+
+/**
+ * Submit a customer review and rating, then recalculate shop average rating
+ */
+export async function submitShopReview(params: {
+  shopId: string;
+  rating: number;
+  comment?: string;
+  orderId?: string | null;
+  customerName?: string;
+}): Promise<{ success: boolean; newRating?: number; totalReviews?: number; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const customerId = user?.id || null;
+    const customerName = params.customerName || user?.user_metadata?.full_name || "Valued Customer";
+    const clampedRating = Math.max(1, Math.min(5, Math.round(params.rating)));
+
+    const newReview: ShopReview = {
+      id: `rev-${Date.now()}`,
+      shop_id: params.shopId,
+      customer_id: customerId,
+      customer_name: customerName,
+      rating: clampedRating,
+      comment: params.comment?.trim() || "",
+      order_id: params.orderId || null,
+      created_at: new Date().toISOString(),
+    };
+
+    let calculatedAvg = clampedRating;
+    let calculatedTotal = 1;
+
+    // 1. Try Supabase insert
+    try {
+      await supabase.from("reviews").insert({
+        shop_id: newReview.shop_id,
+        customer_id: newReview.customer_id,
+        customer_name: newReview.customer_name,
+        rating: newReview.rating,
+        comment: newReview.comment,
+        order_id: newReview.order_id,
+      });
+
+      // Recalculate average rating & total reviews from reviews table
+      const { data: allReviews } = await supabase
+        .from("reviews")
+        .select("rating")
+        .eq("shop_id", params.shopId);
+
+      if (allReviews && allReviews.length > 0) {
+        calculatedTotal = allReviews.length;
+        const sum = allReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+        calculatedAvg = Math.round((sum / calculatedTotal) * 10) / 10;
+
+        await supabase
+          .from("laundry_shops")
+          .update({ rating: calculatedAvg, total_reviews: calculatedTotal })
+          .eq("id", params.shopId);
+      }
+    } catch (dbErr) {
+      console.warn("Direct reviews table update notice, applying local store:", dbErr);
+    }
+
+    // Local fallback update
+    localReviewsStore.unshift(newReview);
+    const shopReviews = localReviewsStore.filter((r) => r.shop_id === params.shopId);
+    if (shopReviews.length > 0) {
+      calculatedTotal = shopReviews.length;
+      const sum = shopReviews.reduce((acc, r) => acc + r.rating, 0);
+      calculatedAvg = Math.round((sum / calculatedTotal) * 10) / 10;
+    }
+
+    const shopIdx = localShopsStore.findIndex((s) => s.id === params.shopId);
+    if (shopIdx >= 0) {
+      localShopsStore[shopIdx].rating = calculatedAvg;
+      localShopsStore[shopIdx].total_reviews = calculatedTotal;
+    }
+
+    return { success: true, newRating: calculatedAvg, totalReviews: calculatedTotal };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to submit review.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Fetch reviews for a specific laundry shop
+ */
+export async function getShopReviews(shopId: string): Promise<ShopReview[]> {
+  try {
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch {
+    // fallback
+  }
+  return localReviewsStore.filter((r) => r.shop_id === shopId);
 }

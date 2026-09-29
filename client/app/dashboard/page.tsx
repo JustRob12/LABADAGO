@@ -48,9 +48,10 @@ function DashboardContent() {
   }, [router]);
 
   const isOwner = user?.role === UserRole.OWNER;
+  const isStaff = user?.role === UserRole.STAFF;
 
   const handleRoleToggle = async () => {
-    if (!user) return;
+    if (!user || isStaff) return;
     const nextRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
     await switchUserRole(nextRole);
     setUser({ ...user, role: nextRole });
@@ -81,30 +82,38 @@ function DashboardContent() {
               <div className="flex items-center gap-3.5">
                 <div
                   className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
-                    isOwner
+                    isStaff
+                      ? "border-teal-200 bg-teal-50 text-teal-600"
+                      : isOwner
                       ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                       : "border-blue-200 bg-blue-50 text-blue-600"
                   }`}
                 >
-                  {isOwner ? <Store size={20} /> : <User size={20} />}
+                  {isStaff ? <ScanLine size={20} /> : isOwner ? <Store size={20} /> : <User size={20} />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                      Active Portal: {isOwner ? "Laundry Shop Owner" : "Customer (Costumer)"}
+                      Active Portal: {isStaff ? "Branch Staff Counter" : isOwner ? "Laundry Shop Owner" : "Customer (Costumer)"}
                     </h3>
                     <span
                       className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                        isOwner
+                        isStaff
+                          ? "bg-teal-50 text-teal-700 border-teal-200"
+                          : isOwner
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : "bg-blue-50 text-blue-700 border-blue-200"
                       }`}
                     >
-                      Role {user?.role}
+                      {isStaff ? "Role 3 (Staff)" : `Role ${user?.role}`}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {isOwner
+                    {isStaff
+                      ? user?.assigned_shop_name
+                        ? `Assigned Branch: ${user.assigned_shop_name} • Counter Scanning & Dispatch (Role locked by owner)`
+                        : "Counter QR Scanning & Laundry Handover (Role locked by owner)"
+                      : isOwner
                       ? "You have access to shop management, counter QR scanner, and business analytics."
                       : "You have access to shop map, queue tracking, walk-in QR passes, and order tracker."}
                   </p>
@@ -112,30 +121,90 @@ function DashboardContent() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRoleToggle}
-                  className="text-xs"
-                >
-                  Switch to {isOwner ? "Customer Mode" : "Shop Owner Mode"}
-                </Button>
-                <Link href={isOwner ? "/owner" : "/customer"}>
-                  <Button
-                    variant={isOwner ? "success" : "primary"}
-                    size="sm"
-                    rightIcon={<ArrowRight size={14} />}
-                    className="text-xs"
-                  >
-                    Enter {isOwner ? "Owner Portal" : "Customer Portal"}
-                  </Button>
-                </Link>
+                {!isStaff ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRoleToggle}
+                      className="text-xs"
+                    >
+                      Switch to {isOwner ? "Customer Mode" : "Shop Owner Mode"}
+                    </Button>
+                    <Link href={isOwner ? "/owner" : "/customer"}>
+                      <Button
+                        variant={isOwner ? "success" : "primary"}
+                        size="sm"
+                        rightIcon={<ArrowRight size={14} />}
+                        className="text-xs"
+                      >
+                        Enter {isOwner ? "Owner Portal" : "Customer Portal"}
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <Link href="/staff">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      rightIcon={<ArrowRight size={14} />}
+                      className="bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold"
+                    >
+                      Open Staff Scanner
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
 
             {/* Quick Access Action Modules Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {!isOwner ? (
+              {isStaff ? (
+                // Staff Modules (Scanning, Pickup Handover, Profile)
+                <>
+                  <Link href="/staff">
+                    <div className="bg-white rounded-xl border border-teal-200 p-5 shadow-2xs hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-9 h-9 rounded-lg border border-teal-200 bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+                        <ScanLine size={18} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-teal-600 transition-colors">
+                        Counter Scanner Station
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Automatic QR scanning to receive drop-offs, assign machines, and dispatch completed laundry.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/staff">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                        <Package size={18} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                        Ready Pickups Queue
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Quick handover list for customers picking up clean laundry and settlement of payments.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/profile">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
+                        <User size={18} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
+                        Staff Account Profile
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        View your branch assignment details, account information, and security settings.
+                      </p>
+                    </div>
+                  </Link>
+                </>
+              ) : !isOwner ? (
                 // Customer Modules
                 <>
                   <Link href="/customer">

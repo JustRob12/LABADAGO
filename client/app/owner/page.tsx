@@ -8,15 +8,22 @@ import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
 import { WalkInIntake } from "@/components/owner/WalkInIntake";
 import { ShopSetupForm } from "@/components/owner/ShopSetupForm";
-import { BarChart3, ScanLine, Settings, Store, Loader2 } from "lucide-react";
+import { BranchStaffManagement } from "@/components/owner/BranchStaffManagement";
+import { BarChart3, ScanLine, Settings, Store, Loader2, Users } from "lucide-react";
 
 function OwnerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") || "analytics";
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "scanner" | "setup">(
-    initialTab === "scanner" ? "scanner" : initialTab === "setup" ? "setup" : "analytics"
+  const [activeTab, setActiveTab] = useState<"analytics" | "scanner" | "setup" | "staff">(
+    initialTab === "scanner"
+      ? "scanner"
+      : initialTab === "setup"
+      ? "setup"
+      : initialTab === "staff"
+      ? "staff"
+      : "analytics"
   );
 
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -31,12 +38,14 @@ function OwnerContent() {
       setActiveTab("scanner");
     } else if (tabParam === "setup") {
       setActiveTab("setup");
+    } else if (tabParam === "staff") {
+      setActiveTab("staff");
     } else {
       setActiveTab("analytics");
     }
   }, [searchParams]);
 
-  const handleTabChange = (tab: "analytics" | "scanner" | "setup") => {
+  const handleTabChange = (tab: "analytics" | "scanner" | "setup" | "staff") => {
     setActiveTab(tab);
     if (tab === "analytics") {
       router.push("/owner", { scroll: false });
@@ -49,22 +58,33 @@ function OwnerContent() {
     async function loadOwnerData() {
       setIsLoading(true);
       try {
-        const [profile, shopsList, txList] = await Promise.all([
-          getCurrentUserProfile(),
-          getLaundryShops(),
-          getLaundryTransactions(),
-        ]);
+        const profile = await getCurrentUserProfile();
 
         if (!profile) {
           router.push("/login?redirect=/owner&message=" + encodeURIComponent("Please sign in to your shop owner account."));
           return;
         }
 
-        setUser(profile);
-        setShops(shopsList);
-        if (shopsList.length > 0) {
-          setShop(shopsList[0]);
+        // Dedicated restriction: Staff users cannot access the owner management portal
+        if (profile.role === UserRole.STAFF) {
+          router.replace("/staff");
+          return;
         }
+
+        setUser(profile);
+
+        // Fetch strictly this owner's shops
+        const ownerShops = await getLaundryShops(profile.id);
+        setShops(ownerShops);
+        if (ownerShops.length > 0) {
+          setShop(ownerShops[0]);
+        } else {
+          setShop(null);
+        }
+
+        // Fetch strictly transactions belonging to this owner's registered shops
+        const ownerShopIds = ownerShops.map((s) => s.id);
+        const txList = await getLaundryTransactions(undefined, undefined, ownerShopIds);
         setTransactions(txList);
       } catch (err) {
         console.error("Failed to load owner data:", err);
@@ -74,12 +94,15 @@ function OwnerContent() {
     }
 
     loadOwnerData();
-  }, []);
+  }, [router]);
 
   const refreshTransactions = async () => {
-    const txList = await getLaundryTransactions();
+    if (!user) return;
+    const ownerShopIds = shops.map((s) => s.id);
+    const txList = await getLaundryTransactions(undefined, undefined, ownerShopIds);
     setTransactions(txList);
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col">
@@ -142,6 +165,19 @@ function OwnerContent() {
               <Settings size={13} />
               <span>Shop Setup</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("staff")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
+                activeTab === "staff"
+                  ? "bg-teal-600 text-white shadow-2xs font-semibold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Users size={13} />
+              <span>Branch Staff</span>
+            </button>
           </div>
         </div>
 
@@ -159,6 +195,8 @@ function OwnerContent() {
             {/* Tab 2: Walk-In QR Intake & Live Orders */}
             {activeTab === "scanner" && (
               <WalkInIntake
+                shops={shops}
+                currentShop={shop}
                 transactions={transactions}
                 onTransactionsUpdated={refreshTransactions}
               />
@@ -167,6 +205,7 @@ function OwnerContent() {
             {/* Tab 3: Shop Setup */}
             {activeTab === "setup" && (
               <ShopSetupForm
+                ownerId={user?.id}
                 shops={shops}
                 initialShop={shop || undefined}
                 onSaved={(updated) => {
@@ -181,6 +220,22 @@ function OwnerContent() {
                     return [updated, ...prev];
                   });
                 }}
+                onDeleted={(deletedId) => {
+                  setShops((prev) => {
+                    const remaining = prev.filter((s) => s.id !== deletedId);
+                    setShop(remaining.length > 0 ? remaining[0] : null);
+                    return remaining;
+                  });
+                }}
+              />
+            )}
+
+            {/* Tab 4: Branch Staff Management */}
+            {activeTab === "staff" && (
+              <BranchStaffManagement
+                shops={shops}
+                currentShop={shop}
+                ownerId={user?.id}
               />
             )}
           </>

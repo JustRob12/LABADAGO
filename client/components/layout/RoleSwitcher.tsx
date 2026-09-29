@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UserRole } from "@/types/auth";
 import { switchUserRole } from "@/lib/supabase/auth";
-import { Store, User, Loader2 } from "lucide-react";
+import { Store, User, Loader2, Lock } from "lucide-react";
 
 interface RoleSwitcherProps {
   currentRole: UserRole;
@@ -20,6 +20,19 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
   const router = useRouter();
   const pathname = usePathname();
   const [isSwitching, setIsSwitching] = useState(false);
+
+  // If user is staff, role is completely locked!
+  if (currentRole === UserRole.STAFF) {
+    return (
+      <div
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 text-xs font-semibold shadow-2xs ${className}`}
+        title="Staff Role is locked. Only your branch owner can remove your staff role."
+      >
+        <Lock size={12} className="text-teal-600 shrink-0" />
+        <span>Branch Staff (Locked)</span>
+      </div>
+    );
+  }
 
   // Derive if currently in owner mode either by role or current pathname
   const isOwner = currentRole === UserRole.OWNER || pathname?.startsWith("/owner");

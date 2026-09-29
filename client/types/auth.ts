@@ -2,12 +2,14 @@ export enum UserRole {
   ADMIN = 0,
   OWNER = 1,
   COSTUMER = 2,
+  STAFF = 3,
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.ADMIN]: "Admin",
   [UserRole.OWNER]: "Owner",
   [UserRole.COSTUMER]: "Costumer",
+  [UserRole.STAFF]: "Branch Staff",
 };
 
 export const ROLE_BADGE_COLORS: Record<UserRole, { bg: string; text: string; border: string }> = {
@@ -26,6 +28,11 @@ export const ROLE_BADGE_COLORS: Record<UserRole, { bg: string; text: string; bor
     text: "text-emerald-700",
     border: "border-emerald-200",
   },
+  [UserRole.STAFF]: {
+    bg: "bg-teal-50",
+    text: "text-teal-700",
+    border: "border-teal-200",
+  },
 };
 
 export type Gender = "Male" | "Female" | "Other" | "Prefer not to say";
@@ -38,8 +45,34 @@ export interface UserProfile {
   phone_number: string;
   gender: Gender;
   role: UserRole;
+  assigned_shop_id?: string | null;
+  assigned_shop_name?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface BranchStaffMember {
+  id: string;
+  shop_id: string;
+  shop_name?: string;
+  user_id: string;
+  full_name: string;
+  email: string | null;
+  phone_number: string;
+  role_title?: string;
+  assigned_by?: string;
+  created_at: string;
+}
+
+export interface ShopReview {
+  id: string;
+  shop_id: string;
+  customer_id?: string | null;
+  customer_name: string;
+  rating: number;
+  comment?: string;
+  order_id?: string | null;
+  created_at: string;
 }
 
 export interface RegisterFormData {
@@ -128,6 +161,9 @@ export interface LaundryTransaction {
   is_walkin: boolean;
   qr_data?: string;
   special_notes?: string;
+  machine_number?: string;
+  staff_id?: string;
+  staff_name?: string;
   created_at: string;
   updated_at?: string;
 }

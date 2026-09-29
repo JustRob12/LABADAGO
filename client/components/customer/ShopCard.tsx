@@ -19,6 +19,7 @@ interface ShopCardProps {
   isSelected?: boolean;
   onSelect?: (shop: LaundryShop) => void;
   onGenerateQR?: (shop: LaundryShop) => void;
+  onShowDirections?: (shop: LaundryShop) => void;
   distanceKm?: number;
 }
 
@@ -27,6 +28,7 @@ export const ShopCard: React.FC<ShopCardProps> = ({
   isSelected = false,
   onSelect,
   onGenerateQR,
+  onShowDirections,
   distanceKm,
 }) => {
   const queueBadge = {
@@ -39,10 +41,16 @@ export const ShopCard: React.FC<ShopCardProps> = ({
 
   const handleNavigate = (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${shop.latitude},${shop.longitude}`,
-      "_blank"
-    );
+    if (onShowDirections) {
+      onShowDirections(shop);
+    } else if (onSelect) {
+      onSelect(shop);
+    } else {
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&destination=${shop.latitude},${shop.longitude}`,
+        "_blank"
+      );
+    }
   };
 
   const hasImages = shop.images && shop.images.length > 0;
@@ -119,9 +127,11 @@ export const ShopCard: React.FC<ShopCardProps> = ({
 
           {/* Rating badge */}
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 shrink-0">
-            <Star size={12} className="text-amber-500 fill-amber-500" />
-            <span>{shop.rating}</span>
-            <span className="text-[10px] text-slate-400">({shop.total_reviews})</span>
+            <Star size={12} className={shop.total_reviews > 0 ? "text-amber-500 fill-amber-500" : "text-amber-400 fill-amber-400/30"} />
+            <span>{shop.total_reviews > 0 ? Number(shop.rating).toFixed(1) : "New"}</span>
+            <span className="text-[10px] text-slate-400">
+              {shop.total_reviews > 0 ? `(${shop.total_reviews})` : "(0)"}
+            </span>
           </div>
         </div>
 

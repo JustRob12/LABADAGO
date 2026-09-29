@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   description: "LabadaGo is your premier laundry platform. Schedule pick up, track your laundry progress, and enjoy fresh clothes returned straight to your door.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+  colorScheme: "light",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -26,8 +31,10 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ colorScheme: "light" }}
     >
       <body className="min-h-full flex flex-col bg-white text-slate-900">{children}</body>
     </html>
   );
 }
+
