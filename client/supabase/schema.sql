@@ -68,8 +68,9 @@ create table if not exists public.laundry_shops (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Ensure images column exists if table was created previously
+-- Ensure images and max_kilo_per_load columns exist if table was created previously
 alter table public.laundry_shops add column if not exists images text[] default '{}';
+alter table public.laundry_shops add column if not exists max_kilo_per_load numeric(6,2) default 8.0;
 
 create index if not exists idx_shops_owner on public.laundry_shops(owner_id);
 create index if not exists idx_shops_location on public.laundry_shops(latitude, longitude);
@@ -79,7 +80,7 @@ alter table public.profiles add column if not exists assigned_shop_id uuid refer
 create index if not exists idx_profiles_assigned_shop on public.profiles(assigned_shop_id);
 
 -- ------------------------------------------------------------------------------
--- 3. Shop Services Catalog (Pricing, unit, turnaround)
+-- 3. Shop Services Catalog (Pricing, unit, turnaround, kilo capacity)
 -- ------------------------------------------------------------------------------
 create table if not exists public.shop_services (
   id uuid primary key default gen_random_uuid(),
@@ -88,10 +89,14 @@ create table if not exists public.shop_services (
   description text,
   price numeric(10,2) not null,
   unit text not null default 'kg', -- 'kg', 'load', 'piece'
+  kilos numeric(6,2), -- max kilos allowed or capacity per load
   estimated_minutes int default 120,
   is_available boolean default true,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Ensure kilos column exists if shop_services table was created previously
+alter table public.shop_services add column if not exists kilos numeric(6,2);
 
 create index if not exists idx_services_shop on public.shop_services(shop_id);
 

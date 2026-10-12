@@ -125,3 +125,21 @@
     - Added automatic service reset: when switching laundry shops (either externally from the map or via the dropdown selector), the service options reload to match the chosen branch, and the first valid service for that shop is pre-selected.
   - **Safe Guarding in `LaundryMap.tsx`**: Ensured `onGenerateQR` safely validates `selectedShop` before calling the handler.
 
+### 14. Shop Setup Kilo Allowance & Service Capacity Configuration
+- **Branch-Level Machine Capacity**:
+  - Added **Standard Machine Capacity (kg)** input (default `8.0 kg`) to the **Hours, Queue & Capacity** section in `ShopSetupForm.tsx`.
+  - Stored in `laundry_shops.max_kilo_per_load` with resilient database saving and fallback handling.
+- **Service-Level Kilo & Weight Allowance**:
+  - **Kilos Input Field**: Added a dedicated `Kilos (e.g. 8)` input field alongside Service Name, Price (₱), and Unit (`per load`, `per kg`, `per pc`) in the service catalog creation and editing row in `ShopSetupForm.tsx`.
+  - **Inline Service Editing**: Added a **Pencil (Edit)** button to each existing service item in `ShopSetupForm.tsx`, allowing shop owners to edit the price, service name, unit, and kilo allowance directly.
+  - **Visual Kilo Badges**: Existing services now clearly display their weight capacity badge (e.g., `⚖️ 8 kg per load max` or `⚖️ 5 kg allowance`) next to the price tag.
+  - **Updated Quick Suggestions**: Pre-populated one-click suggestions with standard kilo values (e.g., `Wash, Dry & Fold (200 / 8kg load)`, `Wash & Dry (160 / 8kg load)`, `Comforter / Blanket (180 / 5kg)`, etc.).
+- **Smart Load-Based Pricing in Walk-In QR Generator (`WalkInQRGenerator.tsx`)**:
+  - **Kilo Allowance in Dropdown**: Service selector shows exact weight limits (e.g., `Wash, Dry & Fold — ₱200/load (8kg load)`).
+  - **Load Quantity Calculation**: For `load` services, `estimatedAmount` automatically calculates the number of machine loads needed based on the customer's estimated weight and the service's kilo limit (e.g. 5 kg on an 8 kg load = 1 load @ ₱200; 12 kg = 2 loads @ ₱400), instead of multiplying weight by price indiscriminately.
+- **Shop Card Snapshot Enhancement**:
+  - `ShopCard.tsx` now shows kilo load pricing snapshots (e.g., `₱200/8kg load`) on customer branch cards.
+- **Database Schema & Error Resilience**:
+  - Updated `supabase_schema.sql` and `client/supabase/schema.sql` with `ALTER TABLE public.shop_services ADD COLUMN IF NOT EXISTS kilos NUMERIC(6,2);` and `ALTER TABLE public.laundry_shops ADD COLUMN IF NOT EXISTS max_kilo_per_load NUMERIC(6,2) DEFAULT 8.0;`.
+  - Built automatic error recovery into `saveLaundryShop` in `auth.ts`: if the Supabase tables don't have the `kilos` or `max_kilo_per_load` columns yet, it automatically retries without failing and stores the kilo information in `description`, while persisting seamlessly in the active session.
+

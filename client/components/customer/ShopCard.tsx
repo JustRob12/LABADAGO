@@ -184,7 +184,7 @@ export const ShopCard: React.FC<ShopCardProps> = ({
               >
                 <span className="text-slate-600 truncate">{srv.service_name}</span>
                 <span className="font-bold text-slate-900 shrink-0 ml-1">
-                  ₱{srv.price}/{srv.unit}
+                  ₱{srv.price}/{srv.unit === "load" && srv.kilos ? `${srv.kilos}kg load` : srv.unit}
                 </span>
               </div>
             ))}

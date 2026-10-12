@@ -103,6 +103,7 @@ export interface ShopService {
   description?: string;
   price: number;
   unit: string; // 'kg', 'piece', 'load'
+  kilos?: number | null; // e.g. 8 for an 8kg load limit or standard weight allowance
   estimated_minutes: number;
   is_available?: boolean;
 }
@@ -124,6 +125,7 @@ export interface LaundryShop {
   total_reviews: number;
   washer_count: number;
   dryer_count: number;
+  max_kilo_per_load?: number;
   images?: string[];
   services?: ShopService[];
   distance_km?: number;

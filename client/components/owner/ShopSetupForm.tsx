@@ -28,6 +28,8 @@ import {
   Pencil,
   ChevronRight,
   AlertTriangle,
+  X,
+  Scale,
 } from "lucide-react";
 
 export function formatTo12Hour(timeStr?: string): string {
@@ -89,6 +91,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       total_reviews: 0,
       washer_count: 6,
       dryer_count: 6,
+      max_kilo_per_load: 8,
       images: [],
       services: [],
     }
@@ -96,7 +99,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
   const [newServiceName, setNewServiceName] = useState("");
   const [newServicePrice, setNewServicePrice] = useState<string>("");
-  const [newServiceUnit, setNewServiceUnit] = useState("kg");
+  const [newServiceUnit, setNewServiceUnit] = useState("load");
+  const [newServiceKilos, setNewServiceKilos] = useState<string>("8");
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
 
   // Keep branchList synchronized with props
   useEffect(() => {
@@ -138,6 +143,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       close_time: branch.close_time || "21:00",
       washer_count: branch.washer_count ?? 6,
       dryer_count: branch.dryer_count ?? 6,
+      max_kilo_per_load: branch.max_kilo_per_load ?? 8,
     });
     setIsAddingNew(false);
     setViewMode("form");
@@ -165,6 +171,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
       total_reviews: 0,
       washer_count: 6,
       dryer_count: 6,
+      max_kilo_per_load: 8,
       images: [],
       services: [],
     });
@@ -205,28 +212,72 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
     { value: "Closed", label: "Store Closed" },
   ];
 
-  const handleAddService = () => {
+  const handleAddOrUpdateService = () => {
     if (!newServiceName.trim()) return;
     const priceNum = parseFloat(newServicePrice);
-    const newSrv: ShopService = {
-      id: `srv-${Date.now()}`,
-      shop_id: shopData.id,
-      service_name: newServiceName.trim(),
-      price: isNaN(priceNum) ? 0 : priceNum,
-      unit: newServiceUnit,
-      estimated_minutes: 90,
-    };
+    const kilosNum = parseFloat(newServiceKilos);
+    const kilosVal = isNaN(kilosNum) || kilosNum <= 0 ? null : kilosNum;
 
-    setShopData((prev) => ({
-      ...prev,
-      services: [...(prev.services || []), newSrv],
-    }));
+    if (editingServiceId) {
+      setShopData((prev) => ({
+        ...prev,
+        services: (prev.services || []).map((s) =>
+          s.id === editingServiceId
+            ? {
+                ...s,
+                service_name: newServiceName.trim(),
+                price: isNaN(priceNum) ? 0 : priceNum,
+                unit: newServiceUnit,
+                kilos: kilosVal,
+                description: kilosVal ? `Up to ${kilosVal} kg` : s.description || "",
+              }
+            : s
+        ),
+      }));
+      setEditingServiceId(null);
+    } else {
+      const newSrv: ShopService = {
+        id: `srv-${Date.now()}`,
+        shop_id: shopData.id,
+        service_name: newServiceName.trim(),
+        price: isNaN(priceNum) ? 0 : priceNum,
+        unit: newServiceUnit,
+        kilos: kilosVal,
+        description: kilosVal ? `Up to ${kilosVal} kg` : "",
+        estimated_minutes: 90,
+        is_available: true,
+      };
+
+      setShopData((prev) => ({
+        ...prev,
+        services: [...(prev.services || []), newSrv],
+      }));
+    }
 
     setNewServiceName("");
     setNewServicePrice("");
+    setNewServiceKilos("8");
+  };
+
+  const handleEditService = (srv: ShopService) => {
+    setNewServiceName(srv.service_name);
+    setNewServicePrice(srv.price !== undefined ? String(srv.price) : "");
+    setNewServiceUnit(srv.unit || "load");
+    setNewServiceKilos(srv.kilos ? String(srv.kilos) : "");
+    setEditingServiceId(srv.id);
+  };
+
+  const handleCancelEditService = () => {
+    setNewServiceName("");
+    setNewServicePrice("");
+    setNewServiceKilos("8");
+    setEditingServiceId(null);
   };
 
   const handleRemoveService = (serviceId: string) => {
+    if (editingServiceId === serviceId) {
+      handleCancelEditService();
+    }
     setShopData((prev) => ({
       ...prev,
       services: (prev.services || []).filter((s) => s.id !== serviceId),
@@ -239,21 +290,43 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
     setSuccessMessage(null);
     setErrorMessage(null);
 
-    // Auto-commit any typed service that wasn't submitted with the "+ Add" button yet
+    // Auto-commit any typed service that wasn't submitted with the button yet
     let currentServices = [...(shopData.services || [])];
     if (newServiceName.trim()) {
       const priceNum = parseFloat(newServicePrice);
-      currentServices.push({
-        id: `srv-${Date.now()}`,
-        shop_id: shopData.id,
-        service_name: newServiceName.trim(),
-        price: isNaN(priceNum) ? 0 : priceNum,
-        unit: newServiceUnit,
-        estimated_minutes: 90,
-        is_available: true,
-      });
+      const kilosNum = parseFloat(newServiceKilos);
+      const kilosVal = isNaN(kilosNum) || kilosNum <= 0 ? null : kilosNum;
+
+      if (editingServiceId) {
+        currentServices = currentServices.map((s) =>
+          s.id === editingServiceId
+            ? {
+                ...s,
+                service_name: newServiceName.trim(),
+                price: isNaN(priceNum) ? 0 : priceNum,
+                unit: newServiceUnit,
+                kilos: kilosVal,
+                description: kilosVal ? `Up to ${kilosVal} kg` : s.description || "",
+              }
+            : s
+        );
+      } else {
+        currentServices.push({
+          id: `srv-${Date.now()}`,
+          shop_id: shopData.id,
+          service_name: newServiceName.trim(),
+          price: isNaN(priceNum) ? 0 : priceNum,
+          unit: newServiceUnit,
+          kilos: kilosVal,
+          description: kilosVal ? `Up to ${kilosVal} kg` : "",
+          estimated_minutes: 90,
+          is_available: true,
+        });
+      }
       setNewServiceName("");
       setNewServicePrice("");
+      setNewServiceKilos("8");
+      setEditingServiceId(null);
     }
 
     const dataToSave: LaundryShop = {
@@ -788,7 +861,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
           <Input
             type="number"
             min="1"
@@ -846,6 +919,36 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
               }
             }}
           />
+
+          <Input
+            type="number"
+            min="1"
+            step="0.5"
+            placeholder="e.g. 8"
+            label="Standard Machine Capacity (kg)"
+            value={shopData.max_kilo_per_load === 0 ? "" : (shopData.max_kilo_per_load ?? 8)}
+            onChange={(e) =>
+              setShopData({
+                ...shopData,
+                max_kilo_per_load: e.target.value === "" ? (undefined as any) : parseFloat(e.target.value) || 0,
+              })
+            }
+            onKeyDown={(e) => {
+              if (
+                (e.key === "Backspace" || e.key === "Delete") &&
+                e.currentTarget.value === "0"
+              ) {
+                setShopData({ ...shopData, max_kilo_per_load: undefined as any });
+              }
+            }}
+            onFocus={(e) => {
+              if (e.target.value === "0") {
+                setShopData({ ...shopData, max_kilo_per_load: undefined as any });
+              } else {
+                e.target.select();
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -863,25 +966,49 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
         {/* Existing Services List */}
         <div className="space-y-2">
+          {(!shopData.services || shopData.services.length === 0) && (
+            <p className="text-xs text-slate-400 italic py-2 text-center">
+              No services added yet. Use the quick suggestions below or add a custom service.
+            </p>
+          )}
           {shopData.services?.map((srv) => (
             <div
               key={srv.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50/60"
+              className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                editingServiceId === srv.id
+                  ? "border-blue-400 bg-blue-50/70"
+                  : "border-slate-200 bg-slate-50/60 hover:bg-slate-50"
+              }`}
             >
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-xs text-slate-900">{srv.service_name}</span>
-                <span className="text-xs text-slate-500 ml-2">
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   ₱{srv.price} per {srv.unit}
                 </span>
+                {srv.kilos ? (
+                  <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                    ⚖️ {srv.kilos} kg {srv.unit === "load" ? "per load max" : "allowance"}
+                  </span>
+                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => handleRemoveService(srv.id)}
-                className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                title="Remove Service"
-              >
-                <Trash2 size={14} />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleEditService(srv)}
+                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                  title="Edit Service Kilos / Price"
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveService(srv.id)}
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                  title="Remove Service"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -890,82 +1017,123 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
         <div className="flex items-center gap-1.5 flex-wrap pt-1">
           <span className="text-[11px] text-slate-400 font-medium">Quick Suggestions:</span>
           {[
-            { name: "Wash, Dry & Fold", price: "45", unit: "kg" },
-            { name: "Wash & Dry", price: "35", unit: "kg" },
-            { name: "Wash Only", price: "25", unit: "kg" },
-            { name: "Dry Only", price: "25", unit: "kg" },
-            { name: "Comforter / Blanket", price: "180", unit: "piece" },
-            { name: "Dry Cleaning", price: "150", unit: "piece" },
+            { name: "Wash, Dry & Fold", price: "200", unit: "load", kilos: "8" },
+            { name: "Wash, Dry & Fold", price: "45", unit: "kg", kilos: "1" },
+            { name: "Wash & Dry", price: "160", unit: "load", kilos: "8" },
+            { name: "Wash Only", price: "70", unit: "load", kilos: "8" },
+            { name: "Dry Only", price: "70", unit: "load", kilos: "8" },
+            { name: "Comforter / Blanket", price: "180", unit: "piece", kilos: "5" },
+            { name: "Dry Cleaning", price: "150", unit: "piece", kilos: "1" },
           ].map((preset) => (
             <button
-              key={preset.name}
+              key={`${preset.name}-${preset.unit}`}
               type="button"
               onClick={() => {
                 setNewServiceName(preset.name);
                 setNewServicePrice(preset.price);
                 setNewServiceUnit(preset.unit);
+                setNewServiceKilos(preset.kilos);
               }}
               className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 border border-slate-200 cursor-pointer transition-colors"
             >
-              + {preset.name} (₱{preset.price})
+              + {preset.name} (₱{preset.price} / {preset.unit === "load" ? `${preset.kilos}kg load` : preset.unit})
             </button>
           ))}
         </div>
 
-        {/* Add New Service Line */}
-        <div className="pt-2 grid grid-cols-1 sm:grid-cols-12 gap-2">
-          <div className="sm:col-span-6">
-            <Input
-              placeholder="e.g. Dry Cleaning / Delicate Wash"
-              value={newServiceName}
-              onChange={(e) => setNewServiceName(e.target.value)}
-            />
+        {/* Add / Edit Service Line */}
+        <div className="pt-2">
+          {editingServiceId && (
+            <div className="flex items-center justify-between pb-2 text-xs text-blue-600 font-medium">
+              <span>Editing service: <strong>{newServiceName || "Selected Service"}</strong></span>
+              <button
+                type="button"
+                onClick={handleCancelEditService}
+                className="text-slate-500 hover:text-slate-700 underline text-[11px] cursor-pointer"
+              >
+                Cancel Edit
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div className="sm:col-span-5">
+              <Input
+                placeholder="e.g. Wash, Dry & Fold"
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Input
+                type="number"
+                placeholder="Price (₱)"
+                value={newServicePrice}
+                onChange={(e) => setNewServicePrice(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    (e.key === "Backspace" || e.key === "Delete") &&
+                    (newServicePrice === "0" || newServicePrice === "0.0")
+                  ) {
+                    e.preventDefault();
+                    setNewServicePrice("");
+                  }
+                }}
+                onFocus={(e) => {
+                  if (e.target.value === "0") {
+                    setNewServicePrice("");
+                  } else {
+                    e.target.select();
+                  }
+                }}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Input
+                type="number"
+                step="0.5"
+                min="0.5"
+                placeholder="Kilos (e.g. 8)"
+                value={newServiceKilos}
+                onChange={(e) => setNewServiceKilos(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                title="Max kilos or load capacity (kg)"
+              />
+            </div>
+            <div className="sm:col-span-3 flex items-center gap-1.5">
+              <select
+                value={newServiceUnit}
+                onChange={(e) => setNewServiceUnit(e.target.value)}
+                className="h-9 px-2 text-xs rounded-lg border border-slate-200 bg-white grow min-w-[75px]"
+              >
+                <option value="load">per load</option>
+                <option value="kg">per kg</option>
+                <option value="piece">per pc</option>
+              </select>
+              <Button
+                type="button"
+                variant={editingServiceId ? "primary" : "outline"}
+                size="sm"
+                onClick={handleAddOrUpdateService}
+                leftIcon={editingServiceId ? <CheckCircle2 size={14} /> : <Plus size={14} />}
+                className="text-xs shrink-0 whitespace-nowrap"
+              >
+                {editingServiceId ? "Update" : "Add"}
+              </Button>
+              {editingServiceId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEditService}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                  title="Cancel"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="sm:col-span-3">
-            <Input
-              type="number"
-              placeholder="Price (₱)"
-              value={newServicePrice}
-              onChange={(e) => setNewServicePrice(e.target.value)}
-              onKeyDown={(e) => {
-                if (
-                  (e.key === "Backspace" || e.key === "Delete") &&
-                  (newServicePrice === "0" || newServicePrice === "0.0")
-                ) {
-                  e.preventDefault();
-                  setNewServicePrice("");
-                }
-              }}
-              onFocus={(e) => {
-                if (e.target.value === "0") {
-                  setNewServicePrice("");
-                } else {
-                  e.target.select();
-                }
-              }}
-            />
-          </div>
-          <div className="sm:col-span-3 flex items-center gap-2">
-            <select
-              value={newServiceUnit}
-              onChange={(e) => setNewServiceUnit(e.target.value)}
-              className="h-9 px-2 text-xs rounded-lg border border-slate-200 bg-white"
-            >
-              <option value="kg">per kg</option>
-              <option value="piece">per pc</option>
-              <option value="load">per load</option>
-            </select>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddService}
-              leftIcon={<Plus size={14} />}
-              className="text-xs shrink-0"
-            >
-              Add
-            </Button>
-          </div>
+          <p className="text-[11px] text-slate-400 mt-1.5">
+            💡 <strong>Kilo Tip:</strong> Specify how much kilo is covered (e.g. <strong>8 kg</strong> per load) so customers and staff see the exact weight allowance.
+          </p>
         </div>
       </div>
 

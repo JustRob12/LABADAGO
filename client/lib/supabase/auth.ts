@@ -435,8 +435,20 @@ export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> 
     if (!error && data && data.length > 0) {
       return data.map((shop) => ({
         ...shop,
+        max_kilo_per_load: shop.max_kilo_per_load ? Number(shop.max_kilo_per_load) : 8.0,
         images: Array.isArray(shop.images) ? shop.images : [],
-        services: shop.shop_services || [],
+        services: (shop.shop_services || []).map((srv: any) => {
+          let kilos: number | null =
+            srv.kilos !== undefined && srv.kilos !== null ? Number(srv.kilos) : null;
+          if ((kilos === null || isNaN(kilos)) && srv.description) {
+            const match = String(srv.description).match(/(\d+(\.\d+)?)\s*kg/i);
+            if (match) kilos = parseFloat(match[1]);
+          }
+          return {
+            ...srv,
+            kilos: kilos && !isNaN(kilos) ? kilos : undefined,
+          };
+        }),
       }));
     }
   } catch (err) {
@@ -515,6 +527,7 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
       queue_status: shop.queue_status || "Low",
       washer_count: shop.washer_count || 6,
       dryer_count: shop.dryer_count || 6,
+      max_kilo_per_load: shop.max_kilo_per_load ? Number(shop.max_kilo_per_load) : 8.0,
       images: Array.isArray(shop.images) ? shop.images : [],
       owner_id: user.id,
       updated_at: new Date().toISOString(),
@@ -524,11 +537,22 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
 
     if (isTempId) {
       // Insert new shop
-      const { data: inserted, error: insertError } = await supabase
+      let { data: inserted, error: insertError } = await supabase
         .from("laundry_shops")
         .insert(payload)
         .select()
         .single();
+
+      if (insertError && insertError.message.includes("max_kilo_per_load")) {
+        delete payload.max_kilo_per_load;
+        const retry = await supabase
+          .from("laundry_shops")
+          .insert(payload)
+          .select()
+          .single();
+        inserted = retry.data;
+        insertError = retry.error;
+      }
 
       if (insertError) {
         console.warn("Supabase insert shop notice:", insertError.message);
@@ -538,9 +562,17 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
     } else {
       // Update existing shop (guarantee owner_id matches)
       payload.id = shop.id;
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from("laundry_shops")
         .upsert(payload, { onConflict: "id" });
+
+      if (updateError && updateError.message.includes("max_kilo_per_load")) {
+        delete payload.max_kilo_per_load;
+        const retry = await supabase
+          .from("laundry_shops")
+          .upsert(payload, { onConflict: "id" });
+        updateError = retry.error;
+      }
 
       if (updateError) {
         console.warn("Supabase upsert shop notice:", updateError.message);
@@ -562,15 +594,22 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
 
         if (shop.services.length > 0) {
           const servicesPayload = shop.services.map((srv) => {
+            const parsedKilos =
+              srv.kilos !== undefined && srv.kilos !== null ? Number(srv.kilos) : null;
+            const desc =
+              srv.description || (parsedKilos ? `Up to ${parsedKilos} kg` : "");
             const item: Record<string, any> = {
               shop_id: savedShopId,
               service_name: srv.service_name.trim(),
-              description: srv.description || "",
+              description: desc,
               price: Number(srv.price) || 0,
               unit: srv.unit || "kg",
               estimated_minutes: srv.estimated_minutes || 90,
               is_available: srv.is_available !== false,
             };
+            if (parsedKilos !== null && !isNaN(parsedKilos)) {
+              item.kilos = parsedKilos;
+            }
             // Only preserve UUID if it's already a valid 36-char Postgres UUID
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (srv.id && uuidRegex.test(srv.id)) {
@@ -579,15 +618,34 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
             return item;
           });
 
-          const { data: insertedServices, error: srvError } = await supabase
+          let { data: insertedServices, error: srvError } = await supabase
             .from("shop_services")
             .insert(servicesPayload)
             .select();
 
+          // If 'kilos' column does not exist yet in Supabase table, retry gracefully without it
+          if (srvError && srvError.message.includes("kilos")) {
+            console.warn("Retrying services insert without 'kilos' column:", srvError.message);
+            const fallbackPayload = servicesPayload.map((it) => {
+              const copy = { ...it };
+              delete copy.kilos;
+              return copy;
+            });
+            const retry = await supabase
+              .from("shop_services")
+              .insert(fallbackPayload)
+              .select();
+            insertedServices = retry.data;
+            srvError = retry.error;
+          }
+
           if (srvError) {
             console.warn("Supabase save services error:", srvError.message);
           } else if (insertedServices && insertedServices.length > 0) {
-            savedServices = insertedServices;
+            savedServices = insertedServices.map((ins, idx) => ({
+              ...ins,
+              kilos: shop.services![idx]?.kilos ?? ins.kilos,
+            }));
           }
         }
       } catch (srvErr) {

@@ -180,7 +180,20 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
 
   const weightNum = parseFloat(estimatedWeight);
   const validWeight = isNaN(weightNum) ? 0 : weightNum;
-  const estimatedAmount = activeService ? activeService.price * validWeight : 0;
+  const loadCapacity = activeService?.kilos || activeShop?.max_kilo_per_load || 8;
+  const numLoads = validWeight > 0 ? Math.max(1, Math.ceil(validWeight / loadCapacity)) : 1;
+
+  let estimatedAmount = 0;
+  if (activeService) {
+    if (activeService.unit === "load") {
+      estimatedAmount = activeService.price * numLoads;
+    } else if (activeService.unit === "piece") {
+      estimatedAmount = activeService.price;
+    } else {
+      // per kg
+      estimatedAmount = activeService.price * validWeight;
+    }
+  }
 
   const handleGenerateQR = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,10 +384,15 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                 label="Select Laundry Service"
                 value={selectedServiceId}
                 onChange={(e) => setSelectedServiceId(e.target.value)}
-                options={availableServices.map((srv) => ({
-                  value: srv.id,
-                  label: `${srv.service_name} — ₱${srv.price}/${srv.unit}`,
-                }))}
+                options={availableServices.map((srv) => {
+                  const kiloTag = srv.kilos
+                    ? ` (${srv.unit === "load" ? `${srv.kilos}kg load` : `up to ${srv.kilos}kg`})`
+                    : "";
+                  return {
+                    value: srv.id,
+                    label: `${srv.service_name} — ₱${srv.price}/${srv.unit}${kiloTag}`,
+                  };
+                })}
                 leftIcon={<Shirt size={15} />}
                 required
               />
@@ -414,7 +432,11 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                     Estimated Total
                   </label>
                   <div className="h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between text-sm">
-                    <span className="text-xs text-slate-500">Approx.</span>
+                    <span className="text-xs text-slate-500">
+                      {activeService?.unit === "load"
+                        ? `${numLoads} load (${loadCapacity}kg/load)`
+                        : "Approx."}
+                    </span>
                     <span className="font-bold text-slate-900">₱{estimatedAmount.toFixed(2)}</span>
                   </div>
                 </div>
