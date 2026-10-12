@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { LaundryShop, ShopService, UserProfile, WalkInQRPayload, LaundryTransaction } from "@/types/auth";
 import { createWalkInTransaction } from "@/lib/supabase/auth";
@@ -46,11 +47,17 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   onReturnToMap,
   onViewOrderTracker,
 }) => {
-  const [selectedShopId, setSelectedShopId] = useState<string>(
-    initialShopId || (shops.length > 0 ? shops[0].id : "")
-  );
+  const searchParams = useSearchParams();
+  const queryShopId = searchParams?.get("shopId") || "";
+  const effectiveShopId = initialShopId || queryShopId || "";
 
-  const activeShop = shops.find((s) => s.id === selectedShopId) || shops[0];
+  const [selectedShopId, setSelectedShopId] = useState<string>(() => {
+    if (effectiveShopId) return effectiveShopId;
+    if (shops.length > 0) return shops[0].id;
+    return "";
+  });
+
+  const activeShop = shops.find((s) => s.id === selectedShopId) || (shops.length > 0 ? shops[0] : null);
 
   const availableServices = activeShop?.services && activeShop.services.length > 0
     ? activeShop.services
@@ -134,12 +141,39 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     }
   }, [walkInTransactions.length]);
 
-  // Sync initial shop if changed externally
+  // Sync selected shop if initialShopId or URL query param changes, or when shops array loads
   useEffect(() => {
-    if (initialShopId) {
-      setSelectedShopId(initialShopId);
+    const targetShopId = initialShopId || searchParams?.get("shopId");
+    if (targetShopId) {
+      if (shops.length > 0 && shops.some((s) => s.id === targetShopId)) {
+        setSelectedShopId(targetShopId);
+      } else if (!shops.length) {
+        setSelectedShopId(targetShopId);
+      }
+    } else if (!selectedShopId && shops.length > 0) {
+      setSelectedShopId(shops[0].id);
     }
-  }, [initialShopId]);
+  }, [initialShopId, searchParams, shops]);
+
+  // Sync selected service when active shop or availableServices changes
+  useEffect(() => {
+    if (availableServices.length > 0) {
+      const exists = availableServices.some((s) => s.id === selectedServiceId);
+      if (!exists) {
+        setSelectedServiceId(availableServices[0].id);
+      }
+    } else {
+      setSelectedServiceId("");
+    }
+  }, [availableServices, selectedShopId]);
+
+  const handleShopChange = (newShopId: string) => {
+    setSelectedShopId(newShopId);
+    const newShop = shops.find((s) => s.id === newShopId);
+    if (newShop?.services && newShop.services.length > 0) {
+      setSelectedServiceId(newShop.services[0].id);
+    }
+  };
 
   const activeService =
     availableServices.find((s) => s.id === selectedServiceId) || availableServices[0];
@@ -323,7 +357,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
               <Select
                 label="Select Laundry Shop"
                 value={selectedShopId}
-                onChange={(e) => setSelectedShopId(e.target.value)}
+                onChange={(e) => handleShopChange(e.target.value)}
                 options={shops.map((s) => ({
                   value: s.id,
                   label: `${s.name} (${s.queue_status} Queue)`,

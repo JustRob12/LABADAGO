@@ -1024,7 +1024,9 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => onGenerateQR(selectedShop)}
+                  onClick={() => {
+                    if (selectedShop && onGenerateQR) onGenerateQR(selectedShop);
+                  }}
                   className="flex-1 text-[11px] py-1 h-7 font-bold flex items-center justify-center gap-1 shadow-2xs"
                 >
                   <QrCode size={12} />

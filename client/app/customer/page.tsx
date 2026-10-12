@@ -61,9 +61,11 @@ export function CustomerContent() {
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<"map" | "list">("map");
 
-  // Sync tab from URL query params
+  // Sync tab and shopId from URL query params
   useEffect(() => {
     const tabParam = searchParams.get("tab");
+    const shopIdParam = searchParams.get("shopId");
+
     if (tabParam === "qr") {
       setActiveTab("qr");
     } else if (tabParam === "orders") {
@@ -71,7 +73,14 @@ export function CustomerContent() {
     } else {
       setActiveTab("map");
     }
-  }, [searchParams]);
+
+    if (shopIdParam && shops.length > 0) {
+      const targetShop = shops.find((s) => s.id === shopIdParam);
+      if (targetShop) {
+        setSelectedShop(targetShop);
+      }
+    }
+  }, [searchParams, shops]);
 
   useEffect(() => {
     async function loadData() {
@@ -80,11 +89,16 @@ export function CustomerContent() {
         const profile = await getCurrentUserProfile();
 
         if (!profile) {
-          // If accessing private features (QR pass generator or Order tracker), redirect to login
+          // If accessing private features (QR pass generator or Order tracker), redirect to login with full query params preserved
           if (initialTab === "qr" || initialTab === "orders") {
+            const shopIdParam = searchParams.get("shopId");
+            const redirectPath = shopIdParam
+              ? `/customer?tab=${initialTab}&shopId=${shopIdParam}`
+              : `/customer?tab=${initialTab}`;
+
             router.push(
               "/login?redirect=" +
-                encodeURIComponent(`/customer?tab=${initialTab}`) +
+                encodeURIComponent(redirectPath) +
                 "&message=" +
                 encodeURIComponent(
                   initialTab === "qr"
@@ -108,8 +122,14 @@ export function CustomerContent() {
         // Fetch all available shops
         const shopsList = await getLaundryShops();
         setShops(shopsList);
-        if (shopsList.length > 0) {
-          setSelectedShop(shopsList[0]);
+
+        // Prioritize shopId from URL query param, then fallback to first shop
+        const urlShopId = searchParams.get("shopId");
+        const foundShop = urlShopId ? shopsList.find((s) => s.id === urlShopId) : null;
+        if (foundShop) {
+          setSelectedShop(foundShop);
+        } else if (shopsList.length > 0) {
+          setSelectedShop((prev) => (prev ? (shopsList.find((s) => s.id === prev.id) || prev) : shopsList[0]));
         }
 
         // Fetch customer transactions if user is logged in
@@ -650,7 +670,7 @@ export function CustomerContent() {
             <WalkInQRGenerator
               user={user}
               shops={shops}
-              initialShopId={selectedShop?.id}
+              initialShopId={selectedShop?.id || searchParams.get("shopId") || undefined}
               transactions={transactions}
               onTransactionCreated={refreshTransactions}
               onReturnToMap={() => handleTabChange("map")}

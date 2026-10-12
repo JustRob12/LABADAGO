@@ -112,3 +112,16 @@
   - **UserProfileCard Role Display**:
     - Updated `UserProfileCard.tsx` role badge to support `Branch Staff (3)` and fixed typos so customers cleanly display `Customer (2)`.
 
+### 13. Map Walk-In QR Shop Pre-Selection & Automatic Synchronization
+- **Root Cause Diagnosed**:
+  - When clicking "Walk-In QR" on the map (`LaundryMap.tsx`, `ShopCard.tsx`, `/map`, or landing map), the destination route included `?tab=qr&shopId=${shop.id}`.
+  - However, in `app/customer/page.tsx`, `loadData()` previously defaulted to unconditionally running `setSelectedShop(shopsList[0])` once the shop list resolved, clobbering the selected shop and reverting the selection to the first shop in the database (e.g., "Thonni Laundry Shop").
+  - Furthermore, `WalkInQRGenerator.tsx` only initialized `selectedShopId` on component mount and did not read URL query parameters or re-synchronize the service dropdown when the active shop changed.
+- **Implemented Fixes**:
+  - **URL Parameter Extraction & Priority Matching**: In `app/customer/page.tsx`, `loadData()` and `useEffect([searchParams, shops])` now inspect `searchParams.get("shopId")`. If present, the target laundry shop is immediately matched in `shopsList` and set as `selectedShop`.
+  - **Dynamic Dropdown Synchronization (`WalkInQRGenerator.tsx`)**:
+    - Integrated `useSearchParams` directly into `WalkInQRGenerator` as a fail-safe fallback so `shopId` in the query string is immediately respected.
+    - Added reactive synchronization: whenever `initialShopId` or `searchParams.get("shopId")` changes, `selectedShopId` updates automatically.
+    - Added automatic service reset: when switching laundry shops (either externally from the map or via the dropdown selector), the service options reload to match the chosen branch, and the first valid service for that shop is pre-selected.
+  - **Safe Guarding in `LaundryMap.tsx`**: Ensured `onGenerateQR` safely validates `selectedShop` before calling the handler.
+
