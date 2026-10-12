@@ -36,12 +36,12 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl text-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl text-slate-100 overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+        <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2">
             <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                 isGcash
                   ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                   : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
@@ -49,17 +49,17 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
             >
               {isGcash ? <Smartphone size={18} /> : <Banknote size={18} />}
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/90 border border-emerald-800/80 px-2 py-0.2 rounded-full inline-flex items-center gap-1">
                   <CheckCircle2 size={10} />
                   Payment Verified
                 </span>
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-400 font-mono truncate">
                   #{transaction.tracking_number}
                 </span>
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-white">
+              <h3 className="text-xs sm:text-base font-bold text-white truncate">
                 Receipt &amp; Payment Record
               </h3>
             </div>
@@ -68,14 +68,14 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+        <div className="p-3.5 sm:p-5 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {/* Key Payment Meta Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 text-xs">
             <div>
@@ -104,15 +104,15 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
               <div className="col-span-2 sm:col-span-3 pt-1 border-t border-slate-700/50 flex items-center gap-1.5">
                 <Hash size={13} className="text-blue-400 shrink-0" />
                 <span className="text-slate-400 text-[11px]">GCash Ref #:</span>
-                <span className="font-mono font-bold text-blue-300 text-xs">
+                <span className="font-mono font-bold text-blue-300 text-xs truncate">
                   {transaction.payment_reference_no}
                 </span>
               </div>
             )}
             {formattedPaidAt && (
               <div className="col-span-2 sm:col-span-3 text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Calendar size={12} className="text-slate-500" />
-                <span>Recorded on: {formattedPaidAt}</span>
+                <Calendar size={12} className="text-slate-500 shrink-0" />
+                <span className="truncate">Recorded on: {formattedPaidAt}</span>
               </div>
             )}
           </div>
@@ -135,12 +135,12 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
                 </a>
               </div>
 
-              <div className="relative rounded-xl border border-slate-800 bg-black/60 p-2 flex items-center justify-center max-h-80 overflow-hidden group">
+              <div className="relative rounded-xl border border-slate-800 bg-black/60 p-2 flex items-center justify-center max-h-64 sm:max-h-80 overflow-hidden group">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={transaction.payment_proof_url}
                   alt={`Payment proof for ${transaction.tracking_number}`}
-                  className="max-h-72 w-auto object-contain rounded-lg shadow-lg"
+                  className="max-h-56 sm:max-h-72 w-auto object-contain rounded-lg shadow-lg"
                 />
               </div>
             </div>
@@ -158,7 +158,7 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between shrink-0">
           <span className="text-[11px] text-slate-400">
             Status: <b className="text-emerald-400">Verified &amp; Settled</b>
           </span>

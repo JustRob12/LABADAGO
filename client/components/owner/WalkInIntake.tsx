@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { PaymentStatus, LaundryTransaction, OrderStatus, WalkInQRPayload, LaundryShop } from "@/types/auth";
-import { updateTransactionStatus, updateTransactionPayment, getTransactionByTrackingNumber } from "@/lib/supabase/auth";
+import { updateTransactionStatus, updateTransactionPayment, getTransactionByTrackingNumber, uploadPaymentProof } from "@/lib/supabase/auth";
+import { PaymentInputSection } from "@/components/payment/PaymentInputSection";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -74,6 +75,13 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   // Manual payment record & proof preview modal states
   const [paymentRecordTx, setPaymentRecordTx] = useState<LaundryTransaction | null>(null);
   const [proofModalTx, setProofModalTx] = useState<LaundryTransaction | null>(null);
+
+  // Scanned intake payment state (Cash or GCash Receipt Photo)
+  const [intakePaymentMethod, setIntakePaymentMethod] = useState<"Cash" | "GCash">("Cash");
+  const [intakeReferenceNo, setIntakeReferenceNo] = useState("");
+  const [intakeFile, setIntakeFile] = useState<File | null>(null);
+  const [intakePreviewUrl, setIntakePreviewUrl] = useState<string | null>(null);
+  const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
 
   // Operating counter branch selection
   const [activeBranchId, setActiveBranchId] = useState<string>(() => {
@@ -236,38 +244,67 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
     const isPayFirst = selectedPaymentTiming === "pay_first";
     const paymentStatus: PaymentStatus = isPayFirst ? "Paid" : "Unpaid";
     const paymentNote = isPayFirst
-      ? "Paid at counter upon drop-off"
+      ? `Paid at counter (${intakePaymentMethod}) upon drop-off`
       : "Pay when complete / upon pickup";
 
-    await updateTransactionStatus(
-      scannedTx.id,
-      "Received",
-      validWeight,
-      paymentStatus,
-      calculatedTotal,
-      paymentNote,
-      machineNumber.trim() || undefined
-    );
+    setIsSubmittingIntake(true);
+    try {
+      let uploadedProofUrl: string | undefined = undefined;
+      if (isPayFirst && intakePaymentMethod === "GCash" && intakeFile) {
+        uploadedProofUrl = await uploadPaymentProof(
+          intakeFile,
+          scannedTx.tracking_number
+        );
+      }
 
-    setIntakeSuccess(
-      `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as RECEIVED at scale weight ${validWeight}kg${
-        machineNumber ? ` (Assigned to ${machineNumber})` : ""
-      }. Payment arrangement: ${
-        isPayFirst ? "PAID FIRST (₱" + calculatedTotal.toFixed(2) + ")" : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
-      }.`
-    );
-    setSmsNotification(
-      `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) was received at ${validWeight}kg${
-        machineNumber ? ` (${machineNumber})` : ""
-      }. Payment: ${
-        isPayFirst ? "PAID (₱" + calculatedTotal.toFixed(2) + ")" : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
-      }."`
-    );
+      await updateTransactionStatus(
+        scannedTx.id,
+        "Received",
+        validWeight,
+        paymentStatus,
+        calculatedTotal,
+        paymentNote,
+        machineNumber.trim() || undefined,
+        undefined,
+        undefined,
+        isPayFirst ? intakePaymentMethod : undefined,
+        uploadedProofUrl,
+        isPayFirst ? intakeReferenceNo.trim() || undefined : undefined
+      );
 
-    setScannedTx(null);
-    setScanInput("");
-    setMachineNumber("");
-    onTransactionsUpdated();
+      setIntakeSuccess(
+        `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as RECEIVED at scale weight ${validWeight}kg${
+          machineNumber ? ` (Assigned to ${machineNumber})` : ""
+        }. Payment arrangement: ${
+          isPayFirst
+            ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
+            : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
+        }.`
+      );
+      setSmsNotification(
+        `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) was received at ${validWeight}kg${
+          machineNumber ? ` (${machineNumber})` : ""
+        }. Payment: ${
+          isPayFirst
+            ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
+            : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
+        }."`
+      );
+
+      setScannedTx(null);
+      setScanInput("");
+      setMachineNumber("");
+      setIntakePaymentMethod("Cash");
+      setIntakeReferenceNo("");
+      setIntakeFile(null);
+      if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
+      setIntakePreviewUrl(null);
+      onTransactionsUpdated();
+    } catch {
+      setIntakeSuccess("Error saving received intake. Please try again.");
+    } finally {
+      setIsSubmittingIntake(false);
+    }
   };
 
   const handleConfirmIntake = async () => {
@@ -276,38 +313,67 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
     const isPayFirst = selectedPaymentTiming === "pay_first";
     const paymentStatus: PaymentStatus = isPayFirst ? "Paid" : "Unpaid";
     const paymentNote = isPayFirst
-      ? "Paid at counter upon drop-off"
+      ? `Paid at counter (${intakePaymentMethod}) upon intake`
       : "Pay when complete / upon pickup";
 
-    await updateTransactionStatus(
-      scannedTx.id,
-      "Washing",
-      validWeight,
-      paymentStatus,
-      calculatedTotal,
-      paymentNote,
-      machineNumber.trim() || undefined
-    );
+    setIsSubmittingIntake(true);
+    try {
+      let uploadedProofUrl: string | undefined = undefined;
+      if (isPayFirst && intakePaymentMethod === "GCash" && intakeFile) {
+        uploadedProofUrl = await uploadPaymentProof(
+          intakeFile,
+          scannedTx.tracking_number
+        );
+      }
 
-    setIntakeSuccess(
-      `Walk-in load for ${scannedTx.customer_name} accepted! Weighed at ${validWeight}kg${
-        machineNumber ? ` in ${machineNumber}` : ""
-      }. Machine timer started. Status updated to Washing. Payment: ${
-        isPayFirst ? "PAID (₱" + calculatedTotal.toFixed(2) + ")" : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
-      }.`
-    );
-    setSmsNotification(
-      `SMS Notification sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been weighed (${validWeight}kg)${
-        machineNumber ? ` and is in ${machineNumber}` : ""
-      } and is now WASHING! Payment: ${
-        isPayFirst ? "PAID (₱" + calculatedTotal.toFixed(2) + ")" : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
-      }."`
-    );
+      await updateTransactionStatus(
+        scannedTx.id,
+        "Washing",
+        validWeight,
+        paymentStatus,
+        calculatedTotal,
+        paymentNote,
+        machineNumber.trim() || undefined,
+        undefined,
+        undefined,
+        isPayFirst ? intakePaymentMethod : undefined,
+        uploadedProofUrl,
+        isPayFirst ? intakeReferenceNo.trim() || undefined : undefined
+      );
 
-    setScannedTx(null);
-    setScanInput("");
-    setMachineNumber("");
-    onTransactionsUpdated();
+      setIntakeSuccess(
+        `Walk-in load for ${scannedTx.customer_name} accepted! Weighed at ${validWeight}kg${
+          machineNumber ? ` in ${machineNumber}` : ""
+        }. Machine timer started. Status updated to Washing. Payment: ${
+          isPayFirst
+            ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
+            : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
+        }.`
+      );
+      setSmsNotification(
+        `SMS Notification sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been weighed (${validWeight}kg)${
+          machineNumber ? ` and is in ${machineNumber}` : ""
+        } and is now WASHING! Payment: ${
+          isPayFirst
+            ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
+            : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
+        }."`
+      );
+
+      setScannedTx(null);
+      setScanInput("");
+      setMachineNumber("");
+      setIntakePaymentMethod("Cash");
+      setIntakeReferenceNo("");
+      setIntakeFile(null);
+      if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
+      setIntakePreviewUrl(null);
+      onTransactionsUpdated();
+    } catch {
+      setIntakeSuccess("Error saving order intake. Please try again.");
+    } finally {
+      setIsSubmittingIntake(false);
+    }
   };
 
   const handleStatusChange = async (txId: string, newStatus: OrderStatus) => {
@@ -332,7 +398,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       {smsNotification && <Alert type="info" message={smsNotification} />}
 
       {/* Incoming Walk-In Fast Passes Section */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
@@ -446,7 +512,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       </div>
 
       {/* Counter QR Scanner / Code Entry Tool */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
@@ -728,13 +794,39 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
               </div>
             </div>
 
-            <div className="pt-2 border-t border-blue-200/60 flex items-center justify-end gap-2">
+            {/* If Pay First is selected, render PaymentInputSection */}
+            {selectedPaymentTiming === "pay_first" && (
+              <div className="pt-1 animate-fadeIn">
+                <PaymentInputSection
+                  theme="light"
+                  method={intakePaymentMethod}
+                  onMethodChange={setIntakePaymentMethod}
+                  referenceNo={intakeReferenceNo}
+                  onReferenceNoChange={setIntakeReferenceNo}
+                  selectedFile={intakeFile}
+                  previewUrl={intakePreviewUrl}
+                  onFileSelect={(file) => {
+                    setIntakeFile(file);
+                    setIntakePreviewUrl(URL.createObjectURL(file));
+                  }}
+                  onFileClear={() => {
+                    setIntakeFile(null);
+                    if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
+                    setIntakePreviewUrl(null);
+                  }}
+                  amount={calculatedTotal}
+                />
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-blue-200/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setScannedTx(null)}
-                className="text-xs"
+                className="text-xs order-3 sm:order-1"
+                disabled={isSubmittingIntake}
               >
                 Close
               </Button>
@@ -744,7 +836,8 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 size="sm"
                 leftIcon={<CheckCircle2 size={14} className="text-blue-600" />}
                 onClick={handleKeepAsReceived}
-                className="text-xs"
+                className="text-xs order-2"
+                disabled={isSubmittingIntake}
               >
                 Confirm Received Only
               </Button>
@@ -754,8 +847,10 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 size="sm"
                 leftIcon={<Check size={14} />}
                 onClick={handleConfirmIntake}
+                disabled={isSubmittingIntake}
+                className="order-1 sm:order-3"
               >
-                Accept & Start Washing
+                {isSubmittingIntake ? "Saving Intake..." : "Accept & Start Washing"}
               </Button>
             </div>
           </div>
@@ -763,7 +858,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       </div>
 
       {/* Live Service Transactions Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Live Service Queue & Transactions</h3>
@@ -911,18 +1006,18 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       {/* SHOP MISMATCH WARNING MODAL                                               */}
       {/* ========================================================================= */}
       {showMismatchModal && mismatchData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-rose-200 shadow-2xl max-w-md w-full overflow-hidden animate-scaleIn">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-rose-200 shadow-2xl max-w-md w-full max-h-[92dvh] flex flex-col overflow-hidden animate-scaleIn">
             {/* Modal Header */}
-            <div className="bg-rose-50 border-b border-rose-100 p-5 flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <AlertTriangle size={22} />
+            <div className="bg-rose-50 border-b border-rose-100 p-4 sm:p-5 flex items-start gap-3 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <AlertTriangle size={20} />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-200/80 text-rose-900 mb-1">
                   Shop Mismatch Warning
                 </div>
-                <h3 className="text-base font-bold text-slate-900 leading-tight">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
                   This Laundry Doesn&apos;t Belong to This Shop!
                 </h3>
                 <p className="text-xs text-rose-700 mt-1">
@@ -935,14 +1030,14 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                   setShowMismatchModal(false);
                   setMismatchData(null);
                 }}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-colors shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
               {/* Branch Comparison Cards */}
               <div className="space-y-2">
                 <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3 space-y-1">
@@ -1004,7 +1099,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+            <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end shrink-0">
               <Button
                 type="button"
                 variant="primary"

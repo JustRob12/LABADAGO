@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCurrentUserProfile, getLaundryShops, getLaundryTransactions } from "@/lib/supabase/auth";
+import { getCurrentUserProfile, getCachedUserProfile, getLaundryShops, getLaundryTransactions } from "@/lib/supabase/auth";
 import { UserProfile, LaundryShop, LaundryTransaction, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { LaundryMap, calculateDistanceKm } from "@/components/customer/LaundryMap";
@@ -43,7 +43,9 @@ export function CustomerContent() {
     initialTab === "qr" ? "qr" : initialTab === "orders" ? "orders" : "map"
   );
 
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() =>
+    typeof window !== "undefined" ? getCachedUserProfile() : null
+  );
   const [shops, setShops] = useState<LaundryShop[]>([]);
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
   const [selectedShop, setSelectedShop] = useState<LaundryShop | null>(null);

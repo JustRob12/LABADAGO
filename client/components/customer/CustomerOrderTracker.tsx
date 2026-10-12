@@ -236,7 +236,7 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
           return (
             <div
               key={tx.id}
-              className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 space-y-4"
+              className="bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 sm:p-5 space-y-3.5 sm:space-y-4"
             >
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
@@ -559,9 +559,9 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
 
       {/* Rating & Review Feedback Modal */}
       {reviewTx && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <Star size={18} className="text-amber-500 fill-amber-500" />
                 <h4 className="text-sm font-bold text-slate-900">Rate Laundry Experience</h4>
@@ -569,13 +569,14 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               <button
                 type="button"
                 onClick={() => setReviewTx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="text-center space-y-1">
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="text-center space-y-1">
               <h5 className="text-sm font-bold text-slate-900">
                 {reviewTx.shop_name || "Laundry Partner Shop"}
               </h5>
@@ -673,15 +674,16 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       )}
 
       {/* QR Fast Pass Preview Modal */}
       {viewingQrTx && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden text-center">
+            <div className="flex items-center justify-between p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <QrCode size={18} className="text-blue-600" />
                 <h4 className="text-sm font-bold text-slate-900">Walk-In QR Fast Pass</h4>
@@ -689,48 +691,50 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               <button
                 type="button"
                 onClick={() => setViewingQrTx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div>
-              <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
-                {viewingQrTx.tracking_number}
-              </span>
-              <p className="text-xs text-slate-500 mt-2 font-medium">
-                {viewingQrTx.service_name} • {viewingQrTx.shop_name || "LabadaGo Partner Shop"}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+                  {viewingQrTx.tracking_number}
+                </span>
+                <p className="text-xs text-slate-500 mt-2 font-medium">
+                  {viewingQrTx.service_name} • {viewingQrTx.shop_name || "LabadaGo Partner Shop"}
+                </p>
+              </div>
+
+              {qrModalUrl ? (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 inline-block mx-auto">
+                  <img
+                    src={qrModalUrl}
+                    alt={`QR Fast Pass ${viewingQrTx.tracking_number}`}
+                    className="w-48 sm:w-56 h-48 sm:h-56 mx-auto object-contain rounded-lg"
+                  />
+                </div>
+              ) : (
+                <div className="w-48 sm:w-56 h-48 sm:h-56 flex items-center justify-center bg-slate-50 rounded-xl text-xs text-slate-400 mx-auto">
+                  Loading QR Code...
+                </div>
+              )}
+
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                Show this QR code at the laundry shop counter. Once scanned, your status will automatically change from <strong>Pending</strong> to <strong>Received</strong>.
               </p>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setViewingQrTx(null)}
+                className="w-full shrink-0"
+              >
+                Close
+              </Button>
             </div>
-
-            {qrModalUrl ? (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 inline-block mx-auto">
-                <img
-                  src={qrModalUrl}
-                  alt={`QR Fast Pass ${viewingQrTx.tracking_number}`}
-                  className="w-56 h-56 mx-auto object-contain rounded-lg"
-                />
-              </div>
-            ) : (
-              <div className="w-56 h-56 flex items-center justify-center bg-slate-50 rounded-xl text-xs text-slate-400 mx-auto">
-                Loading QR Code...
-              </div>
-            )}
-
-            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-              Show this QR code at the laundry shop counter. Once scanned, your status will automatically change from <strong>Pending</strong> to <strong>Received</strong>.
-            </p>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingQrTx(null)}
-              className="w-full"
-            >
-              Close
-            </Button>
           </div>
         </div>
       )}

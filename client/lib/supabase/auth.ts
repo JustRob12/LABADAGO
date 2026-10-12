@@ -149,6 +149,7 @@ export async function signOutUser(): Promise<{ error: string | null }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (typeof window !== "undefined") {
+      localStorage.removeItem("labadago_cached_profile");
       localStorage.removeItem("labadago_active_role");
       if (user?.id) {
         localStorage.removeItem(`labadago_active_role_${user.id}`);
@@ -164,8 +165,25 @@ export async function signOutUser(): Promise<{ error: string | null }> {
 }
 
 /**
+ * Synchronous client-side cached profile lookup to prevent navigation flicker
+ */
+export function getCachedUserProfile(): UserProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("labadago_cached_profile");
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
  * Switch the active user role (Customer <-> Owner)
  * Note: Staff members are locked and CANNOT switch roles unless removed by the owner!
+ * Regular customers CANNOT switch to Owner!
  */
 export async function switchUserRole(newRole: UserRole): Promise<{
   success: boolean;
@@ -205,6 +223,15 @@ export async function switchUserRole(newRole: UserRole): Promise<{
       };
     }
 
+    // Regular customers cannot self-switch to shop owner
+    if (dbProfile?.role === UserRole.COSTUMER && newRole === UserRole.OWNER) {
+      return {
+        success: false,
+        role: UserRole.COSTUMER,
+        error: "Customers cannot switch to Shop Owner mode. An authorized owner account is required.",
+      };
+    }
+
     if (newRole === UserRole.STAFF) {
       return {
         success: false,
@@ -228,6 +255,11 @@ export async function switchUserRole(newRole: UserRole): Promise<{
     if (typeof window !== "undefined") {
       localStorage.setItem(`labadago_active_role_${user.id}`, String(newRole));
       localStorage.setItem("labadago_active_role", String(newRole));
+      const cached = getCachedUserProfile();
+      if (cached) {
+        cached.role = newRole;
+        localStorage.setItem("labadago_cached_profile", JSON.stringify(cached));
+      }
     }
 
     return { success: true, role: newRole };
@@ -297,8 +329,16 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     }
 
     if (dbProfile) {
+      // If user in DB is a customer, ensure localStorage savedRole cannot elevate them
+      if (dbProfile.role === UserRole.COSTUMER && typeof window !== "undefined") {
+        localStorage.removeItem(`labadago_active_role_${user.id}`);
+        localStorage.removeItem("labadago_active_role");
+      }
+
       const effectiveRole = isStaff
         ? UserRole.STAFF
+        : dbProfile.role === UserRole.COSTUMER
+        ? UserRole.COSTUMER
         : savedRole !== null
         ? savedRole
         : dbProfile.role !== undefined && dbProfile.role !== null
@@ -323,12 +363,22 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
       if (pIdx >= 0) localProfilesStore[pIdx] = profileObj;
       else localProfilesStore.push(profileObj);
 
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("labadago_cached_profile", JSON.stringify(profileObj));
+        } catch {
+          // ignore
+        }
+      }
+
       return profileObj;
     }
 
     const meta = user.user_metadata || {};
     const metaRole = isStaff
       ? UserRole.STAFF
+      : Number(meta.role) === UserRole.COSTUMER
+      ? UserRole.COSTUMER
       : savedRole !== null
       ? savedRole
       : meta.role !== undefined
@@ -350,6 +400,14 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     const fIdx = localProfilesStore.findIndex((p) => p.id === user.id);
     if (fIdx >= 0) localProfilesStore[fIdx] = fallbackProfile;
     else localProfilesStore.push(fallbackProfile);
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("labadago_cached_profile", JSON.stringify(fallbackProfile));
+      } catch {
+        // ignore
+      }
+    }
 
     return fallbackProfile;
   } catch (err) {

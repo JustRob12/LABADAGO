@@ -90,15 +90,17 @@ export default function Home() {
               <span>Walk-In QR</span>
             </button>
 
-            <Link href="/owner">
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<Store size={14} className="text-slate-600" />}
-              >
-                Owner Portal
-              </Button>
-            </Link>
+            {(!user || user.role === UserRole.OWNER || user.role === UserRole.ADMIN) && (
+              <Link href="/owner">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Store size={14} className="text-slate-600" />}
+                >
+                  Owner Portal
+                </Button>
+              </Link>
+            )}
 
             <div className="h-4 w-px bg-slate-200 mx-1" />
 

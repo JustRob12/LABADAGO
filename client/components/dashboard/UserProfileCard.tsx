@@ -44,7 +44,9 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user }) => {
                 ? "Admin (0)"
                 : user.role === UserRole.OWNER
                 ? "Owner (1)"
-                : "Costumer (2)"}
+                : user.role === UserRole.STAFF
+                ? "Branch Staff (3)"
+                : "Customer (2)"}
             </strong>
           </span>
         </div>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCurrentUserProfile, getLaundryShops, getLaundryTransactions } from "@/lib/supabase/auth";
+import { getCurrentUserProfile, getCachedUserProfile, getLaundryShops, getLaundryTransactions } from "@/lib/supabase/auth";
 import { UserProfile, LaundryShop, LaundryTransaction, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
@@ -26,7 +26,9 @@ function OwnerContent() {
       : "analytics"
   );
 
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() =>
+    typeof window !== "undefined" ? getCachedUserProfile() : null
+  );
   const [shop, setShop] = useState<LaundryShop | null>(null);
   const [shops, setShops] = useState<LaundryShop[]>([]);
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
@@ -68,6 +70,12 @@ function OwnerContent() {
         // Dedicated restriction: Staff users cannot access the owner management portal
         if (profile.role === UserRole.STAFF) {
           router.replace("/staff");
+          return;
+        }
+
+        // Dedicated restriction: Customer accounts cannot access the owner management portal
+        if (profile.role === UserRole.COSTUMER) {
+          router.replace("/customer");
           return;
         }
 

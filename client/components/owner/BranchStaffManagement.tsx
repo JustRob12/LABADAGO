@@ -485,9 +485,9 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
 
       {/* Recruitment Confirmation Modal */}
       {selectedUserToRecruit && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden">
+            <div className="flex items-center gap-3 p-4 sm:p-6 pb-3 border-b border-slate-100 shrink-0">
               <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200">
                 <UserCheck size={20} />
               </div>
@@ -496,6 +496,8 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                 <p className="text-xs text-slate-500">Branch: {activeShop?.name}</p>
               </div>
             </div>
+
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-xs">
               <div className="flex justify-between">
@@ -565,15 +567,16 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                 )}
               </Button>
             </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Remove Staff Confirmation Modal */}
       {staffToRemove && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden">
+            <div className="flex items-center gap-3 p-4 sm:p-6 pb-3 border-b border-slate-100 shrink-0">
               <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
                 <Trash2 size={20} />
               </div>
@@ -582,6 +585,8 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                 <p className="text-xs text-slate-500">Revoke scanner privileges</p>
               </div>
             </div>
+
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
 
             <p className="text-xs text-slate-600 leading-relaxed">
               Are you sure you want to remove <strong>{staffToRemove.full_name}</strong> from <strong>{activeShop?.name}</strong>?
@@ -611,6 +616,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
               >
                 {isRemoving ? "Removing..." : "Remove Staff"}
               </Button>
+            </div>
             </div>
           </div>
         </div>

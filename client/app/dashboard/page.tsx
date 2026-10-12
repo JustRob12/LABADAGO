@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getCurrentUserProfile, switchUserRole } from "@/lib/supabase/auth";
+import { getCurrentUserProfile, getCachedUserProfile, switchUserRole } from "@/lib/supabase/auth";
 import { UserProfile, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { UserProfileCard } from "@/components/dashboard/UserProfileCard";
@@ -24,12 +24,15 @@ import {
 
 function DashboardContent() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<UserProfile | null>(() =>
+    typeof window !== "undefined" ? getCachedUserProfile() : null
+  );
+  const [isLoading, setIsLoading] = useState(() =>
+    typeof window !== "undefined" ? !getCachedUserProfile() : true
+  );
 
   useEffect(() => {
     async function loadUser() {
-      setIsLoading(true);
       try {
         const profile = await getCurrentUserProfile();
         if (!profile) {
@@ -47,11 +50,11 @@ function DashboardContent() {
     loadUser();
   }, [router]);
 
-  const isOwner = user?.role === UserRole.OWNER;
+  const isOwner = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
   const isStaff = user?.role === UserRole.STAFF;
 
   const handleRoleToggle = async () => {
-    if (!user || isStaff) return;
+    if (!user || isStaff || user.role === UserRole.COSTUMER) return;
     const nextRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
     await switchUserRole(nextRole);
     setUser({ ...user, role: nextRole });
@@ -94,7 +97,7 @@ function DashboardContent() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                      Active Portal: {isStaff ? "Branch Staff Counter" : isOwner ? "Laundry Shop Owner" : "Customer (Costumer)"}
+                      Active Portal: {isStaff ? "Branch Staff Counter" : isOwner ? "Laundry Shop Owner" : "Customer"}
                     </h3>
                     <span
                       className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
@@ -105,7 +108,7 @@ function DashboardContent() {
                           : "bg-blue-50 text-blue-700 border-blue-200"
                       }`}
                     >
-                      {isStaff ? "Role 3 (Staff)" : `Role ${user?.role}`}
+                      {isStaff ? "Role 3 (Staff)" : isOwner ? "Role 1 (Owner)" : "Role 2 (Customer)"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -120,29 +123,8 @@ function DashboardContent() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {!isStaff ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRoleToggle}
-                      className="text-xs"
-                    >
-                      Switch to {isOwner ? "Customer Mode" : "Shop Owner Mode"}
-                    </Button>
-                    <Link href={isOwner ? "/owner" : "/customer"}>
-                      <Button
-                        variant={isOwner ? "success" : "primary"}
-                        size="sm"
-                        rightIcon={<ArrowRight size={14} />}
-                        className="text-xs"
-                      >
-                        Enter {isOwner ? "Owner Portal" : "Customer Portal"}
-                      </Button>
-                    </Link>
-                  </>
-                ) : (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {isStaff ? (
                   <Link href="/staff">
                     <Button
                       variant="primary"
@@ -151,6 +133,38 @@ function DashboardContent() {
                       className="bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold"
                     >
                       Open Staff Scanner
+                    </Button>
+                  </Link>
+                ) : isOwner ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRoleToggle}
+                      className="text-xs"
+                    >
+                      Switch to Customer Preview
+                    </Button>
+                    <Link href="/owner">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        rightIcon={<ArrowRight size={14} />}
+                        className="text-xs"
+                      >
+                        Enter Owner Portal
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <Link href="/customer">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      rightIcon={<ArrowRight size={14} />}
+                      className="text-xs"
+                    >
+                      Enter Customer Portal
                     </Button>
                   </Link>
                 )}

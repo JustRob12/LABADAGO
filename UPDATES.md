@@ -81,3 +81,34 @@
   - Added columns `payment_method`, `payment_proof_url`, `payment_reference_no`, and `paid_at` to `public.transactions`.
   - Created public Supabase storage bucket `payment_proofs` with RLS upload/view policies.
   - Generated standalone migration script `supabase_manual_payment_migration.sql` for 1-click execution in Supabase SQL editor.
+
+### 11. Scanned Intake Receipt Camera Snap / Upload & Universal Mobile Responsiveness Fixes
+- **Inline Photo Capture / Receipt Upload in Intake (Owner & Staff)**:
+  - **Shop Owner / Admin Intake (`WalkInIntake.tsx`)**: When scanning a QR pass or selecting an incoming drop-off, selecting "1. Pay First (Paid Now)" immediately opens the inline payment selector. Selecting GCash provides direct mobile camera snapping (`capture="environment"` / "Take Photo") and file gallery selection ("Upload File") alongside GCash reference number input. Uploads and updates happen synchronously upon clicking "Accept & Start Washing" or "Confirm Received Only".
+  - **Staff Scanner Intake & Dispatch (`StaffScannerView.tsx`)**:
+    - **Intake Form**: Choosing "Paid Now (Counter)" displays the dark-themed `PaymentInputSection` inline with camera snap / screenshot upload and reference number input.
+    - **Dispatch / Handover Form**: If an unpaid order is picked up, checking "Payment collected in full" renders the same inline payment capture widget, guaranteeing all over-the-counter payments have verified proof before completion.
+  - **Reusable Inline Component (`PaymentInputSection.tsx`)**: Created modular component supporting Cash vs. GCash/Bank toggling, GCash reference number, dual camera capture & file picker, live thumbnail preview with remove button, and dynamic theme support (`dark` for Staff / `light` for Owner).
+- **Comprehensive Mobile Responsiveness & Modal Viewport Overhaul**:
+  - **Dynamic Viewport Heights (`max-h-[92dvh]`)**: Updated all modals (`PaymentProofModal`, `PaymentRecordModal`, `StaffScannerView` action/mismatch modals, `WalkInIntake` mismatch modal, `CustomerOrderTracker` review and QR preview modals, `BranchStaffManagement` recruit/remove modals) from fixed or standard viewport units to `max-h-[92dvh]` with `flex flex-col` and `flex-1 overflow-y-auto` body containers. Prevents double scrollbars, modal clipping, or buttons getting hidden behind mobile browser toolbars on iOS Safari and Android Chrome.
+  - **Responsive Button Stacking**: Made all modal action button footers responsive (`flex flex-col sm:flex-row gap-2`) with primary action buttons appearing first on mobile screens for easy thumb tapping.
+  - **Mobile Bottom Navigation Spacing (`DashboardNav.tsx`)**: Adjusted the floating bottom bar to `max-w-md mx-auto` and link padding to `px-1.5 sm:px-3` so 5-tab layouts fit seamlessly on narrow phone screens (320px–375px) without horizontal scrolling or text clipping.
+  - **Horizontal Table Overflow**: Ensured order tables in `WalkInIntake.tsx` and list views have `overflow-x-auto` wrappers and responsive padding (`p-4 sm:p-6`) to prevent wide table columns from stretching mobile viewports.
+
+### 12. Complete Navigation Role Isolation & Elimination of Role Flashing
+- **Root Cause Eliminated (Navigation Flash)**:
+  - Previously, `DashboardNav` and pages fell back to an unauthenticated/loading state during route transitions while `getCurrentUserProfile()` re-fetched. During this brief window, `DashboardNav` fell back to rendering `<Link href="/owner">Owner Portal</Link>` inside customer navigation before swapping once profile data arrived.
+  - Implemented synchronous local caching via `getCachedUserProfile()` in `@/lib/supabase/auth`. `DashboardNav`, `CustomerPage`, `OwnerPage`, and `DashboardPage` now initialize state synchronously from cache, ensuring seamless, instant rendering without layout jumps or flashes.
+- **Strict Role Boundary Enforcement**:
+  - **Customer Portal & Navigation**:
+    - Completely removed all links to `Owner Portal` from customer desktop and mobile navigation. Customers only see customer-authorized links: **Map & Shops**, **Walk-In QR**, **Order Tracker**, and **Profile & Overview**.
+    - Removed the "Switch to Shop Owner Mode" button from the customer dashboard banner. Regular customers cannot self-promote to owner mode.
+    - Removed the "Switch to Owner" action from the user profile dropdown for customer accounts.
+  - **Staff Scanner Navigation**:
+    - Staff accounts are locked strictly to staff tools: **Counter QR Scanner** and **Staff Profile**. They never see customer maps, customer order generators, or owner analytics.
+  - **Owner & Admin Navigation**:
+    - Only verified shop owners and admins have access to **Business Analytics**, **QR Intake & Live Queue**, **Branch Staff**, and **Shop Setup**.
+    - If an unauthorized customer account navigates directly to `/owner`, they are immediately redirected back to `/customer`.
+  - **UserProfileCard Role Display**:
+    - Updated `UserProfileCard.tsx` role badge to support `Branch Staff (3)` and fixed typos so customers cleanly display `Customer (2)`.
+

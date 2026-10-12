@@ -14,6 +14,7 @@ import {
   updateTransactionPayment,
   getTransactionByTrackingNumber,
   getLaundryTransactions,
+  uploadPaymentProof,
 } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -50,6 +51,7 @@ import {
 } from "lucide-react";
 import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
+import { PaymentInputSection } from "@/components/payment/PaymentInputSection";
 
 interface StaffScannerViewProps {
   staffUser: UserProfile;
@@ -141,6 +143,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   // Payment record & proof preview modals
   const [paymentRecordTx, setPaymentRecordTx] = useState<LaundryTransaction | null>(null);
   const [proofModalTx, setProofModalTx] = useState<LaundryTransaction | null>(null);
+
+  // Staff inline intake & dispatch payment states
+  const [staffPayMethod, setStaffPayMethod] = useState<"Cash" | "GCash">("Cash");
+  const [staffPayRefNo, setStaffPayRefNo] = useState("");
+  const [staffPayFile, setStaffPayFile] = useState<File | null>(null);
+  const [staffPayPreviewUrl, setStaffPayPreviewUrl] = useState<string | null>(null);
 
   // Status feedback
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
@@ -275,6 +283,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     setSpecialNotesInput(tx.special_notes || "");
     setPaymentChoice(tx.payment_status === "Paid" ? "paid" : "unpaid");
     setCollectPaymentOnGive(tx.payment_status === "Unpaid");
+    setStaffPayMethod("Cash");
+    setStaffPayRefNo("");
+    setStaffPayFile(null);
+    if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
+    setStaffPayPreviewUrl(null);
 
     if (tx.status === "Pending") {
       // AUTOMATIC: RECEIVE LAUNDRY
@@ -309,6 +322,14 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       const finalPaymentStatus: PaymentStatus =
         paymentChoice === "paid" ? "Paid" : activeScannedTx.payment_status;
 
+      let uploadedProofUrl: string | undefined = undefined;
+      if (paymentChoice === "paid" && staffPayMethod === "GCash" && staffPayFile) {
+        uploadedProofUrl = await uploadPaymentProof(
+          staffPayFile,
+          activeScannedTx.tracking_number
+        );
+      }
+
       const success = await updateTransactionStatus(
         activeScannedTx.id,
         nextStatus,
@@ -318,7 +339,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         specialNotesInput.trim() || undefined,
         machineNumber.trim() || undefined,
         staffUser.id,
-        staffUser.full_name
+        staffUser.full_name,
+        paymentChoice === "paid" ? staffPayMethod : undefined,
+        uploadedProofUrl,
+        paymentChoice === "paid" ? staffPayRefNo.trim() || undefined : undefined
       );
 
       if (success) {
@@ -326,11 +350,14 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
           "success",
           `Received order #${activeScannedTx.tracking_number}! ${
             machineNumber ? `Assigned to ${machineNumber}.` : ""
-          }`
+          } ${paymentChoice === "paid" ? `(Paid via ${staffPayMethod})` : ""}`
         );
         setActiveScannedTx(null);
         setAutoActionType(null);
         setSearchCode("");
+        setStaffPayFile(null);
+        if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
+        setStaffPayPreviewUrl(null);
         await loadShopOrders();
       } else {
         showToast("error", "Failed to update order status. Please try again.");
@@ -351,6 +378,14 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       const finalPayment: PaymentStatus =
         collectPaymentOnGive || activeScannedTx.payment_status === "Paid" ? "Paid" : "Unpaid";
 
+      let uploadedProofUrl: string | undefined = undefined;
+      if (collectPaymentOnGive && staffPayMethod === "GCash" && staffPayFile) {
+        uploadedProofUrl = await uploadPaymentProof(
+          staffPayFile,
+          activeScannedTx.tracking_number
+        );
+      }
+
       const success = await updateTransactionStatus(
         activeScannedTx.id,
         "Completed",
@@ -360,7 +395,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         undefined,
         undefined,
         staffUser.id,
-        staffUser.full_name
+        staffUser.full_name,
+        collectPaymentOnGive ? staffPayMethod : undefined,
+        uploadedProofUrl,
+        collectPaymentOnGive ? staffPayRefNo.trim() || undefined : undefined
       );
 
       if (success) {
@@ -371,6 +409,9 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         setActiveScannedTx(null);
         setAutoActionType(null);
         setSearchCode("");
+        setStaffPayFile(null);
+        if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
+        setStaffPayPreviewUrl(null);
         await loadShopOrders();
       } else {
         showToast("error", "Failed to mark order as completed.");
@@ -960,11 +1001,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
       {/* AUTOMATIC ACTION MODAL: RECEIVE OR GIVE */}
       {activeScannedTx && autoActionType && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header: Changes banner color depending on automatic action */}
             <div
-              className={`p-4 border-b flex items-center justify-between ${
+              className={`p-3.5 sm:p-4 border-b shrink-0 flex items-center justify-between ${
                 autoActionType === "receive"
                   ? "bg-amber-950/80 border-amber-800 text-amber-200"
                   : autoActionType === "give"
@@ -1020,7 +1061,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div className="p-3.5 sm:p-5 space-y-4 flex-1 overflow-y-auto">
               {/* Customer & Order Summary Card */}
               <div className="bg-slate-900 border border-slate-850 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -1171,13 +1212,43 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     </div>
                   </div>
 
+                  {/* If Paid Now is selected, render PaymentInputSection for Cash / GCash proof */}
+                  {paymentChoice === "paid" && (
+                    <div className="pt-1 animate-fadeIn">
+                      <PaymentInputSection
+                        theme="dark"
+                        method={staffPayMethod}
+                        onMethodChange={setStaffPayMethod}
+                        referenceNo={staffPayRefNo}
+                        onReferenceNoChange={setStaffPayRefNo}
+                        selectedFile={staffPayFile}
+                        previewUrl={staffPayPreviewUrl}
+                        onFileSelect={(file) => {
+                          setStaffPayFile(file);
+                          setStaffPayPreviewUrl(URL.createObjectURL(file));
+                        }}
+                        onFileClear={() => {
+                          setStaffPayFile(null);
+                          if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
+                          setStaffPayPreviewUrl(null);
+                        }}
+                        amount={
+                          (parseFloat(weightInput) || activeScannedTx.weight_kg || 5.0) *
+                          (activeScannedTx.weight_kg > 0
+                            ? activeScannedTx.total_amount / activeScannedTx.weight_kg
+                            : 50)
+                        }
+                      />
+                    </div>
+                  )}
+
                   {/* Action Buttons */}
-                  <div className="pt-2 flex gap-2">
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setActiveScannedTx(null)}
-                      className="flex-1 border-slate-700 text-slate-300 text-xs py-2.5"
+                      className="flex-1 border-slate-700 text-slate-300 text-xs py-2.5 order-2 sm:order-1"
                     >
                       Cancel
                     </Button>
@@ -1186,7 +1257,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       variant="primary"
                       onClick={handleConfirmReceive}
                       disabled={isProcessing}
-                      className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5"
+                      className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5 order-1 sm:order-2"
                     >
                       <CheckCircle2 size={15} />
                       {isProcessing ? "Processing..." : "Confirm & Receive Clothes"}
@@ -1216,7 +1287,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
                   {/* Payment settlement check */}
                   {activeScannedTx.payment_status === "Unpaid" ? (
-                    <div className="bg-amber-950/60 border border-amber-600/60 rounded-xl p-3 space-y-2">
+                    <div className="bg-amber-950/60 border border-amber-600/60 rounded-xl p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
                           <DollarSign size={15} />
@@ -1233,8 +1304,33 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           onChange={(e) => setCollectPaymentOnGive(e.target.checked)}
                           className="w-4 h-4 rounded text-teal-600 border-slate-700 focus:ring-teal-500"
                         />
-                        <span>Payment collected in full (Cash / GCash / Card)</span>
+                        <span>Payment collected in full (Cash / GCash)</span>
                       </label>
+
+                      {/* If collect on give is checked, render PaymentInputSection */}
+                      {collectPaymentOnGive && (
+                        <div className="pt-1 animate-fadeIn">
+                          <PaymentInputSection
+                            theme="dark"
+                            method={staffPayMethod}
+                            onMethodChange={setStaffPayMethod}
+                            referenceNo={staffPayRefNo}
+                            onReferenceNoChange={setStaffPayRefNo}
+                            selectedFile={staffPayFile}
+                            previewUrl={staffPayPreviewUrl}
+                            onFileSelect={(file) => {
+                              setStaffPayFile(file);
+                              setStaffPayPreviewUrl(URL.createObjectURL(file));
+                            }}
+                            onFileClear={() => {
+                              setStaffPayFile(null);
+                              if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
+                              setStaffPayPreviewUrl(null);
+                            }}
+                            amount={activeScannedTx.total_amount}
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-emerald-950/40 border border-emerald-600/40 rounded-xl p-3 flex items-center gap-2 text-xs text-emerald-300 font-semibold">
@@ -1244,12 +1340,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   )}
 
                   {/* Give Confirmation Action Buttons */}
-                  <div className="pt-2 flex gap-2">
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2 shrink-0">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setActiveScannedTx(null)}
-                      className="flex-1 border-slate-700 text-slate-300 text-xs py-2.5"
+                      className="flex-1 border-slate-700 text-slate-300 text-xs py-2.5 order-2 sm:order-1"
                     >
                       Cancel
                     </Button>
@@ -1258,7 +1354,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       variant="primary"
                       onClick={handleConfirmGive}
                       disabled={isProcessing}
-                      className="flex-1 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5 shadow-lg shadow-teal-900/40"
+                      className="flex-1 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5 shadow-lg shadow-teal-900/40 order-1 sm:order-2"
                     >
                       <Check size={16} />
                       {isProcessing ? "Releasing..." : "Confirm Handover & Release"}
