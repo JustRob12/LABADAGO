@@ -24,7 +24,11 @@ import {
   MessageSquare,
   Loader2,
   Check,
+  Banknote,
+  Smartphone,
+  Eye,
 } from "lucide-react";
+import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
 interface CustomerOrderTrackerProps {
   transactions: LaundryTransaction[];
@@ -56,6 +60,7 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
   const [reviewSuccessMessage, setReviewSuccessMessage] = useState<string | null>(null);
   const [viewingQrTx, setViewingQrTx] = useState<LaundryTransaction | null>(null);
   const [qrModalUrl, setQrModalUrl] = useState<string | null>(null);
+  const [proofModalTx, setProofModalTx] = useState<LaundryTransaction | null>(null);
 
   // Load previously persisted ratings from localStorage
   useEffect(() => {
@@ -405,38 +410,70 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                 </div>
               )}
 
-              {/* Payment Arrangement Banner Callout */}
+              {/* Payment Status & Instructions Callout */}
               <div
-                className={`flex items-start sm:items-center gap-2.5 p-3 rounded-lg border text-xs ${
+                className={`p-3.5 rounded-xl border text-xs space-y-2 ${
                   tx.payment_status === "Paid"
                     ? "bg-emerald-50/80 border-emerald-200/90 text-emerald-950"
                     : "bg-amber-50/80 border-amber-200/90 text-amber-950"
                 }`}
               >
                 {tx.payment_status === "Paid" ? (
-                  <>
-                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
-                    <div>
-                      <span className="font-bold text-emerald-950">
-                        Payment Arrangement: Paid First (Settled at Drop-off)
-                      </span>
-                      <p className="text-emerald-700 text-[11px] mt-0.5">
-                        ₱{tx.total_amount.toFixed(2)} was received at the shop counter. You do not need to pay anything when claiming your clean clothes!
-                      </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-emerald-950 text-sm">
+                            Payment Settled: ₱{tx.total_amount.toFixed(2)}
+                          </span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                            {tx.payment_method ? `Paid via ${tx.payment_method}` : "Paid in Full"}
+                          </span>
+                        </div>
+                        <p className="text-emerald-700 text-[11px] mt-0.5 leading-relaxed">
+                          Your payment was officially received and logged by the shop staff. No extra fee is needed when claiming your laundry.
+                        </p>
+                        {tx.payment_reference_no && (
+                          <p className="text-emerald-800 font-mono text-[11px] mt-1 font-semibold">
+                            GCash Ref #: {tx.payment_reference_no}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </>
+
+                    {tx.payment_proof_url && (
+                      <button
+                        type="button"
+                        onClick={() => setProofModalTx(tx)}
+                        className="self-start sm:self-center shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                      >
+                        <Receipt size={13} />
+                        View Receipt Proof
+                      </button>
+                    )}
+                  </div>
                 ) : (
-                  <>
-                    <Clock size={16} className="text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
-                    <div>
-                      <span className="font-bold text-amber-950">
-                        Payment Arrangement: Pay When Complete
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Clock size={16} className="text-amber-600 shrink-0" />
+                        <span className="font-bold text-amber-950 text-sm">
+                          Final Amount: ₱{tx.total_amount.toFixed(2)}
+                        </span>
+                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                          Payment: Unpaid
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded">
+                        Accepted: Cash or GCash
                       </span>
-                      <p className="text-amber-700 text-[11px] mt-0.5">
-                        Please prepare <strong>₱{tx.total_amount.toFixed(2)}</strong> (Cash or GCash) when claiming your clean laundry upon pickup.
-                      </p>
                     </div>
-                  </>
+
+                    <p className="text-amber-800 text-[11px] leading-relaxed pl-6">
+                      Please settle <strong>₱{tx.total_amount.toFixed(2)}</strong> directly with the counter staff upon drop-off or pickup. If paying via <strong>GCash</strong>, pay using the shop&apos;s displayed GCash QR code or phone number. (No online payment is processed on this website).
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -459,12 +496,12 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                     {tx.payment_status === "Paid" ? (
                       <strong className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1">
                         <CheckCircle2 size={11} className="text-emerald-600" />
-                        Paid First (Drop-off)
+                        Paid {tx.payment_method ? `(${tx.payment_method})` : ""}
                       </strong>
                     ) : (
                       <strong className="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1">
                         <Clock size={11} className="text-amber-600" />
-                        Pay When Complete (On Pickup)
+                        Unpaid (Pay at Counter)
                       </strong>
                     )}
                   </div>
@@ -697,6 +734,13 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Payment Receipt / Proof Modal */}
+      <PaymentProofModal
+        isOpen={!!proofModalTx}
+        transaction={proofModalTx}
+        onClose={() => setProofModalTx(null)}
+      />
     </div>
   );
 };

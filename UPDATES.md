@@ -62,5 +62,22 @@
 - **Walk-In QR Auth Guard**: When a guest clicks "Walk-In QR" on any shop card or within the right-side map modal, they are strictly routed to `/login?redirect=...` with the message: *"Please sign in or create an account to generate your Walk-In QR Fast Pass."*
 - **Portal Boundary Enforcement**: Unauthenticated visitors who attempt to access `/customer` are automatically redirected to the public `/map` workspace to keep guest browsing separate from customer accounts.
 
+---
 
+## [2026-10-12]
 
+### 10. Manual Counter Payment Recording (Cash & GCash Receipt Upload Proof)
+- **Zero Third-Party Gateway Dependency**: Eliminated the need for commercial payment APIs (PayMongo, Stripe, GCash Merchant APIs) and processing fees by implementing a direct **Manual Over-The-Counter (OTC) / GCash Verification** architecture.
+- **Counter Staff Payment Intake (`PaymentRecordModal.tsx`)**:
+  - Staff can record payments directly from the queue or action modal at any stage (Receive, Washing, Ready, Give/Pickup).
+  - **Cash Option**: One-tap recording with instant calculation and timestamped logging.
+  - **GCash / Bank Transfer Option**: Allows staff to input the customer's GCash reference number, capture a camera photo of the customer's phone screen, or upload a transfer screenshot.
+  - **Client-Side Image Compression & Resilient Storage**: Automatically compresses images via HTML5 Canvas before uploading to Supabase Storage bucket `payment_proofs` (with fallback to compressed base64 if storage is unavailable).
+- **Cross-Role Receipt & Proof Viewer (`PaymentProofModal.tsx`)**:
+  - **Customer Portal**: Customers can view their confirmed bill, payment method (`Cash` or `GCash`), reference number, and click to view their official receipt/transfer proof in a lightbox modal. If unpaid, clear instructions indicate that payment is settled at the counter (Cash or GCash) with no online checkout required.
+  - **Staff Scanner Station**: Staff can review whether an order was prepaid, view receipt screenshots, or collect settlement before releasing clothes.
+  - **Owner / Admin Dashboard**: Shop owners can inspect all transaction proofs in the orders table and view revenue breakdowns (`Cash Revenue` vs. `GCash Revenue`) in the analytics dashboard to prevent employee theft or unrecorded sales.
+- **Database Schema & Storage Bucket Migration**:
+  - Added columns `payment_method`, `payment_proof_url`, `payment_reference_no`, and `paid_at` to `public.transactions`.
+  - Created public Supabase storage bucket `payment_proofs` with RLS upload/view policies.
+  - Generated standalone migration script `supabase_manual_payment_migration.sql` for 1-click execution in Supabase SQL editor.

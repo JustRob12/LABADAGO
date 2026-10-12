@@ -35,6 +35,26 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
     return sum;
   }, 0);
 
+  const cashRevenue = transactions.reduce((sum, tx) => {
+    if (
+      (tx.payment_status === "Paid" || tx.status === "Completed") &&
+      (!tx.payment_method || tx.payment_method === "Cash")
+    ) {
+      return sum + (Number(tx.total_amount) || 0);
+    }
+    return sum;
+  }, 0);
+
+  const gcashRevenue = transactions.reduce((sum, tx) => {
+    if (
+      (tx.payment_status === "Paid" || tx.status === "Completed") &&
+      tx.payment_method?.toLowerCase().includes("gcash")
+    ) {
+      return sum + (Number(tx.total_amount) || 0);
+    }
+    return sum;
+  }, 0);
+
   const completedOrders = transactions.filter(
     (tx) => tx.status === "Completed" || tx.status === "Ready"
   ).length;
@@ -96,9 +116,11 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
               ₱{totalRevenue.toFixed(2)}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {hasData ? `${transactions.length} total orders logged` : "No paid orders yet"}
-          </p>
+          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+            <span className="text-emerald-700 font-semibold">Cash: ₱{cashRevenue.toFixed(0)}</span>
+            <span>•</span>
+            <span className="text-blue-700 font-semibold">GCash: ₱{gcashRevenue.toFixed(0)}</span>
+          </div>
         </div>
 
         {/* Total Orders Completed */}

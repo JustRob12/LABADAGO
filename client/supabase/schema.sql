@@ -119,13 +119,19 @@ create table if not exists public.transactions (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Ensure machine_number and staff_id columns exist if table was created previously
+-- Ensure machine_number, staff_id, and payment tracking columns exist if table was created previously
 alter table public.transactions add column if not exists machine_number text;
 alter table public.transactions add column if not exists staff_id uuid references auth.users(id) on delete set null;
+alter table public.transactions add column if not exists payment_method text check (payment_method in ('Cash', 'GCash', 'Bank Transfer'));
+alter table public.transactions add column if not exists payment_proof_url text;
+alter table public.transactions add column if not exists payment_reference_no text;
+alter table public.transactions add column if not exists paid_at timestamp with time zone;
 
 create index if not exists idx_transactions_customer on public.transactions(customer_id);
 create index if not exists idx_transactions_shop on public.transactions(shop_id);
 create index if not exists idx_transactions_status on public.transactions(status);
+create index if not exists idx_transactions_payment_status on public.transactions(payment_status);
+create index if not exists idx_transactions_payment_method on public.transactions(payment_method);
 
 -- ------------------------------------------------------------------------------
 -- 5. Branch Staff Table (Recruited members who can scan only)
@@ -499,6 +505,23 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user();
+
+-- ==============================================================================
+-- 10. Storage Bucket for Payment Receipts / Proof of Transfer
+-- ==============================================================================
+insert into storage.buckets (id, name, public)
+values ('payment_proofs', 'payment_proofs', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Payment proofs are publicly readable" on storage.objects;
+create policy "Payment proofs are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'payment_proofs');
+
+drop policy if exists "Authenticated users can upload payment proofs" on storage.objects;
+create policy "Authenticated users can upload payment proofs"
+  on storage.objects for insert
+  with check (bucket_id = 'payment_proofs' and (auth.role() = 'authenticated' or auth.role() = 'anon'));
 
 -- ==============================================================================
 -- End of Database Schema (Clean production-ready without mock seed data)

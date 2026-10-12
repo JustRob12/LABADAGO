@@ -742,7 +742,10 @@ export async function updateTransactionStatus(
   specialNotes?: string,
   machineNumber?: string,
   staffId?: string,
-  staffName?: string
+  staffName?: string,
+  paymentMethod?: string,
+  paymentProofUrl?: string,
+  paymentReferenceNo?: string
 ): Promise<boolean> {
   const updatePayload: Record<string, unknown> = {
     status: newStatus,
@@ -753,6 +756,18 @@ export async function updateTransactionStatus(
   }
   if (paymentStatus !== undefined) {
     updatePayload.payment_status = paymentStatus;
+    if (paymentStatus === "Paid") {
+      updatePayload.paid_at = new Date().toISOString();
+    }
+  }
+  if (paymentMethod !== undefined) {
+    updatePayload.payment_method = paymentMethod;
+  }
+  if (paymentProofUrl !== undefined) {
+    updatePayload.payment_proof_url = paymentProofUrl;
+  }
+  if (paymentReferenceNo !== undefined) {
+    updatePayload.payment_reference_no = paymentReferenceNo;
   }
   if (totalAmount !== undefined && !isNaN(totalAmount)) {
     updatePayload.total_amount = totalAmount;
@@ -792,6 +807,10 @@ export async function updateTransactionStatus(
           status: newStatus,
           weight_kg: weightKg !== undefined && !isNaN(weightKg) ? weightKg : tx.weight_kg,
           payment_status: paymentStatus !== undefined ? paymentStatus : tx.payment_status,
+          payment_method: paymentMethod !== undefined ? paymentMethod : tx.payment_method,
+          payment_proof_url: paymentProofUrl !== undefined ? paymentProofUrl : tx.payment_proof_url,
+          payment_reference_no: paymentReferenceNo !== undefined ? paymentReferenceNo : tx.payment_reference_no,
+          paid_at: paymentStatus === "Paid" ? new Date().toISOString() : tx.paid_at,
           total_amount: totalAmount !== undefined && !isNaN(totalAmount) ? totalAmount : tx.total_amount,
           special_notes: specialNotes !== undefined ? specialNotes : tx.special_notes,
           machine_number: machineNumber !== undefined ? machineNumber : tx.machine_number,
@@ -808,12 +827,27 @@ export async function updateTransactionStatus(
 export async function updateTransactionPayment(
   txId: string,
   paymentStatus: PaymentStatus,
-  specialNotes?: string
+  specialNotes?: string,
+  paymentMethod?: string,
+  paymentProofUrl?: string,
+  paymentReferenceNo?: string
 ): Promise<boolean> {
   const updatePayload: Record<string, unknown> = {
     payment_status: paymentStatus,
     updated_at: new Date().toISOString(),
   };
+  if (paymentStatus === "Paid") {
+    updatePayload.paid_at = new Date().toISOString();
+  }
+  if (paymentMethod !== undefined) {
+    updatePayload.payment_method = paymentMethod;
+  }
+  if (paymentProofUrl !== undefined) {
+    updatePayload.payment_proof_url = paymentProofUrl;
+  }
+  if (paymentReferenceNo !== undefined) {
+    updatePayload.payment_reference_no = paymentReferenceNo;
+  }
   if (specialNotes !== undefined) {
     updatePayload.special_notes = specialNotes;
   }
@@ -839,6 +873,10 @@ export async function updateTransactionPayment(
       ? {
           ...tx,
           payment_status: paymentStatus,
+          payment_method: paymentMethod !== undefined ? paymentMethod : tx.payment_method,
+          payment_proof_url: paymentProofUrl !== undefined ? paymentProofUrl : tx.payment_proof_url,
+          payment_reference_no: paymentReferenceNo !== undefined ? paymentReferenceNo : tx.payment_reference_no,
+          paid_at: paymentStatus === "Paid" ? new Date().toISOString() : tx.paid_at,
           special_notes: specialNotes !== undefined ? specialNotes : tx.special_notes,
           updated_at: new Date().toISOString(),
         }
@@ -846,6 +884,86 @@ export async function updateTransactionPayment(
   );
 
   return true;
+}
+
+/**
+ * Compresses an image file client-side and uploads it to Supabase Storage
+ * bucket 'payment_proofs'. If upload fails or bucket is not yet created,
+ * falls back to a compressed Base64 data URI so transactions never fail.
+ */
+export async function uploadPaymentProof(
+  file: File,
+  trackingNumber: string
+): Promise<string> {
+  // Compress image client-side via canvas
+  const compressedDataUrl = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        } else {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+
+  if (!compressedDataUrl) {
+    throw new Error("Failed to read image file");
+  }
+
+  // Attempt upload to Supabase Storage
+  try {
+    const cleanNum = trackingNumber.replace(/[^a-zA-Z0-9]/g, "");
+    const fileName = `${cleanNum}-${Date.now()}.jpg`;
+
+    const res = await fetch(compressedDataUrl);
+    const blob = await res.blob();
+
+    const uploadRes = await supabase.storage
+      .from("payment_proofs")
+      .upload(fileName, blob, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (!uploadRes.error && uploadRes.data?.path) {
+      const { data: urlData } = supabase.storage
+        .from("payment_proofs")
+        .getPublicUrl(uploadRes.data.path);
+      if (urlData?.publicUrl) {
+        return urlData.publicUrl;
+      }
+    }
+  } catch {
+    // If Supabase storage is not configured or errors, fallback to Base64
+  }
+
+  // Graceful fallback to data URL
+  return compressedDataUrl;
 }
 
 // -----------------------------------------------------------------------------

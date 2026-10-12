@@ -28,7 +28,11 @@ import {
   X,
   AlertCircle,
   Building2,
+  Receipt,
+  Smartphone,
 } from "lucide-react";
+import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
+import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
 interface WalkInIntakeProps {
   shops?: LaundryShop[];
@@ -66,6 +70,10 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   // Shop mismatch modal state
   const [showMismatchModal, setShowMismatchModal] = useState(false);
   const [mismatchData, setMismatchData] = useState<MismatchModalData | null>(null);
+
+  // Manual payment record & proof preview modal states
+  const [paymentRecordTx, setPaymentRecordTx] = useState<LaundryTransaction | null>(null);
+  const [proofModalTx, setProofModalTx] = useState<LaundryTransaction | null>(null);
 
   // Operating counter branch selection
   const [activeBranchId, setActiveBranchId] = useState<string>(() => {
@@ -819,25 +827,37 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                     <td className="py-3 px-3 font-bold text-slate-900">₱{tx.total_amount.toFixed(2)}</td>
                     <td className="py-3 px-3">
                       {tx.payment_status === "Paid" ? (
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-1">
                           <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1 w-fit">
                             <CheckCircle2 size={11} className="text-emerald-600" />
-                            Paid (Drop-off)
+                            Paid {tx.payment_method ? `(${tx.payment_method})` : ""}
                           </span>
+                          {tx.payment_proof_url && (
+                            <button
+                              type="button"
+                              onClick={() => setProofModalTx(tx)}
+                              className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer w-fit"
+                              title="View uploaded transfer receipt"
+                            >
+                              <Receipt size={11} />
+                              View Proof
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
                           <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1 w-fit">
                             <Clock size={11} className="text-amber-600" />
-                            Pay on Pickup
+                            Unpaid
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleUpdatePaymentStatus(tx.id, "Paid")}
-                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline text-left cursor-pointer"
-                            title="Mark order as paid when customer pays on pickup"
+                            onClick={() => setPaymentRecordTx(tx)}
+                            className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 underline text-left cursor-pointer flex items-center gap-1"
+                            title="Record Cash or GCash payment"
                           >
-                            Mark as Paid ✓
+                            <Banknote size={11} />
+                            Receive Pay ✓
                           </button>
                         </div>
                       )}
@@ -1000,6 +1020,25 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
           </div>
         </div>
       )}
+
+      {/* Manual Payment Record Modal (Cash / GCash Proof Upload) */}
+      <PaymentRecordModal
+        isOpen={!!paymentRecordTx}
+        transaction={paymentRecordTx}
+        onClose={() => setPaymentRecordTx(null)}
+        onSuccess={() => {
+          setIntakeSuccess(`Payment recorded for order #${paymentRecordTx?.tracking_number}!`);
+          setPaymentRecordTx(null);
+          onTransactionsUpdated();
+        }}
+      />
+
+      {/* Payment Receipt / Transfer Proof Lightbox Modal */}
+      <PaymentProofModal
+        isOpen={!!proofModalTx}
+        transaction={proofModalTx}
+        onClose={() => setProofModalTx(null)}
+      />
     </div>
   );
 };

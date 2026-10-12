@@ -42,7 +42,14 @@ import {
   LogOut,
   ChevronRight,
   BadgeAlert,
+  Banknote,
+  Smartphone,
+  Receipt,
+  FileText,
+  Eye,
 } from "lucide-react";
+import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
+import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
 interface StaffScannerViewProps {
   staffUser: UserProfile;
@@ -130,6 +137,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
   // Form states for Give action
   const [collectPaymentOnGive, setCollectPaymentOnGive] = useState<boolean>(true);
+
+  // Payment record & proof preview modals
+  const [paymentRecordTx, setPaymentRecordTx] = useState<LaundryTransaction | null>(null);
+  const [proofModalTx, setProofModalTx] = useState<LaundryTransaction | null>(null);
 
   // Status feedback
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
@@ -409,6 +420,55 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const renderPaymentBadge = (tx: LaundryTransaction) => {
+    const isPaid = tx.payment_status === "Paid";
+    const methodLabel = tx.payment_method ? ` (${tx.payment_method})` : "";
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+        <span
+          className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 ${
+            isPaid
+              ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800"
+              : "bg-amber-950/80 text-amber-300 border border-amber-800"
+          }`}
+        >
+          {isPaid ? <CheckCircle2 size={10} /> : <DollarSign size={10} />}
+          {isPaid ? `Paid${methodLabel}` : "Unpaid"}
+        </span>
+
+        {tx.payment_proof_url && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setProofModalTx(tx);
+            }}
+            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-950/90 text-blue-300 border border-blue-700 hover:bg-blue-900 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+            title="View GCash / Transfer Receipt"
+          >
+            <Receipt size={11} />
+            Receipt
+          </button>
+        )}
+
+        {!isPaid && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPaymentRecordTx(tx);
+            }}
+            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-700 hover:bg-emerald-900 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+            title="Record Cash or GCash payment"
+          >
+            <Banknote size={11} />
+            Receive Pay
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -743,17 +803,9 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-400">
-                          {tx.service_name} • {tx.weight_kg}kg •{" "}
-                          <span
-                            className={
-                              tx.payment_status === "Paid"
-                                ? "text-emerald-400 font-semibold"
-                                : "text-amber-400 font-semibold"
-                            }
-                          >
-                            ₱{tx.total_amount.toFixed(2)} ({tx.payment_status})
-                          </span>
+                          {tx.service_name} • {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
                         </p>
+                        {renderPaymentBadge(tx)}
                       </div>
 
                       <Button
@@ -807,8 +859,9 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           {tx.customer_name}
                         </div>
                         <p className="text-xs text-slate-400">
-                          {tx.service_name} • {tx.weight_kg}kg
+                          {tx.service_name} • {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
                         </p>
+                        {renderPaymentBadge(tx)}
                       </div>
 
                       <Button
@@ -851,6 +904,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <p className="text-xs text-slate-400">
                           {tx.service_name} • Est. {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
                         </p>
+                        {renderPaymentBadge(tx)}
                       </div>
 
                       <Button
@@ -892,6 +946,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <p className="text-xs text-slate-500">
                           ₱{tx.total_amount.toFixed(2)} • Handed over to customer
                         </p>
+                        {renderPaymentBadge(tx)}
                       </div>
                       <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
                     </div>
@@ -986,8 +1041,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Total Due:</span>
-                  <span className="text-teal-300 font-extrabold text-sm">
-                    ₱{activeScannedTx.total_amount.toFixed(2)}{" "}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-teal-300 font-extrabold text-sm">
+                      ₱{activeScannedTx.total_amount.toFixed(2)}
+                    </span>
                     <span
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                         activeScannedTx.payment_status === "Paid"
@@ -996,8 +1053,35 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       }`}
                     >
                       {activeScannedTx.payment_status}
+                      {activeScannedTx.payment_method ? ` (${activeScannedTx.payment_method})` : ""}
                     </span>
-                  </span>
+
+                    {/* Receipt proof preview button if GCash receipt attached */}
+                    {activeScannedTx.payment_proof_url && (
+                      <button
+                        type="button"
+                        onClick={() => setProofModalTx(activeScannedTx)}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-700 hover:bg-blue-900 flex items-center gap-1 cursor-pointer"
+                        title="View GCash transfer proof"
+                      >
+                        <Receipt size={11} />
+                        Receipt
+                      </button>
+                    )}
+
+                    {/* Pay now button if unpaid */}
+                    {activeScannedTx.payment_status === "Unpaid" && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRecordTx(activeScannedTx)}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 hover:bg-emerald-900 flex items-center gap-1 cursor-pointer"
+                        title="Record Cash or GCash payment"
+                      >
+                        <Banknote size={11} />
+                        Receive Pay
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {activeScannedTx.special_notes && (
@@ -1295,6 +1379,28 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Manual Counter Payment Record Modal (Cash / GCash Proof Upload) */}
+      <PaymentRecordModal
+        isOpen={!!paymentRecordTx}
+        transaction={paymentRecordTx}
+        onClose={() => setPaymentRecordTx(null)}
+        onSuccess={async () => {
+          showToast(
+            "success",
+            `Payment recorded for order #${paymentRecordTx?.tracking_number}!`
+          );
+          setPaymentRecordTx(null);
+          await loadShopOrders();
+        }}
+      />
+
+      {/* Payment Receipt / Transfer Proof Lightbox Modal */}
+      <PaymentProofModal
+        isOpen={!!proofModalTx}
+        transaction={proofModalTx}
+        onClose={() => setProofModalTx(null)}
+      />
     </div>
   );
 };

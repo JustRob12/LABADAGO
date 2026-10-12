@@ -144,6 +144,7 @@ export type OrderStatus =
   | "Cancelled";
 
 export type PaymentStatus = "Unpaid" | "Paid" | "Refunded";
+export type PaymentMethod = "Cash" | "GCash" | "Bank Transfer";
 
 export interface LaundryTransaction {
   id: string;
@@ -158,6 +159,10 @@ export interface LaundryTransaction {
   total_amount: number;
   status: OrderStatus;
   payment_status: PaymentStatus;
+  payment_method?: PaymentMethod | string;
+  payment_proof_url?: string;
+  payment_reference_no?: string;
+  paid_at?: string;
   is_walkin: boolean;
   qr_data?: string;
   special_notes?: string;
