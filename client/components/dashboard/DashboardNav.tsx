@@ -86,8 +86,8 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
   };
 
   const handleToggleRole = async () => {
-    // Locked for staff and regular customers
-    if (isStaff || activeUser?.role === UserRole.COSTUMER) return;
+    // Locked for staff
+    if (isStaff) return;
     setIsSwitchingRole(true);
     const targetRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
 
@@ -438,8 +438,8 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                     </Link>
                   </div>
 
-                  {/* Role Switcher Action (Locked for staff and regular customers!) */}
-                  {isOwner && (
+                  {/* Role Switcher Action (Locked for staff) */}
+                  {!isStaff && (
                     <div className="border-t border-slate-100 py-1">
                       <button
                         type="button"
@@ -448,14 +448,17 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                         className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer transition-colors"
                       >
                         {isSwitchingRole ? (
-                          <Loader2 size={14} className="animate-spin text-blue-600" />
+                          <Loader2
+                            size={14}
+                            className={`animate-spin ${isOwner ? "text-blue-600" : "text-emerald-600"}`}
+                          />
                         ) : (
                           <ArrowRightLeft
                             size={14}
-                            className="text-blue-600"
+                            className={isOwner ? "text-blue-600" : "text-emerald-600"}
                           />
                         )}
-                        <span>Switch to Customer Preview</span>
+                        <span>{isOwner ? "Switch to Customer" : "Switch to Owner"}</span>
                       </button>
                     </div>
                   )}

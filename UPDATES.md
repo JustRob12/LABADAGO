@@ -143,3 +143,15 @@
   - Updated `supabase_schema.sql` and `client/supabase/schema.sql` with `ALTER TABLE public.shop_services ADD COLUMN IF NOT EXISTS kilos NUMERIC(6,2);` and `ALTER TABLE public.laundry_shops ADD COLUMN IF NOT EXISTS max_kilo_per_load NUMERIC(6,2) DEFAULT 8.0;`.
   - Built automatic error recovery into `saveLaundryShop` in `auth.ts`: if the Supabase tables don't have the `kilos` or `max_kilo_per_load` columns yet, it automatically retries without failing and stores the kilo information in `description`, while persisting seamlessly in the active session.
 
+### 15. Restored Customer Profile Dropdown "Switch to Owner" Role Toggle
+- **Restored "Switch to Owner" in Customer Profile Dropdown (`DashboardNav.tsx`)**:
+  - Re-enabled the bidirectional role switch button in the user profile dropdown for non-staff accounts.
+  - When in Owner mode, the dropdown displays **"Switch to Customer"** (navigating to `/customer`).
+  - When in Customer mode, the dropdown displays **"Switch to Owner"** (navigating to `/owner`), restoring the symmetrical mode toggle requested by the user.
+  - Branch staff accounts remain strictly locked (`isStaff`), showing the non-clickable "Staff Role Locked" notice.
+- **Backend & State Synchronization (`auth.ts` & `dashboard/page.tsx`)**:
+  - Removed the role lock in `switchUserRole` that blocked switching from Customer to Owner.
+  - Removed local storage role overrides in `getCurrentUserProfile` that prevented customer sessions from transitioning to owner mode.
+  - Synchronized the active role toggle button on the Hub overview (`app/dashboard/page.tsx`) so users can switch between Customer Mode and Owner Mode directly from their profile hub.
+
+

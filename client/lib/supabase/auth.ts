@@ -183,7 +183,6 @@ export function getCachedUserProfile(): UserProfile | null {
 /**
  * Switch the active user role (Customer <-> Owner)
  * Note: Staff members are locked and CANNOT switch roles unless removed by the owner!
- * Regular customers CANNOT switch to Owner!
  */
 export async function switchUserRole(newRole: UserRole): Promise<{
   success: boolean;
@@ -220,15 +219,6 @@ export async function switchUserRole(newRole: UserRole): Promise<{
         success: false,
         role: UserRole.STAFF,
         error: "Staff role is locked. You cannot switch roles while assigned as Branch Staff. Only your shop owner can remove your staff role.",
-      };
-    }
-
-    // Regular customers cannot self-switch to shop owner
-    if (dbProfile?.role === UserRole.COSTUMER && newRole === UserRole.OWNER) {
-      return {
-        success: false,
-        role: UserRole.COSTUMER,
-        error: "Customers cannot switch to Shop Owner mode. An authorized owner account is required.",
       };
     }
 
@@ -329,16 +319,8 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     }
 
     if (dbProfile) {
-      // If user in DB is a customer, ensure localStorage savedRole cannot elevate them
-      if (dbProfile.role === UserRole.COSTUMER && typeof window !== "undefined") {
-        localStorage.removeItem(`labadago_active_role_${user.id}`);
-        localStorage.removeItem("labadago_active_role");
-      }
-
       const effectiveRole = isStaff
         ? UserRole.STAFF
-        : dbProfile.role === UserRole.COSTUMER
-        ? UserRole.COSTUMER
         : savedRole !== null
         ? savedRole
         : dbProfile.role !== undefined && dbProfile.role !== null
@@ -377,8 +359,6 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     const meta = user.user_metadata || {};
     const metaRole = isStaff
       ? UserRole.STAFF
-      : Number(meta.role) === UserRole.COSTUMER
-      ? UserRole.COSTUMER
       : savedRole !== null
       ? savedRole
       : meta.role !== undefined

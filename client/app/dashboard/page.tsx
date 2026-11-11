@@ -54,7 +54,7 @@ function DashboardContent() {
   const isStaff = user?.role === UserRole.STAFF;
 
   const handleRoleToggle = async () => {
-    if (!user || isStaff || user.role === UserRole.COSTUMER) return;
+    if (!user || isStaff) return;
     const nextRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
     await switchUserRole(nextRole);
     setUser({ ...user, role: nextRole });
@@ -143,7 +143,7 @@ function DashboardContent() {
                       onClick={handleRoleToggle}
                       className="text-xs"
                     >
-                      Switch to Customer Preview
+                      Switch to Customer Mode
                     </Button>
                     <Link href="/owner">
                       <Button
@@ -157,16 +157,26 @@ function DashboardContent() {
                     </Link>
                   </>
                 ) : (
-                  <Link href="/customer">
+                  <>
                     <Button
-                      variant="primary"
+                      variant="outline"
                       size="sm"
-                      rightIcon={<ArrowRight size={14} />}
+                      onClick={handleRoleToggle}
                       className="text-xs"
                     >
-                      Enter Customer Portal
+                      Switch to Owner Mode
                     </Button>
-                  </Link>
+                    <Link href="/customer">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        rightIcon={<ArrowRight size={14} />}
+                        className="text-xs"
+                      >
+                        Enter Customer Portal
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
             </div>
