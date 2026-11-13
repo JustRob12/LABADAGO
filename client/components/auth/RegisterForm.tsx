@@ -4,14 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signUpUser } from "@/lib/supabase/auth";
-import { Gender, RegisterFormData } from "@/types/auth";
+import { supabase } from "@/lib/supabase/client";
+import { RegisterFormData } from "@/types/auth";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import {
   User,
-  Calendar,
   Phone,
   Mail,
   Lock,
@@ -19,16 +18,20 @@ import {
   EyeOff,
   UserCheck,
   CheckCircle,
+  Check,
 } from "lucide-react";
+
+// Strict Password Regex: Minimum 8 chars, at least 1 uppercase, 1 lowercase, 1 number, and 1 special character
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+=\-~`[\]{}|:;"'<>,./\\]).{8,}$/;
 
 export const RegisterForm: React.FC = () => {
   const router = useRouter();
 
   const [formData, setFormData] = useState<RegisterFormData>({
     fullName: "",
-    dateOfBirth: "",
+    dateOfBirth: "2000-01-01", // Default to satisfy database not-null constraint
     phoneNumber: "",
-    gender: "Male",
+    gender: "Prefer not to say", // Default to satisfy database check constraint
     email: "",
     password: "",
     confirmPassword: "",
@@ -40,35 +43,24 @@ export const RegisterForm: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const genderOptions: { value: Gender; label: string }[] = [
-    { value: "Male", label: "Male" },
-    { value: "Female", label: "Female" },
-    { value: "Other", label: "Other" },
-    { value: "Prefer not to say", label: "Prefer not to say" },
-  ];
-
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errorMessage) setErrorMessage(null);
   };
 
+  // Password requirement checks for visual feedback
+  const hasMinLength = formData.password.length >= 8;
+  const hasUpperCase = /[A-Z]/.test(formData.password);
+  const hasLowerCase = /[a-z]/.test(formData.password);
+  const hasNumber = /\d/.test(formData.password);
+  const hasSpecialChar = /[@$!%*?&#^()_+=\-~`[\]{}|:;"'<>,./\\]/.test(formData.password);
+
   const validateForm = (): boolean => {
     if (!formData.fullName.trim()) {
       setErrorMessage("Please enter your full name.");
-      return false;
-    }
-    if (!formData.dateOfBirth) {
-      setErrorMessage("Please select your date of birth.");
-      return false;
-    }
-
-    const birthDate = new Date(formData.dateOfBirth);
-    const today = new Date();
-    if (birthDate > today) {
-      setErrorMessage("Date of birth cannot be in the future.");
       return false;
     }
 
@@ -82,8 +74,10 @@ export const RegisterForm: React.FC = () => {
       return false;
     }
 
-    if (formData.password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters long.");
+    if (!PASSWORD_REGEX.test(formData.password)) {
+      setErrorMessage(
+        "Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character."
+      );
       return false;
     }
 
@@ -114,19 +108,13 @@ export const RegisterForm: React.FC = () => {
         return;
       }
 
-      if (result.needsEmailConfirmation) {
-        setSuccessMessage(
-          "Registration successful! Please check your email to confirm your account, then sign in."
-        );
-        setTimeout(() => {
-          router.push("/login");
-        }, 3000);
-      } else {
-        setSuccessMessage("Account created successfully! Redirecting to dashboard...");
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 1200);
-      }
+      // Explicitly sign out to guarantee the user is NOT automatically logged in
+      await supabase.auth.signOut();
+
+      setSuccessMessage("Account created successfully! Please sign in with your email and password.");
+      setTimeout(() => {
+        router.push("/login?registered=true");
+      }, 1500);
     } catch {
       setErrorMessage("An unexpected error occurred. Please try again.");
       setIsLoading(false);
@@ -138,55 +126,32 @@ export const RegisterForm: React.FC = () => {
       {errorMessage && <Alert type="error" message={errorMessage} />}
       {successMessage && <Alert type="success" message={successMessage} />}
 
-      {/* Fullname */}
-      <Input
-        id="register-fullname"
-        name="fullName"
-        type="text"
-        label="Full Name"
-        placeholder="Enter your full name"
-        value={formData.fullName}
-        onChange={handleChange}
-        leftIcon={<User size={15} />}
-        required
-      />
-
-      {/* Date of Birth & Gender in responsive grid */}
+      {/* Fullname & Phone Number in responsive grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <Input
-          id="register-dob"
-          name="dateOfBirth"
-          type="date"
-          label="Date of Birth"
-          value={formData.dateOfBirth}
+          id="register-fullname"
+          name="fullName"
+          type="text"
+          label="Full Name"
+          placeholder="Enter your full name"
+          value={formData.fullName}
           onChange={handleChange}
-          leftIcon={<Calendar size={15} />}
+          leftIcon={<User size={15} />}
           required
         />
 
-        <Select
-          id="register-gender"
-          name="gender"
-          label="Gender"
-          value={formData.gender}
+        <Input
+          id="register-phone"
+          name="phoneNumber"
+          type="tel"
+          label="Phone Number"
+          placeholder="09XXXXXXXXX"
+          value={formData.phoneNumber}
           onChange={handleChange}
-          options={genderOptions}
+          leftIcon={<Phone size={15} />}
           required
         />
       </div>
-
-      {/* Phone Number */}
-      <Input
-        id="register-phone"
-        name="phoneNumber"
-        type="tel"
-        label="Phone Number"
-        placeholder="09XXXXXXXXX"
-        value={formData.phoneNumber}
-        onChange={handleChange}
-        leftIcon={<Phone size={15} />}
-        required
-      />
 
       {/* Email Address */}
       <Input
@@ -209,7 +174,7 @@ export const RegisterForm: React.FC = () => {
           name="password"
           type={showPassword ? "text" : "password"}
           label="Password"
-          placeholder="Min. 6 chars"
+          placeholder="Min. 8 chars (A-z, 0-9, @#$)"
           value={formData.password}
           onChange={handleChange}
           leftIcon={<Lock size={15} />}
@@ -217,7 +182,7 @@ export const RegisterForm: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+              className="text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer"
               tabIndex={-1}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
@@ -241,7 +206,7 @@ export const RegisterForm: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+              className="text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer"
               tabIndex={-1}
               aria-label={showConfirmPassword ? "Hide password" : "Show password"}
             >
@@ -251,6 +216,37 @@ export const RegisterForm: React.FC = () => {
           required
           autoComplete="new-password"
         />
+      </div>
+
+      {/* Strict Password Requirement Helpers */}
+      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1.5 text-slate-600">
+        <p className="font-bold text-slate-700">Password Requirements:</p>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+          <span className={`flex items-center gap-1.5 ${hasMinLength ? "text-emerald-600 font-semibold" : "text-slate-400"}`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasMinLength ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+              {hasMinLength ? "✓" : "•"}
+            </span>
+            At least 8 characters
+          </span>
+          <span className={`flex items-center gap-1.5 ${hasUpperCase ? "text-emerald-600 font-semibold" : "text-slate-400"}`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasUpperCase ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+              {hasUpperCase ? "✓" : "•"}
+            </span>
+            Uppercase letter (A-Z)
+          </span>
+          <span className={`flex items-center gap-1.5 ${hasLowerCase ? "text-emerald-600 font-semibold" : "text-slate-400"}`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasLowerCase ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+              {hasLowerCase ? "✓" : "•"}
+            </span>
+            Lowercase letter (a-z)
+          </span>
+          <span className={`flex items-center gap-1.5 ${hasNumber && hasSpecialChar ? "text-emerald-600 font-semibold" : "text-slate-400"}`}>
+            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasNumber && hasSpecialChar ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+              {hasNumber && hasSpecialChar ? "✓" : "•"}
+            </span>
+            Number &amp; Symbol (@$!%*?#)
+          </span>
+        </div>
       </div>
 
       {/* Notice that Role is automatically Customer (Clean shadcn style) */}

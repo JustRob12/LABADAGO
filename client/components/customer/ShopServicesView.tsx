@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LaundryShop, ShopService } from "@/types/auth";
 import { formatTo12Hour } from "@/components/owner/ShopSetupForm";
+import { getShopServices } from "@/lib/supabase/auth";
 import {
   ArrowLeft,
   Heart,
@@ -21,6 +22,7 @@ import {
   X,
   Send,
   CheckCircle,
+  Loader2,
 } from "lucide-react";
 
 interface ShopServicesViewProps {
@@ -98,6 +100,34 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
   const [messageSent, setMessageSent] = useState(false);
   const [customMsg, setCustomMsg] = useState("");
 
+  // Live database services
+  const [dbServices, setDbServices] = useState<ShopService[]>(shop.services || []);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadShopServices() {
+      setIsLoadingServices(true);
+      try {
+        const live = await getShopServices(shop.id);
+        if (isMounted && live && live.length > 0) {
+          setDbServices(live);
+        }
+      } catch (err) {
+        console.error("Failed to load services for shop from database:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingServices(false);
+        }
+      }
+    }
+
+    loadShopServices();
+    return () => {
+      isMounted = false;
+    };
+  }, [shop.id]);
+
   const toggleFavorite = () => {
     setIsFavorited((prev) => {
       const next = !prev;
@@ -137,10 +167,11 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
       ? shop.images[0]
       : "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=1200&q=80";
 
-  // Build service display list
+  // Build service display list connected to database
+  const activeServiceList = dbServices.length > 0 ? dbServices : (shop.services || []);
   const servicesToDisplay =
-    shop.services && shop.services.length > 0
-      ? shop.services.map((s, idx) => {
+    activeServiceList.length > 0
+      ? activeServiceList.map((s) => {
           const type = s.service_name.toLowerCase().includes("iron")
             ? "iron"
             : s.service_name.toLowerCase().includes("dry only")
@@ -150,11 +181,12 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
             : s.service_name.toLowerCase().includes("shoe")
             ? "shoe"
             : "fold";
+          const kiloInfo = s.kilos ? `Up to ${s.kilos} kg allowance per load.` : "Quality wash and clean laundry service.";
           return {
             name: s.service_name,
-            desc: s.description || (s.kilos ? `Up to ${s.kilos} kg capacity allowance.` : "Quality wash and clean laundry service."),
+            desc: s.description || kiloInfo,
             price: `₱${s.price.toFixed(2)}`,
-            unit: `/ ${s.unit === "kg" || s.unit === "piece" ? "load" : s.unit || "load"}`,
+            unit: `/ load`,
             iconType: type as any,
           };
         })

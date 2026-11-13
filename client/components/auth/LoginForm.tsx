@@ -15,6 +15,7 @@ function LoginFormInner() {
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect");
   const messageParam = searchParams.get("message");
+  const isRegisteredParam = searchParams.get("registered") === "true";
 
   const [formData, setFormData] = useState({
     email: "",
@@ -76,7 +77,13 @@ function LoginFormInner() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-      {messageParam && !errorMessage && !successMessage && (
+      {isRegisteredParam && !errorMessage && !successMessage && (
+        <Alert
+          type="success"
+          message="Registration successful! Please enter your email and password to log in."
+        />
+      )}
+      {messageParam && !errorMessage && !successMessage && !isRegisteredParam && (
         <Alert type="info" message={messageParam} />
       )}
       {errorMessage && <Alert type="error" message={errorMessage} />}

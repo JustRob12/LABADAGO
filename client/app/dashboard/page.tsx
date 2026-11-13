@@ -3,10 +3,17 @@
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getCurrentUserProfile, getCachedUserProfile, switchUserRole } from "@/lib/supabase/auth";
-import { UserProfile, UserRole } from "@/types/auth";
+import {
+  getCurrentUserProfile,
+  getCachedUserProfile,
+  switchUserRole,
+  getLaundryShops,
+  getLaundryTransactions,
+} from "@/lib/supabase/auth";
+import { UserProfile, UserRole, LaundryShop, LaundryTransaction } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { UserProfileCard } from "@/components/dashboard/UserProfileCard";
+import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
 import { Button } from "@/components/ui/Button";
 import {
   MapPin,
@@ -20,6 +27,8 @@ import {
   User,
   Loader2,
   Sparkles,
+  Handshake,
+  ShieldCheck,
 } from "lucide-react";
 
 function DashboardContent() {
@@ -27,6 +36,8 @@ function DashboardContent() {
   const [user, setUser] = useState<UserProfile | null>(() =>
     typeof window !== "undefined" ? getCachedUserProfile() : null
   );
+  const [shops, setShops] = useState<LaundryShop[]>([]);
+  const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(() =>
     typeof window !== "undefined" ? !getCachedUserProfile() : true
   );
@@ -40,6 +51,14 @@ function DashboardContent() {
           return;
         }
         setUser(profile);
+
+        if (profile.role === UserRole.OWNER || profile.role === UserRole.ADMIN) {
+          const ownerShops = await getLaundryShops(profile.id);
+          setShops(ownerShops);
+          const shopIds = ownerShops.map((s) => s.id);
+          const txList = await getLaundryTransactions(undefined, undefined, shopIds);
+          setTransactions(txList);
+        }
       } catch (err) {
         console.error("Failed to load user profile:", err);
       } finally {
@@ -181,145 +200,129 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* Quick Access Action Modules Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {isStaff ? (
-                // Staff Modules (Scanning, Pickup Handover, Profile)
-                <>
-                  <Link href="/staff">
-                    <div className="bg-white rounded-xl border border-teal-200 p-5 shadow-2xs hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-teal-200 bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
-                        <ScanLine size={18} />
+            {isOwner ? (
+              /* Owner / Admin Analytics Dashboard View */
+              <div className="space-y-6">
+                <OwnerAnalyticsDashboard
+                  transactions={transactions}
+                  shop={shops[0] || null}
+                  shops={shops}
+                  user={user}
+                  onNavigateTab={(tab) => {
+                    router.push(`/owner?tab=${tab}`);
+                  }}
+                />
+              </div>
+            ) : (
+              /* Non-Owner Quick Access Action Modules Grid */
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {isStaff ? (
+                  // Staff Modules (Scanning, Pickup Handover, Profile)
+                  <>
+                    <Link href="/staff">
+                      <div className="bg-white rounded-xl border border-teal-200 p-5 shadow-2xs hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-teal-200 bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+                          <ScanLine size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-teal-600 transition-colors">
+                          Counter Scanner Station
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Automatic QR scanning to receive drop-offs, assign machines, and dispatch completed laundry.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-teal-600 transition-colors">
-                        Counter Scanner Station
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Automatic QR scanning to receive drop-offs, assign machines, and dispatch completed laundry.
-                      </p>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  <Link href="/staff">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                        <Package size={18} />
+                    <Link href="/staff">
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                          <Package size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                          Ready Pickups Queue
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Quick handover list for customers picking up clean laundry and settlement of payments.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        Ready Pickups Queue
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Quick handover list for customers picking up clean laundry and settlement of payments.
-                      </p>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  <Link href="/profile">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
-                        <User size={18} />
+                    <Link href="/profile">
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
+                          <User size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
+                          Staff Account Profile
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          View your branch assignment details, account information, and security settings.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
-                        Staff Account Profile
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        View your branch assignment details, account information, and security settings.
-                      </p>
-                    </div>
-                  </Link>
-                </>
-              ) : !isOwner ? (
-                // Customer Modules
-                <>
-                  <Link href="/customer">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                        <Store size={18} />
+                    </Link>
+                  </>
+                ) : (
+                  // Customer Modules
+                  <>
+                    <Link href="/customer">
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                          <Store size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                          Browse Nearby Laundry Shops
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Find top-rated laundry shops, explore services and pricing, and get turn-by-turn route navigation.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        Browse Nearby Laundry Shops
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Find top-rated laundry shops, explore services and pricing, and get turn-by-turn route navigation.
-                      </p>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  <Link href="/customer?tab=qr">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
-                        <QrCode size={18} />
+                    <Link href="/customer?tab=qr">
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                          <QrCode size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                          Walk-In Fast Pass (QR)
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Pre-fill services and generate a counter QR code for rapid contactless shop drop-off.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                        Walk-In Fast Pass (QR)
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Pre-fill services and generate a counter QR code for rapid contactless shop drop-off.
-                      </p>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  <Link href="/customer?tab=orders">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
-                        <Package size={18} />
+                    <Link href="/customer?tab=orders">
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
+                        <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
+                          <Package size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
+                          Live Order Tracker
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Track progress from wash to delivery and leave service ratings & feedback.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
-                        Live Order Tracker
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Track progress from wash to delivery and leave service ratings & feedback.
-                      </p>
-                    </div>
-                  </Link>
-                </>
-              ) : (
-                // Owner Modules
-                <>
-                  <Link href="/owner">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
-                        <BarChart3 size={18} />
-                      </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                        Business Analytics
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        View revenue trends, customer retention, service performance, and operational forecasts.
-                      </p>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  <Link href="/owner?tab=scanner">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                        <ScanLine size={18} />
+                    <Link href="/partner">
+                      <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-2xs hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer group bg-gradient-to-br from-white to-emerald-50/30">
+                        <div className="w-9 h-9 rounded-lg border border-emerald-300 bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3">
+                          <Handshake size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-emerald-900 group-hover:text-emerald-700 transition-colors">
+                          Partner with this website
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                          Own a laundry shop? Apply to partner with LabadaGO to receive contactless drop-offs and live queues.
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        QR Intake & Live Queue
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Verify customer walk-in QR passes, log counter weight, and send SMS status updates.
-                      </p>
-                    </div>
-                  </Link>
-
-                  <Link href="/owner?tab=setup">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group">
-                      <div className="w-9 h-9 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center mb-3">
-                        <Settings size={18} />
-                      </div>
-                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-900 transition-colors">
-                        Shop Setup & Location
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        Update map coordinates, machine capacity, operating hours, and service pricing catalog.
-                      </p>
-                    </div>
-                  </Link>
-                </>
-              )}
-            </div>
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Profile Information Card */}
             {user && <UserProfileCard user={user} />}

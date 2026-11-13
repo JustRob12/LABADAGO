@@ -21,10 +21,13 @@ import {
   Users,
   Lock,
   Store,
+  Handshake,
+  ShieldCheck,
 } from "lucide-react";
 
 interface DashboardNavProps {
   user?: UserProfile | null;
+  hasShops?: boolean;
   onLoggedOut?: () => void;
   onRoleSwitched?: (role: UserRole) => void;
 }
@@ -42,6 +45,7 @@ const DashboardNavFallback: React.FC<DashboardNavProps> = () => {
 
 const DashboardNavContent: React.FC<DashboardNavProps> = ({
   user,
+  hasShops = true,
   onLoggedOut,
   onRoleSwitched,
 }) => {
@@ -57,11 +61,12 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
   // Synchronously read cached profile to prevent initial render flicker
   const activeUser = user || (typeof window !== "undefined" ? getCachedUserProfile() : null);
 
-  const isStaff = activeUser?.role === UserRole.STAFF || (!activeUser && pathname?.startsWith("/staff"));
+  const isAdmin = activeUser?.role === UserRole.ADMIN || (!activeUser && pathname?.startsWith("/admin"));
+  const isStaff = !isAdmin && (activeUser?.role === UserRole.STAFF || (!activeUser && pathname?.startsWith("/staff")));
   const isOwner =
     !isStaff &&
-    ((activeUser?.role === UserRole.OWNER || activeUser?.role === UserRole.ADMIN) ||
-      (!activeUser && pathname?.startsWith("/owner")));
+    !isAdmin &&
+    (activeUser?.role === UserRole.OWNER || (!activeUser && pathname?.startsWith("/owner")));
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -123,7 +128,44 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
 
           {/* Desktop Navigation Links */}
           <nav className="hidden lg:flex items-center gap-1">
-            {isStaff ? (
+            {isAdmin ? (
+              // Admin Desktop Links
+              <>
+                <Link
+                  href="/admin"
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                    pathname === "/admin"
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-indigo-600" />
+                    Admin Approvals
+                  </span>
+                </Link>
+
+                <Link
+                  href="/owner"
+                  className="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Store size={14} className="text-emerald-600" />
+                    Owner Portal
+                  </span>
+                </Link>
+
+                <Link
+                  href="/customer"
+                  className="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Store size={14} className="text-blue-600" />
+                    Customer View
+                  </span>
+                </Link>
+              </>
+            ) : isStaff ? (
               // Staff Desktop Links (Scanner only)
               <>
                 <Link
@@ -157,47 +199,51 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             ) : isOwner ? (
               // Owner Desktop Links (Only for Owners/Admins)
               <>
-                <Link
-                  href="/owner"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    pathname === "/owner" && (!currentTab || currentTab === "analytics")
-                      ? "bg-emerald-50 text-emerald-700 font-semibold"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <BarChart3 size={14} className="text-emerald-600" />
-                    Business Analytics
-                  </span>
-                </Link>
+                {hasShops && (
+                  <>
+                    <Link
+                      href="/owner"
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        pathname === "/owner" && (!currentTab || currentTab === "analytics")
+                          ? "bg-emerald-50 text-emerald-700 font-semibold"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <BarChart3 size={14} className="text-emerald-600" />
+                        Business Analytics
+                      </span>
+                    </Link>
 
-                <Link
-                  href="/owner?tab=scanner"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    pathname === "/owner" && currentTab === "scanner"
-                      ? "bg-emerald-50 text-emerald-700 font-semibold"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ScanLine size={14} className="text-blue-600" />
-                    QR Intake & Orders
-                  </span>
-                </Link>
+                    <Link
+                      href="/owner?tab=scanner"
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        pathname === "/owner" && currentTab === "scanner"
+                          ? "bg-emerald-50 text-emerald-700 font-semibold"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <ScanLine size={14} className="text-blue-600" />
+                        QR Intake & Orders
+                      </span>
+                    </Link>
 
-                <Link
-                  href="/owner?tab=staff"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    pathname === "/owner" && currentTab === "staff"
-                      ? "bg-teal-50 text-teal-700 font-semibold border border-teal-200"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Users size={14} className="text-teal-600" />
-                    Branch Staff
-                  </span>
-                </Link>
+                    <Link
+                      href="/owner?tab=staff"
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        pathname === "/owner" && currentTab === "staff"
+                          ? "bg-teal-50 text-teal-700 font-semibold border border-teal-200"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Users size={14} className="text-teal-600" />
+                        Branch Staff
+                      </span>
+                    </Link>
+                  </>
+                )}
 
                 <Link
                   href="/owner?tab=setup"
@@ -230,7 +276,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                 <Link
                   href="/customer"
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    pathname === "/customer" && !currentTab
+                    pathname === "/customer" && (!currentTab || currentTab === "home")
                       ? "bg-blue-50 text-blue-700 font-semibold"
                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   }`}
@@ -238,6 +284,20 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                   <span className="flex items-center gap-1.5">
                     <Store size={14} className="text-blue-600" />
                     Home &amp; Shops
+                  </span>
+                </Link>
+
+                <Link
+                  href="/customer?tab=map"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    pathname === "/customer" && currentTab === "map"
+                      ? "bg-blue-50 text-blue-700 font-semibold"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={14} className="text-blue-600" />
+                    Map
                   </span>
                 </Link>
 
@@ -283,6 +343,20 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                     </Link>
                   </>
                 )}
+
+                <Link
+                  href="/partner"
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                    pathname === "/partner"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50/60"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Handshake size={14} className="text-emerald-600" />
+                    Partner with this website
+                  </span>
+                </Link>
               </>
             )}
           </nav>
@@ -337,14 +411,16 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                     <div className="mt-1.5">
                       <span
                         className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                          isStaff
+                          isAdmin
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                            : isStaff
                             ? "bg-teal-50 text-teal-700 border-teal-200"
                             : isOwner
                             ? "bg-amber-50 text-amber-700 border-amber-200"
                             : "bg-blue-50 text-blue-700 border-blue-200"
                         }`}
                       >
-                        Active: {isStaff ? "Branch Staff" : isOwner ? "Laundry Shop Owner" : "Customer"}
+                        Active: {isAdmin ? "Platform Admin" : isStaff ? "Branch Staff" : isOwner ? "Laundry Shop Owner" : "Customer"}
                       </span>
                       {isStaff && activeUser?.assigned_shop_name && (
                         <p className="text-[10px] text-teal-700 font-semibold mt-1 truncate">
@@ -356,7 +432,34 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
 
                   {/* Navigation Items */}
                   <div className="py-1">
-                    {isStaff ? (
+                    {isAdmin ? (
+                      <>
+                        <Link
+                          href="/admin"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3.5 py-2 text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100/60 transition-colors font-bold"
+                        >
+                          <ShieldCheck size={14} className="text-indigo-600" />
+                          <span>Admin Approvals Portal</span>
+                        </Link>
+                        <Link
+                          href="/owner"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          <Store size={14} className="text-emerald-600" />
+                          <span>Owner Portal</span>
+                        </Link>
+                        <Link
+                          href="/customer"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 transition-colors font-medium"
+                        >
+                          <Store size={14} className="text-blue-600" />
+                          <span>Customer View</span>
+                        </Link>
+                      </>
+                    ) : isStaff ? (
                       <Link
                         href="/staff"
                         onClick={() => setDropdownOpen(false)}
@@ -367,30 +470,34 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                       </Link>
                     ) : isOwner ? (
                       <>
-                        <Link
-                          href="/owner"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
-                        >
-                          <BarChart3 size={14} className="text-emerald-600" />
-                          <span>Business Analytics</span>
-                        </Link>
-                        <Link
-                          href="/owner?tab=scanner"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
-                        >
-                          <ScanLine size={14} className="text-blue-600" />
-                          <span>QR Intake & Orders</span>
-                        </Link>
-                        <Link
-                          href="/owner?tab=staff"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
-                        >
-                          <Users size={14} className="text-teal-600" />
-                          <span>Branch Staff</span>
-                        </Link>
+                        {hasShops && (
+                          <>
+                            <Link
+                              href="/owner"
+                              onClick={() => setDropdownOpen(false)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+                            >
+                              <BarChart3 size={14} className="text-emerald-600" />
+                              <span>Business Analytics</span>
+                            </Link>
+                            <Link
+                              href="/owner?tab=scanner"
+                              onClick={() => setDropdownOpen(false)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+                            >
+                              <ScanLine size={14} className="text-blue-600" />
+                              <span>QR Intake & Orders</span>
+                            </Link>
+                            <Link
+                              href="/owner?tab=staff"
+                              onClick={() => setDropdownOpen(false)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+                            >
+                              <Users size={14} className="text-teal-600" />
+                              <span>Branch Staff</span>
+                            </Link>
+                          </>
+                        )}
                         <Link
                           href="/owner?tab=setup"
                           onClick={() => setDropdownOpen(false)}
@@ -409,6 +516,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                         >
                           <Store size={14} className="text-blue-600" />
                           <span>Customer Home &amp; Shops</span>
+                        </Link>
+                        <Link
+                          href="/customer?tab=map"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+                        >
+                          <MapPin size={14} className="text-blue-600" />
+                          <span>Laundry Map</span>
                         </Link>
                         <Link
                           href="/customer?tab=qr"
@@ -439,28 +554,42 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                     </Link>
                   </div>
 
-                  {/* Role Switcher Action (Locked for staff) */}
+                  {/* Role / Partner Action (Locked for staff) */}
                   {!isStaff && (
                     <div className="border-t border-slate-100 py-1">
-                      <button
-                        type="button"
-                        disabled={isSwitchingRole}
-                        onClick={handleToggleRole}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer transition-colors"
-                      >
-                        {isSwitchingRole ? (
-                          <Loader2
-                            size={14}
-                            className={`animate-spin ${isOwner ? "text-blue-600" : "text-emerald-600"}`}
-                          />
-                        ) : (
-                          <ArrowRightLeft
-                            size={14}
-                            className={isOwner ? "text-blue-600" : "text-emerald-600"}
-                          />
-                        )}
-                        <span>{isOwner ? "Switch to Customer" : "Switch to Owner"}</span>
-                      </button>
+                      {isOwner ? (
+                        <button
+                          type="button"
+                          disabled={isSwitchingRole}
+                          onClick={handleToggleRole}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer transition-colors"
+                        >
+                          {isSwitchingRole ? (
+                            <Loader2 size={14} className="animate-spin text-blue-600" />
+                          ) : (
+                            <ArrowRightLeft size={14} className="text-blue-600" />
+                          )}
+                          <span>Switch to Customer</span>
+                        </button>
+                      ) : isAdmin ? (
+                        <Link
+                          href="/admin"
+                          onClick={() => setDropdownOpen(false)}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left font-bold text-indigo-700 hover:bg-indigo-50 cursor-pointer transition-colors"
+                        >
+                          <ShieldCheck size={14} className="text-indigo-600" />
+                          <span>Admin Approvals Portal</span>
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/partner"
+                          onClick={() => setDropdownOpen(false)}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer transition-colors"
+                        >
+                          <Handshake size={15} className="text-emerald-600" />
+                          <span>Partner with this website</span>
+                        </Link>
+                      )}
                     </div>
                   )}
 
@@ -537,41 +666,45 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         ) : isOwner ? (
           // Owner Mobile Floating Nav
           <>
-            <Link
-              href="/owner"
-              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
-                pathname === "/owner" && (!currentTab || currentTab === "analytics")
-                  ? "text-emerald-600 font-bold bg-emerald-50"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <BarChart3 size={18} />
-              <span>Analytics</span>
-            </Link>
+            {hasShops ? (
+              <>
+                <Link
+                  href="/owner"
+                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+                    pathname === "/owner" && (!currentTab || currentTab === "analytics")
+                      ? "text-emerald-600 font-bold bg-emerald-50"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <BarChart3 size={18} />
+                  <span>Analytics</span>
+                </Link>
 
-            <Link
-              href="/owner?tab=scanner"
-              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
-                pathname === "/owner" && currentTab === "scanner"
-                  ? "text-blue-600 font-bold bg-blue-50"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <ScanLine size={18} />
-              <span>QR Intake</span>
-            </Link>
+                <Link
+                  href="/owner?tab=scanner"
+                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+                    pathname === "/owner" && currentTab === "scanner"
+                      ? "text-blue-600 font-bold bg-blue-50"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <ScanLine size={18} />
+                  <span>QR Intake</span>
+                </Link>
 
-            <Link
-              href="/owner?tab=staff"
-              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
-                pathname === "/owner" && currentTab === "staff"
-                  ? "text-teal-700 font-bold bg-teal-50"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <Users size={18} />
-              <span>Staff</span>
-            </Link>
+                <Link
+                  href="/owner?tab=staff"
+                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+                    pathname === "/owner" && currentTab === "staff"
+                      ? "text-teal-700 font-bold bg-teal-50"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <Users size={18} />
+                  <span>Staff</span>
+                </Link>
+              </>
+            ) : null}
 
             <Link
               href="/owner?tab=setup"
@@ -602,7 +735,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           <>
             <Link
               href="/customer"
-              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl transition-colors ${
                 pathname === "/customer" && (!currentTab || currentTab === "home")
                   ? "text-blue-600 font-bold bg-blue-50"
                   : "text-slate-500 hover:text-slate-900"
@@ -613,8 +746,20 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             </Link>
 
             <Link
+              href="/customer?tab=map"
+              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && currentTab === "map"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <MapPin size={18} />
+              <span>Map</span>
+            </Link>
+
+            <Link
               href="/customer?tab=qr"
-              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl transition-colors ${
                 pathname === "/customer" && currentTab === "qr"
                   ? "text-emerald-600 font-bold bg-emerald-50"
                   : "text-slate-500 hover:text-slate-900"
@@ -628,7 +773,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
               <>
                 <Link
                   href="/customer?tab=orders"
-                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl transition-colors ${
                     pathname === "/customer" && currentTab === "orders"
                       ? "text-blue-600 font-bold bg-blue-50"
                       : "text-slate-500 hover:text-slate-900"
@@ -640,7 +785,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
 
                 <Link
                   href="/dashboard"
-                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
+                  className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl transition-colors ${
                     pathname === "/dashboard"
                       ? "text-blue-600 font-bold bg-blue-50"
                       : "text-slate-500 hover:text-slate-900"
@@ -654,7 +799,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
               <>
                 <Link
                   href="/login"
-                  className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl text-slate-600 hover:text-slate-900"
+                  className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1 sm:px-2 rounded-xl text-slate-600 hover:text-slate-900"
                 >
                   <UserIcon size={18} />
                   <span>Sign In</span>
@@ -662,7 +807,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
 
                 <Link
                   href="/register"
-                  className="flex flex-col items-center gap-1 text-[10px] font-bold py-1 px-1.5 sm:px-3 rounded-xl text-emerald-600 hover:text-emerald-700"
+                  className="flex flex-col items-center gap-1 text-[10px] font-bold py-1 px-1 sm:px-2 rounded-xl text-emerald-600 hover:text-emerald-700"
                 >
                   <UserIcon size={18} />
                   <span>Register</span>

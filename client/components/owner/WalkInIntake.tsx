@@ -1,8 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PaymentStatus, LaundryTransaction, OrderStatus, WalkInQRPayload, LaundryShop } from "@/types/auth";
-import { updateTransactionStatus, updateTransactionPayment, getTransactionByTrackingNumber, uploadPaymentProof } from "@/lib/supabase/auth";
+import { PaymentStatus, LaundryTransaction, OrderStatus, WalkInQRPayload, LaundryShop, UserRole } from "@/types/auth";
+import {
+  updateTransactionStatus,
+  updateTransactionPayment,
+  getTransactionByTrackingNumber,
+  uploadPaymentProof,
+  createManualWalkInTransaction,
+} from "@/lib/supabase/auth";
 import { PaymentInputSection } from "@/components/payment/PaymentInputSection";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -32,9 +38,13 @@ import {
   Receipt,
   Smartphone,
   Loader2,
+  FileText,
+  PlusCircle,
+  UserCheck,
 } from "lucide-react";
 import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
+import { CustomerCheckInView } from "@/components/staff/CustomerCheckInView";
 
 interface WalkInIntakeProps {
   shops?: LaundryShop[];
@@ -100,11 +110,117 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   const activeOperatingShop =
     shops?.find((s) => s.id === activeBranchId) || currentShop || (shops && shops[0]);
 
-
-  const incomingWalkIns = transactions.filter((t) => t.is_walkin && t.status === "Pending");
+  // Filter out unscanned pending walk-in passes from the owner's intake queue & total order count
   const scannedTransactions = transactions.filter((t) => t.status !== "Pending");
-  const allWalkIns = transactions.filter((t) => t.is_walkin);
-  const displayedWalkIns = walkInFilter === "pending" ? incomingWalkIns : allWalkIns;
+
+
+  // Intake Mode State (Full Customer Check-In, Scan Fast Pass QR, or Quick Manual)
+  const [entryMode, setEntryMode] = useState<"checkin" | "scan" | "manual">("checkin");
+  const [manualCustomerName, setManualCustomerName] = useState("");
+  const [manualCustomerPhone, setManualCustomerPhone] = useState("");
+  const [manualService, setManualService] = useState("Wash, Dry & Fold");
+  const [manualLoads, setManualLoads] = useState("1");
+  const [manualMachineNumber, setManualMachineNumber] = useState("");
+  const [manualSpecialNotes, setManualSpecialNotes] = useState("");
+  const [manualPaymentTiming, setManualPaymentTiming] = useState<"pay_first" | "pay_on_complete">("pay_on_complete");
+  const [manualPaymentMethod, setManualPaymentMethod] = useState<"Cash" | "GCash">("Cash");
+  const [manualReferenceNo, setManualReferenceNo] = useState("");
+  const [manualFile, setManualFile] = useState<File | null>(null);
+  const [manualPreviewUrl, setManualPreviewUrl] = useState<string | null>(null);
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+
+  // Available services list for current counter shop
+  const activeServices = activeOperatingShop?.services && activeOperatingShop.services.length > 0
+    ? activeOperatingShop.services
+    : [
+        { id: "s-1", service_name: "Wash, Dry & Fold", price: 200, unit: "load", kilos: 8 },
+        { id: "s-2", service_name: "Wash & Dry", price: 160, unit: "load", kilos: 8 },
+        { id: "s-3", service_name: "Wash Only", price: 70, unit: "load", kilos: 8 },
+        { id: "s-4", service_name: "Dry Only", price: 70, unit: "load", kilos: 8 },
+        { id: "s-5", service_name: "Blanket & Comforter", price: 180, unit: "load", kilos: 8 },
+      ];
+
+  const currentManualServiceObj = activeServices.find((s) => s.service_name === manualService) || activeServices[0];
+  const manualLoadsNum = Math.max(1, parseInt(manualLoads) || 1);
+  const manualRatePerLoad = currentManualServiceObj?.price || 200;
+  const manualTotalAmount = manualLoadsNum * manualRatePerLoad;
+  const manualCapacityKg = manualLoadsNum * (currentManualServiceObj?.kilos || 8);
+
+  const handleManualIntakeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualCustomerName.trim()) {
+      alert("Please enter customer name.");
+      return;
+    }
+    if (!manualCustomerPhone.trim()) {
+      alert("Please enter customer phone number.");
+      return;
+    }
+    if (!activeOperatingShop) {
+      alert("Please select an operating shop counter.");
+      return;
+    }
+
+    setIsSubmittingManual(true);
+    try {
+      const isPayFirst = manualPaymentTiming === "pay_first";
+      let uploadedProofUrl: string | undefined = undefined;
+      if (isPayFirst && manualPaymentMethod === "GCash" && manualFile) {
+        uploadedProofUrl = await uploadPaymentProof(
+          manualFile,
+          `manual-${Date.now()}`
+        );
+      }
+
+      const res = await createManualWalkInTransaction({
+        customer_name: manualCustomerName.trim(),
+        customer_phone: manualCustomerPhone.trim(),
+        shop_id: activeOperatingShop.id,
+        shop_name: activeOperatingShop.name,
+        service_name: manualService,
+        weight_kg: manualCapacityKg,
+        total_amount: manualTotalAmount,
+        payment_status: isPayFirst ? "Paid" : "Unpaid",
+        payment_method: isPayFirst ? manualPaymentMethod : undefined,
+        payment_proof_url: uploadedProofUrl,
+        payment_reference_no: isPayFirst ? manualReferenceNo.trim() || undefined : undefined,
+        machine_number: manualMachineNumber.trim() || undefined,
+        special_notes: manualSpecialNotes.trim() || undefined,
+      });
+
+      if (res.success) {
+        setIntakeSuccess(
+          `Manual Walk-In recorded! Tracking #${res.transaction.tracking_number} for ${res.transaction.customer_name} is now PROCESSING (${manualLoadsNum} ${manualLoadsNum === 1 ? "load" : "loads"}, ₱${manualTotalAmount.toFixed(2)}).`
+        );
+        setSmsNotification(
+          `SMS sent to ${res.transaction.customer_phone}: "LabadaGo: Your laundry order (${res.transaction.tracking_number}) has been registered and is now PROCESSING at ${activeOperatingShop.name}!"`
+        );
+
+        // Reset manual form
+        setManualCustomerName("");
+        setManualCustomerPhone("");
+        setManualMachineNumber("");
+        setManualSpecialNotes("");
+        setManualLoads("1");
+        setManualPaymentTiming("pay_on_complete");
+        setManualPaymentMethod("Cash");
+        setManualReferenceNo("");
+        setManualFile(null);
+        if (manualPreviewUrl) URL.revokeObjectURL(manualPreviewUrl);
+        setManualPreviewUrl(null);
+        setEntryMode("scan"); // Switch to live orders view
+
+        onTransactionsUpdated();
+      } else {
+        alert("Failed to save manual intake. Please try again.");
+      }
+    } catch (err) {
+      console.error("Manual intake error:", err);
+      alert("Error saving manual walk-in entry.");
+    } finally {
+      setIsSubmittingManual(false);
+    }
+  };
 
   const weightNum = parseFloat(actualWeight);
   const validWeight = isNaN(weightNum) || weightNum <= 0 ? (scannedTx?.weight_kg || 1) : weightNum;
@@ -175,13 +291,13 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
     // 4. Order belongs to this shop - proceed with intake
     if (matchedTx) {
       if (matchedTx.status === "Pending") {
-        await updateTransactionStatus(matchedTx.id, "Received");
-        matchedTx.status = "Received";
+        await updateTransactionStatus(matchedTx.id, "Washing");
+        matchedTx.status = "Washing";
         setIntakeSuccess(
-          `QR Scanned! Clothes for ${matchedTx.customer_name} (${matchedTx.tracking_number}) are now marked as RECEIVED.`
+          `QR Scanned! Clothes for ${matchedTx.customer_name} (${matchedTx.tracking_number}) verified and tagged as PROCESSING.`
         );
         setSmsNotification(
-          `SMS sent to ${matchedTx.customer_phone}: "LabadaGo: Your laundry (${matchedTx.tracking_number}) has been SCANNED and RECEIVED at the counter!"`
+          `SMS sent to ${matchedTx.customer_phone}: "LabadaGo: Your laundry (${matchedTx.tracking_number}) has been SCANNED and is now PROCESSING at the counter!"`
         );
         onTransactionsUpdated();
       } else {
@@ -399,133 +515,19 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       {intakeSuccess && <Alert type="success" message={intakeSuccess} />}
       {smsNotification && <Alert type="info" message={smsNotification} />}
 
-      {/* Incoming Walk-In Fast Passes Section */}
+      {/* Counter Walk-In QR Scanner & Manual Intake Tool */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
-              <QrCode size={18} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                Incoming Walk-In Fast Passes
-                {incomingWalkIns.length > 0 && (
-                  <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full animate-pulse">
-                    {incomingWalkIns.length} Awaiting Intake
-                  </span>
-                )}
-              </h3>
-              <p className="text-xs text-slate-500">
-                Customers who generated a QR pass for counter drop-off. Tap &quot;Quick Intake &amp; Weigh&quot; to intake with 1 click.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-lg">
-            <button
-              type="button"
-              onClick={() => setWalkInFilter("pending")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-all ${
-                walkInFilter === "pending"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Awaiting Scan ({incomingWalkIns.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setWalkInFilter("all")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-all ${
-                walkInFilter === "all"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              All Walk-Ins ({allWalkIns.length})
-            </button>
-          </div>
-        </div>
-
-        {displayedWalkIns.length === 0 ? (
-          <div className="py-6 text-center text-slate-400 text-xs">
-            {walkInFilter === "pending"
-              ? "No pending walk-in passes awaiting counter scan right now."
-              : "No walk-in fast passes have been generated yet."}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {displayedWalkIns.map((tx) => (
-              <div
-                key={tx.id}
-                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-blue-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {tx.tracking_number}
-                    </span>
-                    {tx.status === "Pending" ? (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        Awaiting Scan
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                        {tx.status}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="font-bold text-slate-900 text-xs">{tx.customer_name}</p>
-                    <p className="text-[11px] text-slate-500">{tx.customer_phone}</p>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
-                    <span className="text-slate-600 font-medium truncate max-w-[140px]">
-                      {tx.service_name}
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"} • ₱{tx.total_amount.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200/60">
-                  <Button
-                    type="button"
-                    variant={tx.status === "Pending" ? "primary" : "outline"}
-                    size="sm"
-                    className="w-full text-xs font-semibold"
-                    leftIcon={tx.status === "Pending" ? <ScanLine size={13} /> : <CheckCircle2 size={13} />}
-                    onClick={() => {
-                      processCodeOrPayload(tx.tracking_number);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                  >
-                    {tx.status === "Pending" ? "Quick Intake & Weigh" : "View / Edit Order"}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Counter QR Scanner / Code Entry Tool */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <ScanLine size={18} />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Counter Walk-In QR Scanner & Verification
+                Counter Walk-In Intake &amp; Verification
               </h3>
               <p className="text-xs text-slate-500">
-                Scan customer&apos;s phone QR pass directly with camera or enter tracking code
+                Scan customer&apos;s phone QR pass or manually register a walk-in customer
               </p>
             </div>
           </div>
@@ -554,60 +556,328 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 <span>Counter: {activeOperatingShop.name}</span>
               </div>
             )}
-            <Button
-              type="button"
-              variant={isCameraActive ? "outline" : "primary"}
-              size="sm"
-              leftIcon={<Camera size={15} />}
-              onClick={() => setIsCameraActive((prev) => !prev)}
-              className="shadow-sm font-medium"
-            >
-              {isCameraActive ? "Close Camera" : "Scan with Camera"}
-            </Button>
           </div>
         </div>
 
-        {/* Live Camera QR Viewfinder */}
-        {isCameraActive && (
-          <div className="mt-4">
-            <QRCameraScanner
-              onScanSuccess={(decodedText) => {
-                setIsCameraActive(false);
-                processCodeOrPayload(decodedText);
+        {/* Entry Mode Switcher Tabs */}
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl w-fit flex-wrap">
+          <button
+            type="button"
+            onClick={() => setEntryMode("checkin")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              entryMode === "checkin"
+                ? "bg-blue-600 text-white shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <UserCheck size={14} />
+            <span>Customer Check-In</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEntryMode("scan")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              entryMode === "scan"
+                ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <ScanLine size={14} />
+            <span>Scan Customer QR</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEntryMode("manual")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              entryMode === "manual"
+                ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <FileText size={14} />
+            <span>Quick Manual Entry</span>
+          </button>
+        </div>
+
+        {/* MODE 0: FULL CUSTOMER CHECK-IN (Matches Screenshot UI) */}
+        {entryMode === "checkin" && (
+          <div className="pt-2">
+            <CustomerCheckInView
+              staffUser={{
+                id: activeOperatingShop?.owner_id || "owner-counter",
+                full_name: "Shop Counter Staff",
+                email: "",
+                phone_number: "",
+                date_of_birth: "",
+                gender: "Prefer not to say",
+                role: UserRole.OWNER,
+                created_at: "",
               }}
-              onClose={() => setIsCameraActive(false)}
-              incomingPasses={incomingWalkIns.map((t) => ({
-                tracking_number: t.tracking_number,
-                customer_name: t.customer_name,
-              }))}
+              assignedShop={activeOperatingShop || currentShop || null}
+              onTransactionCreated={(tx) => {
+                onTransactionsUpdated();
+                setIntakeSuccess(
+                  `Transaction #${tx.tracking_number} created for ${tx.customer_name}! Status is now Processing.`
+                );
+              }}
+              todayTransactionsCount={scannedTransactions.length}
             />
           </div>
         )}
 
-        <form onSubmit={handleLookup} className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="flex-1">
+        {/* MODE 1: QR SCANNER */}
+        {entryMode === "scan" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                Scan customer&apos;s QR code with device camera or enter their tracking number.
+              </p>
+              <Button
+                type="button"
+                variant={isCameraActive ? "outline" : "primary"}
+                size="sm"
+                leftIcon={<Camera size={15} />}
+                onClick={() => setIsCameraActive((prev) => !prev)}
+                className="shadow-sm font-medium"
+              >
+                {isCameraActive ? "Close Camera" : "Scan with Camera"}
+              </Button>
+            </div>
+
+            {/* Live Camera QR Viewfinder */}
+            {isCameraActive && (
+              <div className="mt-2">
+                <QRCameraScanner
+                  onScanSuccess={(decodedText) => {
+                    setIsCameraActive(false);
+                    processCodeOrPayload(decodedText);
+                  }}
+                  onClose={() => setIsCameraActive(false)}
+                  incomingPasses={transactions.map((t) => ({
+                    tracking_number: t.tracking_number,
+                    customer_name: t.customer_name,
+                  }))}
+                />
+              </div>
+            )}
+
+            <form onSubmit={handleLookup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex-1">
+                <Input
+                  placeholder="Scan with camera or enter Tracking Number (e.g. LBD-96532)"
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  leftIcon={<Search size={15} />}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={isCameraActive ? "ghost" : "outline"}
+                  size="md"
+                  leftIcon={<Camera size={15} />}
+                  onClick={() => setIsCameraActive((prev) => !prev)}
+                >
+                  {isCameraActive ? "Hide Camera" : "Camera"}
+                </Button>
+                <Button type="submit" variant="primary" size="md" leftIcon={<ScanLine size={15} />}>
+                  Verify Code
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* MODE 2: MANUAL WALK-IN ENTRY FORM */}
+        {entryMode === "manual" && (
+          <form onSubmit={handleManualIntakeSubmit} className="space-y-4 animate-fadeIn">
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+              💡 <strong>Direct Counter Intake:</strong> Register walk-in customers who don&apos;t have a phone QR code. Orders immediately start as <strong>Processing</strong> in the queue.
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <Input
+                label="Customer Full Name *"
+                placeholder="e.g. Maria Santos"
+                value={manualCustomerName}
+                onChange={(e) => setManualCustomerName(e.target.value)}
+                leftIcon={<User size={15} />}
+                required
+              />
+              <Input
+                type="tel"
+                label="Customer Phone Number *"
+                placeholder="09XXXXXXXXX"
+                value={manualCustomerPhone}
+                onChange={(e) => setManualCustomerPhone(e.target.value)}
+                leftIcon={<Phone size={15} />}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                  Laundry Service *
+                </label>
+                <select
+                  value={manualService}
+                  onChange={(e) => setManualService(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                >
+                  {activeServices.map((srv) => (
+                    <option key={srv.id || srv.service_name} value={srv.service_name}>
+                      {srv.service_name} — ₱{srv.price}/load ({srv.kilos || 8}kg load)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                  Number of Loads *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={manualLoads}
+                    onChange={(e) => setManualLoads(e.target.value)}
+                    className="w-24 h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                  <span className="text-xs text-slate-500 font-medium">
+                    load(s) • Total: <strong className="text-slate-900 text-sm">₱{manualTotalAmount.toFixed(2)}</strong> ({manualCapacityKg} kg allowance)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Machine Assignment */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <Shirt size={14} className="text-blue-600" />
+                Machine Number (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Washer 1, Dryer 2"
+                  value={manualMachineNumber}
+                  onChange={(e) => setManualMachineNumber(e.target.value)}
+                  className="w-48 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium focus:border-blue-500 focus:outline-none"
+                />
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                  {["Washer 1", "Washer 2", "Washer 3", "Dryer 1", "Dryer 2"].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setManualMachineNumber(p)}
+                      className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
+                        manualMachineNumber === p
+                          ? "bg-blue-100 text-blue-800 border-blue-300 font-bold"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Timing Selection */}
+            <div className="space-y-2 pt-1 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <CreditCard size={14} className="text-blue-600" />
+                Payment Arrangement *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setManualPaymentTiming("pay_first")}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    manualPaymentTiming === "pay_first"
+                      ? "border-emerald-500 bg-emerald-50/80 ring-1 ring-emerald-500 shadow-xs"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                      1. Paid Now (Drop-Off)
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800">₱{manualTotalAmount.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">Customer is paying immediately at counter.</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setManualPaymentTiming("pay_on_complete")}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    manualPaymentTiming === "pay_on_complete"
+                      ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-500 shadow-xs"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Clock size={14} className="text-amber-600" />
+                      2. Pay on Pickup (Unpaid)
+                    </span>
+                    <span className="text-xs font-bold text-amber-800">₱{manualTotalAmount.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">Collect payment when clothes are claimed.</p>
+                </button>
+              </div>
+            </div>
+
+            {manualPaymentTiming === "pay_first" && (
+              <PaymentInputSection
+                theme="light"
+                method={manualPaymentMethod}
+                onMethodChange={setManualPaymentMethod}
+                referenceNo={manualReferenceNo}
+                onReferenceNoChange={setManualReferenceNo}
+                selectedFile={manualFile}
+                previewUrl={manualPreviewUrl}
+                onFileSelect={(file) => {
+                  setManualFile(file);
+                  setManualPreviewUrl(URL.createObjectURL(file));
+                }}
+                onFileClear={() => {
+                  setManualFile(null);
+                  if (manualPreviewUrl) URL.revokeObjectURL(manualPreviewUrl);
+                  setManualPreviewUrl(null);
+                }}
+                amount={manualTotalAmount}
+              />
+            )}
+
             <Input
-              placeholder="Scan with camera or enter Tracking Number (e.g. LBD-96532)"
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              leftIcon={<Search size={15} />}
+              type="text"
+              label="Special Instructions / Care (Optional)"
+              placeholder="e.g. Separate delicate whites, hypoallergenic detergent"
+              value={manualSpecialNotes}
+              onChange={(e) => setManualSpecialNotes(e.target.value)}
             />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant={isCameraActive ? "ghost" : "outline"}
-              size="md"
-              leftIcon={<Camera size={15} />}
-              onClick={() => setIsCameraActive((prev) => !prev)}
-            >
-              {isCameraActive ? "Hide Camera" : "Scan with Camera"}
-            </Button>
-            <Button type="submit" variant="primary" size="md" leftIcon={<ScanLine size={15} />}>
-              Verify Code
-            </Button>
-          </div>
-        </form>
+
+            <div className="pt-2 flex justify-end">
+              <Button
+                type="submit"
+                variant="success"
+                size="md"
+                leftIcon={<PlusCircle size={15} />}
+                isLoading={isSubmittingManual}
+              >
+                Register &amp; Start Processing
+              </Button>
+            </div>
+          </form>
+        )}
 
         {/* Scanned Verification Card */}
         {scannedTx && (
@@ -891,7 +1161,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
               {scannedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
-                    No active scanned orders yet. Incoming walk-in passes appear in the queue above until scanned.
+                    No active processed orders yet. Scan customer QR passes or enter walk-in details above to populate the queue.
                   </td>
                 </tr>
               ) : (

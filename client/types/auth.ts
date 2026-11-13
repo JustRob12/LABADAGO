@@ -53,6 +53,7 @@ export interface UserProfile {
 
 export interface BranchStaffMember {
   id: string;
+  staff_id_code?: string;
   shop_id: string;
   shop_name?: string;
   user_id: string;
@@ -60,6 +61,8 @@ export interface BranchStaffMember {
   email: string | null;
   phone_number: string;
   role_title?: string;
+  status?: "Active" | "Inactive" | "On Leave";
+  avatar_color?: string;
   assigned_by?: string;
   created_at: string;
 }
@@ -215,4 +218,36 @@ export interface AnalyticsSummary {
     peakHour: string;
     confidenceLevel: string;
   };
+}
+
+// -----------------------------------------------------------------------------
+// Partner Application Types
+// -----------------------------------------------------------------------------
+
+export type PartnerApplicationStatus = "pending" | "approved" | "rejected";
+
+export interface PartnerApplication {
+  id: string;
+  applicant_id: string;
+  applicant_name: string;
+  applicant_email: string;
+  applicant_phone: string;
+  shop_name: string;
+  shop_description?: string;
+  shop_address: string;
+  latitude: number;
+  longitude: number;
+  phone_number: string;
+  open_time: string;
+  close_time: string;
+  washer_count: number;
+  dryer_count: number;
+  max_kilo_per_load?: number;
+  images: string[];
+  services: ShopService[];
+  status: PartnerApplicationStatus;
+  admin_notes?: string;
+  created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
 }

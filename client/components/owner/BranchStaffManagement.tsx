@@ -1,40 +1,83 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import Link from "next/link";
-import { LaundryShop, BranchStaffMember, UserRole } from "@/types/auth";
+import React, { useState, useEffect, useMemo } from "react";
+import { LaundryShop, BranchStaffMember } from "@/types/auth";
 import {
-  searchMembers,
-  assignStaffToBranch,
-  removeStaffFromBranch,
   getBranchStaff,
-  MemberSearchResult,
+  registerStaffMember,
+  updateStaffMember,
+  deleteStaffMember,
 } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/Button";
-import { RoleBadge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
+import { Alert } from "@/components/ui/Alert";
 import {
   Users,
-  UserPlus,
   UserCheck,
+  Clock,
+  Shield,
+  Plus,
   Search,
-  Store,
+  Download,
+  Eye,
+  Pencil,
   Trash2,
+  Calendar,
+  Bell,
+  User,
+  Lock,
+  Key,
+  Phone,
+  Mail,
+  X,
+  Check,
+  Store,
   AlertTriangle,
   CheckCircle2,
-  ScanLine,
-  Mail,
-  Phone,
-  ShieldAlert,
-  Loader2,
-  ExternalLink,
-  ChevronDown,
-  Info,
+  ChevronLeft,
+  ChevronRight,
+  EyeOff,
+  UserPlus,
+  RefreshCw,
 } from "lucide-react";
 
 interface BranchStaffManagementProps {
   shops: LaundryShop[];
   currentShop: LaundryShop | null;
   ownerId?: string;
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-100 text-blue-700",
+  "bg-purple-100 text-purple-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-slate-200 text-slate-700",
+  "bg-sky-100 text-sky-700",
+  "bg-pink-100 text-pink-700",
+  "bg-orange-100 text-orange-700",
+];
+
+function getInitials(name: string): string {
+  if (!name) return "ST";
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "May 12, 2024";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
@@ -47,576 +90,1028 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   );
 
   const [staffList, setStaffList] = useState<BranchStaffMember[]>([]);
-  const [isLoadingStaff, setIsLoadingStaff] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Search state
+  // Search & Filter State (Matches Screenshot)
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<MemberSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<string>("All Roles");
+  const [statusFilter, setStatusFilter] = useState<string>("All Status");
 
-  // Recruitment modal / action state
-  const [selectedUserToRecruit, setSelectedUserToRecruit] = useState<MemberSearchResult | null>(null);
-  const [roleTitle, setRoleTitle] = useState("Counter Staff");
-  const [isAssigning, setIsAssigning] = useState(false);
+  // Modal 1: + Add New Staff (Registration with Username & Password)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newFullName, setNewFullName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const [newRole, setNewRole] = useState("Staff");
+  const [newStatus, setNewStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
+  const [newAssignedShopId, setNewAssignedShopId] = useState(selectedShopId || (shops[0]?.id || ""));
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  // Removal confirmation state
-  const [staffToRemove, setStaffToRemove] = useState<BranchStaffMember | null>(null);
-  const [isRemoving, setIsRemoving] = useState(false);
+  // Modal 2: Edit Staff
+  const [editingStaff, setEditingStaff] = useState<BranchStaffMember | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editRole, setEditRole] = useState("Staff");
+  const [editStatus, setEditStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
+  const [editPhone, setEditPhone] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // Status banner
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
-  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  // Modal 3: View Staff
+  const [viewingStaff, setViewingStaff] = useState<BranchStaffMember | null>(null);
 
-  const activeShop = shops.find((s) => s.id === selectedShopId) || shops[0] || null;
+  // Modal 4: Delete Confirmation
+  const [deletingStaff, setDeletingStaff] = useState<BranchStaffMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load staff for the active shop
-  const loadStaff = async () => {
-    if (!selectedShopId && shops.length === 0) return;
-    setIsLoadingStaff(true);
+  // Feedback Banners
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Load Staff
+  const loadStaffData = async () => {
+    setIsLoading(true);
     try {
       const data = await getBranchStaff(selectedShopId || undefined, ownerId);
       setStaffList(data);
     } catch (err) {
-      console.error("Failed to load branch staff:", err);
+      console.error("Failed to load staff:", err);
     } finally {
-      setIsLoadingStaff(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadStaff();
+    loadStaffData();
   }, [selectedShopId]);
 
-  // Handle member search with debouncing
+  // Ensure assigned shop ID is updated if selected shop changes
   useEffect(() => {
-    const trimmed = searchQuery.trim();
-    if (!trimmed) {
-      setSearchResults([]);
-      setHasSearched(false);
+    if (selectedShopId) {
+      setNewAssignedShopId(selectedShopId);
+    }
+  }, [selectedShopId]);
+
+  // Filtered List
+  const filteredStaff = useMemo(() => {
+    return staffList.filter((s) => {
+      // Role filter
+      if (roleFilter !== "All Roles") {
+        if (s.role_title?.toLowerCase() !== roleFilter.toLowerCase()) return false;
+      }
+      // Status filter
+      if (statusFilter !== "All Status") {
+        if (s.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
+      }
+      // Search query (name, email, role)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = s.full_name.toLowerCase().includes(q);
+        const matchesEmail = (s.email || "").toLowerCase().includes(q);
+        const matchesRole = (s.role_title || "").toLowerCase().includes(q);
+        const matchesCode = (s.staff_id_code || "").toLowerCase().includes(q);
+        const matchesContact = s.phone_number.includes(q);
+        if (!matchesName && !matchesEmail && !matchesRole && !matchesCode && !matchesContact) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [staffList, roleFilter, statusFilter, searchQuery]);
+
+  // Metric counts (Matching Screenshot Tiles)
+  const totalStaffCount = staffList.length;
+  const activeStaffCount = staffList.filter((s) => (s.status || "Active") === "Active").length;
+  const onLeaveStaffCount = staffList.filter((s) => s.status === "On Leave").length;
+
+  // Count unique roles
+  const uniqueRolesCount = useMemo(() => {
+    const roles = new Set(staffList.map((s) => s.role_title || "Staff"));
+    return Math.max(roles.size, 3);
+  }, [staffList]);
+
+  // Handle Register New Staff with Username & Password
+  const handleRegisterStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFullName.trim()) {
+      alert("Please enter the staff member's full name.");
+      return;
+    }
+    if (!newEmail.trim()) {
+      alert("Please enter staff username or email address.");
+      return;
+    }
+    if (!newPassword.trim() || newPassword.length < 6) {
+      alert("Please enter a login password (at least 6 characters).");
+      return;
+    }
+    if (!newPhone.trim()) {
+      alert("Please enter staff contact phone number.");
       return;
     }
 
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const results = await searchMembers(trimmed);
-        setSearchResults(results);
-        setHasSearched(true);
-      } catch (err) {
-        console.error("Failed to search members:", err);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 350);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const handleRecruitSubmit = async () => {
-    if (!selectedUserToRecruit || !activeShop) return;
-    setIsAssigning(true);
-    setErrorBanner(null);
-    setSuccessBanner(null);
-
+    setIsRegistering(true);
     try {
-      const res = await assignStaffToBranch(
-        activeShop.id,
-        selectedUserToRecruit.id,
-        roleTitle.trim() || "Counter Staff"
-      );
+      const res = await registerStaffMember({
+        shopId: newAssignedShopId || selectedShopId || shops[0]?.id || "default-shop-main",
+        fullName: newFullName.trim(),
+        email: newEmail.trim(),
+        password: newPassword,
+        phoneNumber: newPhone.trim(),
+        roleTitle: newRole,
+        status: newStatus,
+      });
 
-      if (res.success) {
-        setSuccessBanner(
-          `Successfully recruited ${selectedUserToRecruit.full_name} as staff for ${activeShop.name}!`
-        );
-        setSelectedUserToRecruit(null);
-        setSearchQuery("");
-        setSearchResults([]);
-        setHasSearched(false);
-        await loadStaff();
+      if (res.success && res.staff) {
+        setToastMessage({
+          type: "success",
+          text: `🎉 Staff account registered! ${res.staff.full_name} (${res.staff.email}) can now log into /login with their password to operate the counter scanner station.`,
+        });
+        setIsAddModalOpen(false);
+
+        // Reset form
+        setNewFullName("");
+        setNewEmail("");
+        setNewPassword("");
+        setNewPhone("");
+        setNewRole("Staff");
+        setNewStatus("Active");
+
+        await loadStaffData();
       } else {
-        setErrorBanner(res.error || "Failed to assign staff member.");
+        setToastMessage({ type: "error", text: res.error || "Failed to register staff account." });
       }
-    } catch (err: any) {
-      setErrorBanner(err.message || "An unexpected error occurred.");
+    } catch {
+      setToastMessage({ type: "error", text: "An error occurred while creating staff account." });
     } finally {
-      setIsAssigning(false);
+      setIsRegistering(false);
     }
   };
 
-  const handleRemoveSubmit = async () => {
-    if (!staffToRemove || !activeShop) return;
-    setIsRemoving(true);
-    setErrorBanner(null);
-    setSuccessBanner(null);
+  // Handle Edit Staff
+  const handleOpenEdit = (staff: BranchStaffMember) => {
+    setEditingStaff(staff);
+    setEditFullName(staff.full_name);
+    setEditRole(staff.role_title || "Staff");
+    setEditStatus(staff.status || "Active");
+    setEditPhone(staff.phone_number);
+  };
 
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+    setIsUpdating(true);
     try {
-      const res = await removeStaffFromBranch(staffToRemove.user_id, activeShop.id);
+      const res = await updateStaffMember(editingStaff.id, {
+        full_name: editFullName.trim(),
+        role_title: editRole,
+        status: editStatus,
+        phone_number: editPhone.trim(),
+      });
+
       if (res.success) {
-        setSuccessBanner(
-          `Removed ${staffToRemove.full_name} from staff. Their account role has reverted back to Customer.`
-        );
-        setStaffToRemove(null);
-        await loadStaff();
+        setToastMessage({
+          type: "success",
+          text: `Updated details for ${editFullName}.`,
+        });
+        setEditingStaff(null);
+        await loadStaffData();
       } else {
-        setErrorBanner(res.error || "Failed to remove staff member.");
+        setToastMessage({ type: "error", text: res.error || "Failed to update staff." });
       }
-    } catch (err: any) {
-      setErrorBanner(err.message || "An unexpected error occurred.");
+    } catch {
+      setToastMessage({ type: "error", text: "An error occurred while updating." });
     } finally {
-      setIsRemoving(false);
+      setIsUpdating(false);
     }
+  };
+
+  // Handle Delete Staff
+  const handleConfirmDelete = async () => {
+    if (!deletingStaff) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteStaffMember(deletingStaff.id);
+      if (res.success) {
+        setToastMessage({
+          type: "success",
+          text: `Removed staff member ${deletingStaff.full_name}.`,
+        });
+        setDeletingStaff(null);
+        await loadStaffData();
+      } else {
+        setToastMessage({ type: "error", text: res.error || "Failed to remove staff." });
+      }
+    } catch {
+      setToastMessage({ type: "error", text: "An error occurred while removing staff." });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Export Staff Table to CSV
+  const handleExportCSV = () => {
+    if (staffList.length === 0) return;
+    const headers = ["Staff ID", "Full Name", "Email", "Role", "Status", "Contact", "Date Joined"];
+    const rows = staffList.map((s) => [
+      s.staff_id_code || s.id,
+      s.full_name,
+      s.email || "",
+      s.role_title || "Staff",
+      s.status || "Active",
+      s.phone_number,
+      formatDate(s.created_at),
+    ]);
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.map((val) => `"${val}"`).join(","))].join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `staff_members_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div
+          className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 shadow-md ${
+            toastMessage.type === "success"
+              ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+              : "bg-rose-50 border-rose-300 text-rose-900"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toastMessage.type === "success" ? (
+              <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* TOP HEADER (Matches Screenshot) */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-2xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center shrink-0">
-              <Users size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
-                  Branch Staff Recruitment & Counter Access
-                </h2>
-                <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-                  Staff Role (3)
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-                Recruit existing LabadaGo members as counter staff for your specific branch. Recruited
-                staff can <strong>only scan walk-in QR passes</strong> to receive clothes or dispatch finished
-                laundry. They cannot create branches, recruit members, or view your private business analytics.
-              </p>
-            </div>
-          </div>
-
-          <Link href="/staff" target="_blank">
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<ScanLine size={14} className="text-teal-600" />}
-              rightIcon={<ExternalLink size={12} className="text-slate-400" />}
-              className="text-xs whitespace-nowrap cursor-pointer shrink-0"
-            >
-              Open Staff Scanner
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Success / Error Banners */}
-      {successBanner && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-            <span>{successBanner}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessBanner(null)}
-            className="text-emerald-600 hover:text-emerald-800 font-bold text-sm px-1 cursor-pointer"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {errorBanner && (
-        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-red-600 shrink-0" />
-            <span>{errorBanner}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorBanner(null)}
-            className="text-red-600 hover:text-red-800 font-bold text-sm px-1 cursor-pointer"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Branch Selection Bar */}
-      {shops.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Store size={16} className="text-slate-500" />
-            <span className="text-xs font-bold text-slate-700">Managing Staff for Branch:</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedShopId}
-              onChange={(e) => setSelectedShopId(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
-            >
-              {shops.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.address.slice(0, 30)}...)
-                </option>
-              ))}
-            </select>
-            <span className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-1 rounded-md">
-              {staffList.length} Active Staff
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Main Grid: Search & Recruit on Left, Active Roster on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Recruit Existing LabadaGo Member */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <UserPlus size={16} className="text-teal-600" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Recruit Existing Member
-              </h3>
-            </div>
-
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Search for anyone who registered an account on LabadaGo. Once added, their account role will
-              instantly change to <strong>Branch Staff</strong>, locking them to scanning only.
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+              Staff Management
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+              Manage your staff accounts, roles, and access permissions.
             </p>
+          </div>
 
-            {/* Search Input Box */}
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search member by full name, email, or phone..."
-                className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-slate-400"
-              />
-              {isSearching && (
-                <Loader2
-                  size={14}
-                  className="animate-spin text-teal-600 absolute right-3 top-1/2 -translate-y-1/2"
-                />
-              )}
-            </div>
-
-            {/* Search Results Display */}
-            {hasSearched && (
-              <div className="space-y-2.5 pt-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Search Results ({searchResults.length})
-                </span>
-
-                {searchResults.length === 0 ? (
-                  <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
-                    No registered members found matching &quot;{searchQuery}&quot;. Please check the spelling or ask them to register on LabadaGo first.
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                    {searchResults.map((member) => {
-                      const isAlreadyThisShopStaff = staffList.some(
-                        (s) => s.user_id === member.id
-                      );
-                      return (
-                        <div
-                          key={member.id}
-                          className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-teal-300 transition-all flex items-start justify-between gap-3 shadow-2xs"
-                        >
-                          <div className="space-y-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-bold text-slate-900 truncate">
-                                {member.full_name}
-                              </h4>
-                              <RoleBadge role={member.role} size="sm" showIcon={false} />
-                            </div>
-
-                            {member.email && (
-                              <p className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">
-                                <Mail size={11} className="text-slate-400 shrink-0" />
-                                <span className="truncate">{member.email}</span>
-                              </p>
-                            )}
-
-                            {member.phone_number && (
-                              <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                                <Phone size={11} className="text-slate-400 shrink-0" />
-                                <span>{member.phone_number}</span>
-                              </p>
-                            )}
-
-                            {member.assigned_shop_name && !isAlreadyThisShopStaff && (
-                              <span className="inline-block text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                Currently Staff of {member.assigned_shop_name}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="shrink-0 pt-0.5">
-                            {isAlreadyThisShopStaff ? (
-                              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-200 inline-flex items-center gap-1">
-                                <UserCheck size={11} /> Already Staff
-                              </span>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setSelectedUserToRecruit(member)}
-                                className="text-[11px] px-2.5 py-1 bg-teal-600 hover:bg-teal-700"
-                              >
-                                Recruit
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+          {/* Top Right Controls: Date Pill, Notification Bell, User Avatar, and + Add New Staff Button */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Branch Switcher Dropdown */}
+            {shops.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700">
+                <Store size={13} className="text-blue-600 shrink-0" />
+                <select
+                  value={selectedShopId}
+                  onChange={(e) => setSelectedShopId(e.target.value)}
+                  className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  <option value="">All Branches</option>
+                  {shops.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 
-            {/* Role Lock Notice */}
-            <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-100 flex items-start gap-2.5 text-xs text-teal-900">
-              <Info size={16} className="text-teal-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <strong>Role Lock Enforcement:</strong> Once recruited, the staff user is locked from switching to Customer or Owner. Only you as the branch owner can remove them.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Active Staff Roster for Selected Branch */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-teal-600" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Active Staff for &quot;{activeShop?.name || "Selected Branch"}&quot;
-                </h3>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                {staffList.length} Staff Member{staffList.length !== 1 ? "s" : ""}
+            {/* Date Display Pill */}
+            <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700">
+              <Calendar size={14} className="text-slate-400" />
+              <span>
+                {new Date().toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  weekday: "short",
+                })}
               </span>
             </div>
 
-            {isLoadingStaff ? (
-              <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
-                <Loader2 size={20} className="animate-spin text-teal-600" />
-                <p className="text-xs">Loading branch staff roster...</p>
-              </div>
-            ) : staffList.length === 0 ? (
-              <div className="py-12 rounded-xl border border-dashed border-slate-200 text-center space-y-2 p-6">
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                  <Users size={20} />
-                </div>
-                <h4 className="text-sm font-bold text-slate-700">No Staff Assigned Yet</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  You haven&apos;t recruited any staff for this branch. Search a registered member on the left to add them as counter staff.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {staffList.map((staff) => (
-                  <div
-                    key={staff.id || staff.user_id}
-                    className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        {staff.full_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-slate-900">{staff.full_name}</h4>
-                          <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                            {staff.role_title || "Counter Staff"}
-                          </span>
-                        </div>
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                title="Notifications"
+              >
+                <Bell size={16} />
+              </button>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                1
+              </span>
+            </div>
 
-                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                          {staff.email && (
-                            <span className="flex items-center gap-1">
-                              <Mail size={11} className="text-slate-400" />
-                              {staff.email}
-                            </span>
-                          )}
-                          {staff.phone_number && (
-                            <span className="flex items-center gap-1">
-                              <Phone size={11} className="text-slate-400" />
-                              {staff.phone_number}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-[10px] text-slate-400">
-                          Branch: <strong className="text-slate-600">{staff.shop_name || activeShop?.name}</strong> • Added {new Date(staff.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 shrink-0">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setStaffToRemove(staff)}
-                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200 cursor-pointer"
-                      >
-                        <Trash2 size={13} className="mr-1 text-red-500" />
-                        Remove Staff
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+            {/* Shop Owner Avatar Pill */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                <User size={12} />
               </div>
-            )}
+              <div className="text-left">
+                <div className="text-xs font-bold text-slate-900 leading-tight">Owner</div>
+                <div className="text-[10px] text-slate-400">Shop Owner</div>
+              </div>
+            </div>
+
+            {/* + Add New Staff Primary Button (Matching Royal Blue #2563EB) */}
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer hover:shadow-md"
+            >
+              <Plus size={15} />
+              <span>+ Add New Staff</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 METRIC TILES (Matches Screenshot Exactly) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
+          {/* Tile 1: Total Staff */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Users size={17} />
+              </div>
+              <span className="text-xs text-slate-400 font-medium">All accounts</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900 pt-1">{totalStaffCount}</div>
+            <div className="text-xs font-semibold text-slate-600">Total Staff</div>
+          </div>
+
+          {/* Tile 2: Active Staff */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <UserCheck size={17} />
+              </div>
+              <span className="text-xs text-slate-400 font-medium">Currently active</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900 pt-1">{activeStaffCount}</div>
+            <div className="text-xs font-semibold text-slate-600">Active Staff</div>
+          </div>
+
+          {/* Tile 3: On Leave */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Clock size={17} />
+              </div>
+              <span className="text-xs text-slate-400 font-medium">On leave today</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900 pt-1">{onLeaveStaffCount}</div>
+            <div className="text-xs font-semibold text-slate-600">On Leave</div>
+          </div>
+
+          {/* Tile 4: Roles */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Shield size={17} />
+              </div>
+              <span className="text-xs text-slate-400 font-medium">System roles</span>
+            </div>
+            <div className="text-2xl font-black text-slate-900 pt-1">{uniqueRolesCount}</div>
+            <div className="text-xs font-semibold text-slate-600">Roles</div>
           </div>
         </div>
       </div>
 
-      {/* Recruitment Confirmation Modal */}
-      {selectedUserToRecruit && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden">
-            <div className="flex items-center gap-3 p-4 sm:p-6 pb-3 border-b border-slate-100 shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200">
-                <UserCheck size={20} />
+      {/* FILTER & SEARCH BAR (Matches Screenshot) */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search staff by name, email, or role..."
+            className="w-full text-xs pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-500 text-slate-800 transition-colors"
+          />
+        </div>
+
+        {/* Filters and Export Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Roles Dropdown */}
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none cursor-pointer"
+          >
+            <option value="All Roles">All Roles</option>
+            <option value="Staff">Staff</option>
+            <option value="Manager">Manager</option>
+            <option value="Administrator">Administrator</option>
+          </select>
+
+          {/* Status Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none cursor-pointer"
+          >
+            <option value="All Status">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+            <option value="On Leave">On Leave</option>
+          </select>
+
+          {/* Export Button */}
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Download CSV export"
+          >
+            <Download size={14} className="text-slate-500" />
+            <span>Export</span>
+          </button>
+        </div>
+      </div>
+
+      {/* STAFF MEMBERS TABLE (Matches Screenshot Table Format) */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <tr>
+                <th className="py-3.5 px-4 font-bold">Staff ID</th>
+                <th className="py-3.5 px-4 font-bold">Staff Name</th>
+                <th className="py-3.5 px-4 font-bold">Role</th>
+                <th className="py-3.5 px-4 font-bold">Status</th>
+                <th className="py-3.5 px-4 font-bold">Contact</th>
+                <th className="py-3.5 px-4 font-bold">Date Joined</th>
+                <th className="py-3.5 px-4 font-bold text-right pr-6">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredStaff.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <Users size={36} className="mx-auto mb-2 text-slate-300" />
+                    <p className="font-bold text-slate-700">No staff members found.</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      Click &quot;+ Add New Staff&quot; above to register your first staff account.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredStaff.map((staff, idx) => {
+                  const initials = getInitials(staff.full_name);
+                  const colorClass = staff.avatar_color || AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                  const staffCode = staff.staff_id_code || `STF-${String(idx + 1).padStart(3, "0")}`;
+
+                  return (
+                    <tr
+                      key={staff.id}
+                      className="hover:bg-slate-50/60 transition-colors"
+                    >
+                      {/* 1. Staff ID */}
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-600">
+                        {staffCode}
+                      </td>
+
+                      {/* 2. Staff Name with Initials Avatar */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${colorClass}`}
+                          >
+                            {initials}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 leading-tight">
+                              {staff.full_name}
+                            </div>
+                            <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
+                              {staff.email || "No email specified"}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* 3. Role Badge */}
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${
+                            staff.role_title === "Manager"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : staff.role_title === "Administrator"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          }`}
+                        >
+                          {staff.role_title || "Staff"}
+                        </span>
+                      </td>
+
+                      {/* 4. Status (Dot + Label) */}
+                      <td className="py-3.5 px-4">
+                        <span className="flex items-center gap-1.5 font-semibold text-[11px]">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              staff.status === "Inactive"
+                                ? "bg-rose-500"
+                                : staff.status === "On Leave"
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"
+                            }`}
+                          />
+                          <span
+                            className={
+                              staff.status === "Inactive"
+                                ? "text-rose-600"
+                                : staff.status === "On Leave"
+                                ? "text-amber-600"
+                                : "text-emerald-700"
+                            }
+                          >
+                            {staff.status || "Active"}
+                          </span>
+                        </span>
+                      </td>
+
+                      {/* 5. Contact Phone */}
+                      <td className="py-3.5 px-4 font-medium text-slate-600">
+                        {staff.phone_number || "—"}
+                      </td>
+
+                      {/* 6. Date Joined */}
+                      <td className="py-3.5 px-4 text-slate-500">
+                        {formatDate(staff.created_at)}
+                      </td>
+
+                      {/* 7. Action Icons (View, Edit, Delete) */}
+                      <td className="py-3.5 px-4 text-right pr-6">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setViewingStaff(staff)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                            title="View Staff Profile"
+                          >
+                            <Eye size={13} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(staff)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                            title="Edit Staff Member"
+                          >
+                            <Pencil size={13} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeletingStaff(staff)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Remove Staff"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINATION FOOTER (Matches Screenshot) */}
+        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+          <div>
+            Showing 1 to {filteredStaff.length} of {staffList.length} entries
+          </div>
+
+          <div className="flex items-center gap-1 self-end sm:self-auto">
+            <button
+              type="button"
+              disabled
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-300 cursor-not-allowed"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
+              1
+            </span>
+            <button
+              type="button"
+              disabled
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-300 cursor-not-allowed"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* =================================================================== */}
+      {/* MODAL 1: REGISTER NEW STAFF (With Details, Username & Password)      */}
+      {/* =================================================================== */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                    Register New Staff Member
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Create staff login credentials and assign to your laundry shop counter.
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Registration Form */}
+            <form onSubmit={handleRegisterStaff} className="space-y-4">
+              {/* Branch Assignment */}
               <div>
-                <h4 className="text-sm font-bold text-slate-900">Confirm Staff Recruitment</h4>
-                <p className="text-xs text-slate-500">Branch: {activeShop?.name}</p>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Assigned Branch / Shop <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newAssignedShopId}
+                  onChange={(e) => setNewAssignedShopId(e.target.value)}
+                  className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  required
+                >
+                  {shops.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.address})
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
 
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Member:</span>
-                <strong className="text-slate-900">{selectedUserToRecruit.full_name}</strong>
-              </div>
-              {selectedUserToRecruit.email && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Email:</span>
-                  <span className="text-slate-700 truncate max-w-[180px]">{selectedUserToRecruit.email}</span>
+              {/* Full Name & Phone Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Staff Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    required
+                    value={newFullName}
+                    onChange={(e) => setNewFullName(e.target.value)}
+                    placeholder="e.g. Maria Santos"
+                    className="text-xs h-9"
+                  />
                 </div>
-              )}
-              {selectedUserToRecruit.phone_number && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Phone:</span>
-                  <span className="text-slate-700">{selectedUserToRecruit.phone_number}</span>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Contact Phone Number <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    required
+                    type="tel"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="0917 123 4567"
+                    className="text-xs h-9"
+                  />
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-slate-500">Assigned Branch:</span>
-                <strong className="text-teal-700">{activeShop?.name}</strong>
               </div>
-            </div>
 
-            {/* Role Title input */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">
-                Staff Title / Position
-              </label>
-              <input
-                type="text"
-                value={roleTitle}
-                onChange={(e) => setRoleTitle(e.target.value)}
-                placeholder="e.g. Counter Staff, Scanner Attendant"
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
+              {/* Username / Email Address */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Staff Email / Login Username <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="e.g. maria.santos@lavadago.com"
+                    className="w-full text-xs pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Staff will use this username/email to sign in at the login page.
+                </span>
+              </div>
 
-            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 leading-relaxed">
-              <strong>Notice:</strong> When you recruit {selectedUserToRecruit.full_name}, their active role will change to <strong>Branch Staff</strong>. They will only have access to scan walk-in QRs and cannot switch roles until you remove them.
-            </p>
+              {/* Login Password */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Login Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter at least 6 characters"
+                    className="w-full text-xs pl-9 pr-10 h-9 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 text-slate-800 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Provide this password to your staff member for counter access.
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedUserToRecruit(null)}
-                className="flex-1 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                disabled={isAssigning}
-                onClick={handleRecruitSubmit}
-                className="flex-1 text-xs bg-teal-600 hover:bg-teal-700"
-              >
-                {isAssigning ? (
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 size={13} className="animate-spin" /> Assigning...
-                  </span>
-                ) : (
-                  "Confirm & Recruit"
-                )}
-              </Button>
-            </div>
-            </div>
+              {/* Role & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    System Role <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                    className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="Staff">Staff (Counter Scanner &amp; Check-In)</option>
+                    <option value="Manager">Manager (Supervisory &amp; Reports)</option>
+                    <option value="Administrator">Administrator (Branch Admin)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Employment Status <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="Active">Active (Can log in &amp; scan)</option>
+                    <option value="Inactive">Inactive (Access suspended)</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  isLoading={isRegistering}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 shadow-xs"
+                >
+                  Register Staff &amp; Create Credentials
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Remove Staff Confirmation Modal */}
-      {staffToRemove && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden">
-            <div className="flex items-center gap-3 p-4 sm:p-6 pb-3 border-b border-slate-100 shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
-                <Trash2 size={20} />
+      {/* =================================================================== */}
+      {/* MODAL 2: EDIT STAFF MEMBER                                          */}
+      {/* =================================================================== */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Pencil size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Edit Staff: {editingStaff.full_name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">ID: {editingStaff.staff_id_code || editingStaff.id}</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setEditingStaff(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
               <div>
-                <h4 className="text-sm font-bold text-slate-900">Remove Branch Staff</h4>
-                <p className="text-xs text-slate-500">Revoke scanner privileges</p>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Full Name</label>
+                <Input
+                  required
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Contact Number</label>
+                <Input
+                  required
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Role Title</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value)}
+                    className="w-full text-xs h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                  >
+                    <option value="Staff">Staff</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Administrator">Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full text-xs h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingStaff(null)}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  type="submit"
+                  isLoading={isUpdating}
+                  className="bg-blue-600 hover:bg-blue-700 font-bold"
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 3: VIEW STAFF MEMBER PROFILE                                  */}
+      {/* =================================================================== */}
+      {viewingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in fade-in zoom-in-95 text-center">
+            <div
+              className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-xl shadow-xs ${
+                viewingStaff.avatar_color || "bg-blue-100 text-blue-700"
+              }`}
+            >
+              {getInitials(viewingStaff.full_name)}
+            </div>
+
+            <div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                {viewingStaff.staff_id_code || viewingStaff.id}
+              </span>
+              <h3 className="text-base font-bold text-slate-900 mt-1.5">{viewingStaff.full_name}</h3>
+              <p className="text-xs text-slate-500">{viewingStaff.email}</p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-left text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Assigned Branch:</span>
+                <span className="font-bold text-slate-800">{viewingStaff.shop_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">System Role:</span>
+                <span className="font-bold text-slate-800">{viewingStaff.role_title || "Staff"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Status:</span>
+                <span className="font-bold text-emerald-700">{viewingStaff.status || "Active"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Contact Number:</span>
+                <span className="font-bold text-slate-800">{viewingStaff.phone_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Date Joined:</span>
+                <span className="font-bold text-slate-800">{formatDate(viewingStaff.created_at)}</span>
               </div>
             </div>
 
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingStaff(null)}
+              className="w-full text-xs font-bold"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to remove <strong>{staffToRemove.full_name}</strong> from <strong>{activeShop?.name}</strong>?
-            </p>
+      {/* =================================================================== */}
+      {/* MODAL 4: DELETE CONFIRMATION                                        */}
+      {/* =================================================================== */}
+      {deletingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 size={24} />
+            </div>
 
-            <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-              Their role will automatically revert back to <strong>Customer (Costumer)</strong>, restoring normal customer privileges.
-            </p>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Remove Staff Member?</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Are you sure you want to remove <strong>{deletingStaff.full_name}</strong> from{" "}
+                {deletingStaff.shop_name}? Their counter station access will be immediately revoked.
+              </p>
+            </div>
 
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center justify-center gap-2.5 pt-1">
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setStaffToRemove(null)}
-                className="flex-1 text-xs"
+                onClick={() => setDeletingStaff(null)}
+                disabled={isDeleting}
               >
                 Cancel
               </Button>
               <Button
-                type="button"
-                variant="outline"
+                variant="danger"
                 size="sm"
-                disabled={isRemoving}
-                onClick={handleRemoveSubmit}
-                className="flex-1 text-xs bg-red-600 hover:bg-red-700 text-white border-transparent"
+                onClick={handleConfirmDelete}
+                isLoading={isDeleting}
+                className="bg-rose-600 hover:bg-rose-700 font-bold"
               >
-                {isRemoving ? "Removing..." : "Remove Staff"}
+                Confirm Delete
               </Button>
-            </div>
             </div>
           </div>
         </div>

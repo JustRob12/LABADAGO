@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { LaundryShop, ShopService, UserProfile, WalkInQRPayload, LaundryTransaction } from "@/types/auth";
-import { createWalkInTransaction } from "@/lib/supabase/auth";
+import { createWalkInTransaction, updateTransactionStatus } from "@/lib/supabase/auth";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +26,8 @@ import {
   Package,
   Eye,
   CreditCard,
+  X,
+  Trash2,
 } from "lucide-react";
 
 interface WalkInQRGeneratorProps {
@@ -74,14 +76,15 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   const [generatedQRUrl, setGeneratedQRUrl] = useState<string | null>(null);
   const [generatedPayload, setGeneratedPayload] = useState<WalkInQRPayload | null>(null);
   const [activeTrackingNumber, setActiveTrackingNumber] = useState<string | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Filter all walk-in transactions (most recent first)
   const walkInTransactions = transactions.filter((t) => t.is_walkin);
 
-  // Helper to load any walk-in transaction into the QR preview box
-  const loadPassIntoPreview = async (tx: LaundryTransaction) => {
+  // Helper to load any walk-in transaction into the QR modal
+  const loadPassIntoPreview = async (tx: LaundryTransaction, openModal = true) => {
     try {
       let payloadToUse: WalkInQRPayload;
       if (tx.qr_data) {
@@ -131,17 +134,13 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
       setGeneratedQRUrl(qrDataUrl);
       setGeneratedPayload(payloadToUse);
       setActiveTrackingNumber(tx.tracking_number);
+      if (openModal) {
+        setShowQRModal(true);
+      }
     } catch (err) {
       console.error("Failed to render QR for transaction:", err);
     }
   };
-
-  // Auto-display the most recent walk-in pass if not already viewing one
-  useEffect(() => {
-    if (!generatedQRUrl && walkInTransactions.length > 0) {
-      loadPassIntoPreview(walkInTransactions[0]);
-    }
-  }, [walkInTransactions.length]);
 
   // Sync selected shop if initialShopId or URL query param changes, or when shops array loads
   useEffect(() => {
@@ -244,6 +243,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
       setGeneratedQRUrl(qrDataUrl);
       setGeneratedPayload(payload);
       setActiveTrackingNumber(payload.trackingNumber);
+      setShowQRModal(true);
       setSuccessMessage("Walk-In Fast Pass QR generated successfully! Present this code at the laundry counter.");
 
       if (onTransactionCreated) {
@@ -264,10 +264,46 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     link.click();
   };
 
+  const handleCancelPass = async (txId?: string, trackingNum?: string) => {
+    const targetTracking = trackingNum || activeTrackingNumber || generatedPayload?.trackingNumber;
+    const targetId = txId || activeTx?.id || targetTracking;
+    if (!targetTracking) return;
+
+    if (!window.confirm(`Are you sure you want to cancel fast pass #${targetTracking}?`)) {
+      return;
+    }
+
+    try {
+      if (targetId) {
+        await updateTransactionStatus(targetId, "Cancelled");
+      }
+      if (typeof window !== "undefined") {
+        try {
+          const stored: string[] = JSON.parse(
+            localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
+          );
+          const next = stored.filter((t) => t !== targetTracking);
+          localStorage.setItem("labadago_guest_tracking_numbers", JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+      }
+
+      setSuccessMessage(`Fast pass #${targetTracking} has been cancelled.`);
+      setShowQRModal(false);
+      if (onTransactionCreated) {
+        onTransactionCreated();
+      }
+    } catch {
+      alert("Failed to cancel pass. Please try again.");
+    }
+  };
+
   const handleResetToNew = () => {
     setGeneratedQRUrl(null);
     setGeneratedPayload(null);
     setActiveTrackingNumber(null);
+    setShowQRModal(false);
     setSuccessMessage(null);
   };
 
@@ -331,9 +367,9 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6">
-            {/* Form Column */}
-            <form onSubmit={handleGenerateQR} className="lg:col-span-7 space-y-4">
+          <div className="max-w-2xl mx-auto pt-6">
+            {/* Centered Form */}
+            <form onSubmit={handleGenerateQR} className="space-y-4">
               {successMessage && <Alert type="success" message={successMessage} />}
 
               {/* Customer Profile vs Guest Details Input */}
@@ -518,7 +554,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                   type="submit"
                   variant="success"
                   size="lg"
-                  className="w-full"
+                  className="w-full font-bold"
                   isLoading={isLoading}
                   leftIcon={<QrCode size={16} />}
                 >
@@ -526,62 +562,31 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                 </Button>
               </div>
             </form>
+          </div>
 
-            {/* QR Code Preview Column */}
-            <div className="lg:col-span-5 flex flex-col items-center justify-center p-6 rounded-xl border border-slate-200 bg-slate-50/50 text-center relative">
-              {generatedQRUrl && generatedPayload ? (
-                <div className="w-full flex flex-col items-center animate-fadeIn">
-                  {/* Real-time Status Badge */}
-                  <div className="mb-3">
-                    {activeTx?.status === "Pending" || !activeTx ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                        Awaiting Drop-off Scan at Counter
-                      </span>
-                    ) : activeTx.status === "Ready" ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                        Ready to Pick Up!
-                      </span>
-                    ) : activeTx.status === "Completed" ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 shadow-2xs">
-                        <CheckCircle2 size={13} className="text-slate-600" />
-                        Completed &amp; Claimed
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
-                        <Clock size={13} className="text-blue-600 animate-spin" />
-                        Processing in Shop
-                      </span>
-                    )}
+          {/* QR Fast Pass Modal (Shown when pass is generated or selected) */}
+          {showQRModal && generatedQRUrl && generatedPayload && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[92dvh] flex flex-col overflow-hidden text-center">
+                <div className="flex items-center justify-between p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <QrCode size={18} className="text-emerald-600" />
+                    <h4 className="text-sm font-bold text-slate-900">Walk-In Fast Pass QR</h4>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQRModal(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer shrink-0"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
 
-                  <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm inline-block">
-                    <img
-                      src={generatedQRUrl}
-                      alt="Walk-in QR Code"
-                      className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
-                    />
-                  </div>
-
-                  <div className="mt-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
-                        {generatedPayload.trackingNumber}
-                      </span>
-                      {activeTx?.payment_status === "Paid" ? (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
-                          <CheckCircle2 size={11} className="text-emerald-600" />
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
-                          <CreditCard size={11} className="text-amber-600" />
-                          Pay on Pickup
-                        </span>
-                      )}
-                    </div>
-
+                <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+                  <div>
+                    <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+                      {generatedPayload.trackingNumber}
+                    </span>
                     <p className="text-xs font-bold text-slate-900 mt-2">
                       {generatedPayload.serviceName} • {generatedPayload.estimatedLoads || Math.max(1, Math.round(generatedPayload.estimatedWeight / 8))} {(generatedPayload.estimatedLoads || Math.max(1, Math.round(generatedPayload.estimatedWeight / 8))) === 1 ? "load" : "loads"}
                     </p>
@@ -590,52 +595,73 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-5 flex items-center gap-2 w-full">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 inline-block mx-auto">
+                    <img
+                      src={generatedQRUrl}
+                      alt={`QR Fast Pass ${generatedPayload.trackingNumber}`}
+                      className="w-48 sm:w-56 h-48 sm:h-56 mx-auto object-contain rounded-lg"
+                    />
+                  </div>
+
+                  <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 leading-relaxed">
+                    Present this QR code at the laundry counter. Staff will scan it to immediately start washing your clothes!
+                  </p>
+
+                  <div className="space-y-2 pt-1">
                     <Button
-                      variant="outline"
+                      type="button"
+                      variant="primary"
                       size="sm"
-                      className="flex-1 text-xs"
-                      leftIcon={<Download size={13} />}
                       onClick={handleDownloadQR}
+                      leftIcon={<Download size={14} />}
+                      className="w-full text-xs font-bold"
                     >
-                      Save Pass
+                      Download QR Code
                     </Button>
+
                     {onViewOrderTracker && (
                       <Button
-                        variant="primary"
+                        type="button"
+                        variant="outline"
                         size="sm"
-                        className="flex-1 text-xs"
+                        className="w-full text-xs"
                         leftIcon={<Package size={13} />}
-                        onClick={() => onViewOrderTracker(generatedPayload.trackingNumber)}
+                        onClick={() => {
+                          setShowQRModal(false);
+                          onViewOrderTracker(generatedPayload.trackingNumber);
+                        }}
                       >
-                        Track Order
+                        Track Status in My Orders
                       </Button>
                     )}
+
+                    {(activeTx?.status === "Pending" || !activeTx) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCancelPass()}
+                        leftIcon={<Trash2 size={13} className="text-rose-500" />}
+                        className="w-full text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+                      >
+                        Cancel This Fast Pass
+                      </Button>
+                    )}
+
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
-                      className="text-xs text-slate-600"
-                      leftIcon={<RefreshCw size={13} />}
-                      onClick={handleResetToNew}
-                      title="Generate new pass"
+                      onClick={() => setShowQRModal(false)}
+                      className="w-full text-xs text-slate-500 hover:text-slate-700"
                     >
-                      New
+                      Close
                     </Button>
                   </div>
                 </div>
-              ) : (
-                <div className="py-10 flex flex-col items-center">
-                  <div className="w-14 h-14 rounded-xl border border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 mb-3">
-                    <QrCode size={24} />
-                  </div>
-                  <p className="text-xs font-semibold text-slate-700">QR Code Preview</p>
-                  <p className="text-[11px] text-slate-400 max-w-[200px] mt-1 leading-relaxed">
-                    Fill out the form and click generate to create your scannable counter pass.
-                  </p>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ALL GENERATED WALK-IN PASSES SECTION */}
           <div className="mt-10 pt-8 border-t border-slate-200">
@@ -766,17 +792,29 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                       <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
                         <Button
                           type="button"
-                          variant={isCurrentlyActive ? "primary" : "outline"}
+                          variant="outline"
                           size="sm"
                           className="flex-1 text-xs"
                           leftIcon={<QrCode size={13} />}
                           onClick={() => {
-                            loadPassIntoPreview(tx);
-                            window.scrollTo({ top: 0, behavior: "smooth" });
+                            loadPassIntoPreview(tx, true);
                           }}
                         >
-                          {isCurrentlyActive ? "Showing QR Pass ✓" : "Show QR Pass"}
+                          Show QR Pass
                         </Button>
+                        {tx.status === "Pending" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+                            leftIcon={<Trash2 size={12} />}
+                            onClick={() => handleCancelPass(tx.id, tx.tracking_number)}
+                            title="Cancel this fast pass"
+                          >
+                            Cancel
+                          </Button>
+                        )}
                         {onViewOrderTracker && (
                           <Button
                             type="button"

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { LaundryTransaction, OrderStatus } from "@/types/auth";
 import { Button } from "@/components/ui/Button";
-import { submitShopReview } from "@/lib/supabase/auth";
+import { submitShopReview, updateTransactionStatus } from "@/lib/supabase/auth";
 import QRCode from "qrcode";
 import {
   Package,
@@ -32,6 +32,8 @@ import {
   Wind,
   Bell,
   ShoppingBag,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
@@ -153,6 +155,38 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
       setQrModalUrl(url);
     } catch {
       setQrModalUrl(null);
+    }
+  };
+
+  const handleDownloadQrModal = () => {
+    if (!qrModalUrl || !viewingQrTx) return;
+    const link = document.createElement("a");
+    link.href = qrModalUrl;
+    link.download = `LabadaGo-Pass-${viewingQrTx.tracking_number}.png`;
+    link.click();
+  };
+
+  const handleCancelOrder = async (tx: LaundryTransaction) => {
+    if (!window.confirm(`Are you sure you want to cancel fast pass #${tx.tracking_number}?`)) {
+      return;
+    }
+    try {
+      await updateTransactionStatus(tx.id, "Cancelled");
+      if (typeof window !== "undefined") {
+        try {
+          const stored: string[] = JSON.parse(
+            localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
+          );
+          const next = stored.filter((t) => t !== tx.tracking_number);
+          localStorage.setItem("labadago_guest_tracking_numbers", JSON.stringify(next));
+        } catch {}
+      }
+      setViewingQrTx(null);
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch {
+      alert("Failed to cancel pass. Please try again.");
     }
   };
 
@@ -283,16 +317,29 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
 
                 <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
                   {isPending && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      leftIcon={<QrCode size={13} className="text-blue-600" />}
-                      onClick={() => handleOpenQrModal(tx)}
-                      className="text-xs font-semibold border-blue-200 bg-blue-50/40 text-blue-700 hover:bg-blue-50"
-                    >
-                      Show QR Pass
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<QrCode size={13} className="text-blue-600" />}
+                        onClick={() => handleOpenQrModal(tx)}
+                        className="text-xs font-semibold border-blue-200 bg-blue-50/40 text-blue-700 hover:bg-blue-50"
+                      >
+                        Show QR Pass
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<Trash2 size={13} className="text-rose-500" />}
+                        onClick={() => handleCancelOrder(tx)}
+                        className="text-xs font-semibold border-rose-200 bg-rose-50/40 text-rose-700 hover:bg-rose-50"
+                        title="Cancel this fast pass"
+                      >
+                        Cancel Pass
+                      </Button>
+                    </div>
                   )}
                   <span
                     className={`px-2.5 py-0.5 rounded-md border text-xs font-semibold ${badge.bg} ${badge.text} ${badge.border}`}
@@ -739,18 +786,46 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               )}
 
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                Show this QR code at the laundry shop counter. Once scanned, your status will automatically change from <strong>Pending</strong> to <strong>Received</strong>.
+                Show this QR code at the laundry shop counter. Once scanned, your status will automatically change to <strong>Processing</strong>.
               </p>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setViewingQrTx(null)}
-                className="w-full shrink-0"
-              >
-                Close
-              </Button>
+              <div className="space-y-2 pt-1">
+                {qrModalUrl && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleDownloadQrModal}
+                    leftIcon={<Download size={14} />}
+                    className="w-full text-xs font-bold"
+                  >
+                    Download QR Code
+                  </Button>
+                )}
+
+                {viewingQrTx.status === "Pending" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCancelOrder(viewingQrTx)}
+                    leftIcon={<Trash2 size={13} className="text-rose-500" />}
+                    className="w-full text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+                  >
+                    Cancel This Pass
+                  </Button>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewingQrTx(null)}
+                  className="w-full text-xs shrink-0"
+                >
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
         </div>

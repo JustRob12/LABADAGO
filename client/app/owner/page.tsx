@@ -36,6 +36,10 @@ function OwnerContent() {
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
+    if (shops.length === 0 && !isLoading) {
+      setActiveTab("setup");
+      return;
+    }
     if (tabParam === "scanner") {
       setActiveTab("scanner");
     } else if (tabParam === "setup") {
@@ -45,9 +49,15 @@ function OwnerContent() {
     } else {
       setActiveTab("analytics");
     }
-  }, [searchParams]);
+  }, [searchParams, shops.length, isLoading]);
 
   const handleTabChange = (tab: "analytics" | "scanner" | "setup" | "staff") => {
+    // If owner has no shops yet, lock to setup
+    if (shops.length === 0 && tab !== "setup") {
+      setActiveTab("setup");
+      router.push("/owner?tab=setup", { scroll: false });
+      return;
+    }
     setActiveTab(tab);
     if (tab === "analytics") {
       router.push("/owner", { scroll: false });
@@ -116,50 +126,67 @@ function OwnerContent() {
     <div className="min-h-screen bg-slate-50/50 flex flex-col">
       <DashboardNav
         user={user}
+        hasShops={shops.length > 0}
         onRoleSwitched={(role) => {
           if (user) setUser({ ...user, role });
         }}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8 space-y-6">
-        {/* Owner Header Banner */}
+        {/* Owner Portal Sub-Navigation Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Laundry Shop Owner Portal
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Manage your shop profile, process customer walk-in QR passes, and monitor business analytics.
-            </p>
-          </div>
+          {activeTab !== "analytics" ? (
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                {activeTab === "scanner"
+                  ? "QR Intake & Counter Orders"
+                  : activeTab === "setup"
+                  ? "Laundry Shop Configuration"
+                  : "Branch Staff Management"}
+              </h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {activeTab === "scanner"
+                  ? "Scan customer passes or manual check-in, set load weight, and update order status."
+                  : activeTab === "setup"
+                  ? "Manage your shop coordinates, machine capacities, pricing, and operating schedule."
+                  : "Register and manage staff accounts, roles, and branch permissions."}
+              </p>
+            </div>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
 
-          {/* Owner Tab Navigation (Hidden on mobile/tablet since bottom floating nav handles tabs) */}
-          <div className="hidden lg:inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => handleTabChange("analytics")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                activeTab === "analytics"
-                  ? "bg-emerald-600 text-white shadow-2xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <BarChart3 size={13} />
-              <span>Business Analytics</span>
-            </button>
+          {/* Owner Tab Navigation (Only shows setup if owner has no registered shops yet) */}
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-2xs self-start sm:self-auto">
+            {shops.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("analytics")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
+                    activeTab === "analytics"
+                      ? "bg-blue-600 text-white shadow-2xs font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <BarChart3 size={13} />
+                  <span>Dashboard</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => handleTabChange("scanner")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                activeTab === "scanner"
-                  ? "bg-blue-600 text-white shadow-2xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <ScanLine size={13} />
-              <span>QR Intake & Orders</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("scanner")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
+                    activeTab === "scanner"
+                      ? "bg-blue-600 text-white shadow-2xs font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <ScanLine size={13} />
+                  <span>QR Intake & Orders</span>
+                </button>
+              </>
+            )}
 
             <button
               type="button"
@@ -174,18 +201,20 @@ function OwnerContent() {
               <span>Shop Setup</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => handleTabChange("staff")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                activeTab === "staff"
-                  ? "bg-teal-600 text-white shadow-2xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Users size={13} />
-              <span>Branch Staff</span>
-            </button>
+            {shops.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("staff")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
+                  activeTab === "staff"
+                    ? "bg-teal-600 text-white shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Users size={13} />
+                <span>Branch Staff</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -198,7 +227,15 @@ function OwnerContent() {
         ) : (
           <>
             {/* Tab 1: Business Analytics */}
-            {activeTab === "analytics" && <OwnerAnalyticsDashboard transactions={transactions} />}
+            {activeTab === "analytics" && (
+              <OwnerAnalyticsDashboard
+                transactions={transactions}
+                shop={shop}
+                shops={shops}
+                user={user}
+                onNavigateTab={handleTabChange}
+              />
+            )}
 
             {/* Tab 2: Walk-In QR Intake & Live Orders */}
             {activeTab === "scanner" && (

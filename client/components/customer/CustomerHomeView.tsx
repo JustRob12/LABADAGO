@@ -28,6 +28,7 @@ interface CustomerHomeViewProps {
   onSelectShop: (shop: LaundryShop) => void;
   onViewOrders: () => void;
   onOpenQR: (shop?: LaundryShop) => void;
+  onOpenMap?: () => void;
   userLocation: [number, number] | null;
   radiusKm: number | null;
   onRadiusChange: (radius: number | null) => void;
@@ -51,6 +52,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
   onSelectShop,
   onViewOrders,
   onOpenQR,
+  onOpenMap,
   userLocation,
   radiusKm,
   onRadiusChange,
@@ -149,14 +151,14 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
           type="button"
           onClick={() => setShowFilterDrawer(!showFilterDrawer)}
           className={`p-3 rounded-2xl border transition-all cursor-pointer shadow-xs flex items-center justify-center shrink-0 ${
-            showFilterDrawer || radiusKm !== null || minRating !== null
+            showFilterDrawer || minRating !== null
               ? "bg-blue-50 border-blue-300 text-blue-600"
               : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
           }`}
-          title="Filter by distance radius and rating"
+          title="Filter and sort shops"
         >
           <SlidersHorizontal size={18} />
-          {(radiusKm !== null || minRating !== null) && (
+          {minRating !== null && (
             <span className="w-2 h-2 rounded-full bg-blue-600 absolute top-2 right-2 ring-2 ring-white" />
           )}
         </button>
@@ -168,7 +170,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <Filter size={15} className="text-blue-600" />
-              <h4 className="text-xs font-bold text-slate-900">Filter &amp; Sort Shops</h4>
+              <h4 className="text-xs font-bold text-slate-900">Filter &amp; Sort Registered Shops</h4>
             </div>
             <button
               type="button"
@@ -179,36 +181,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Radius Filter */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1.5">
-                Distance Radius
-              </label>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {[
-                  { label: "1 km", value: 1 },
-                  { label: "3 km", value: 3 },
-                  { label: "5 km", value: 5 },
-                  { label: "10 km", value: 10 },
-                  { label: "All", value: null },
-                ].map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => onRadiusChange(item.value)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                      radiusKm === item.value
-                        ? "bg-blue-600 text-white shadow-2xs font-bold"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Rating Filter */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1.5">
@@ -371,9 +344,12 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
         <button
           type="button"
           onClick={() => {
-            onRadiusChange(3);
-            const el = document.getElementById("shops-section");
-            if (el) el.scrollIntoView({ behavior: "smooth" });
+            if (onOpenMap) {
+              onOpenMap();
+            } else {
+              const el = document.getElementById("shops-section");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }
           }}
           className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer group"
         >

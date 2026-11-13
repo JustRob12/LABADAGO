@@ -12,7 +12,7 @@ import {
 } from "@/lib/supabase/auth";
 import { UserProfile, LaundryShop, LaundryTransaction, UserRole } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
-import { calculateDistanceKm } from "@/components/customer/LaundryMap";
+import { LaundryMap, calculateDistanceKm } from "@/components/customer/LaundryMap";
 import { CustomerHomeView } from "@/components/customer/CustomerHomeView";
 import { ShopServicesView } from "@/components/customer/ShopServicesView";
 import { ShopRouteNavigation } from "@/components/customer/ShopRouteNavigation";
@@ -28,7 +28,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 
-type CustomerViewTab = "home" | "services" | "route" | "qr" | "orders";
+type CustomerViewTab = "home" | "map" | "services" | "route" | "qr" | "orders";
 
 export function CustomerContent() {
   const router = useRouter();
@@ -38,6 +38,7 @@ export function CustomerContent() {
   const [activeTab, setActiveTab] = useState<CustomerViewTab>(() => {
     const tabParam = searchParams.get("tab");
     const viewParam = searchParams.get("view");
+    if (tabParam === "map") return "map";
     if (tabParam === "qr") return "qr";
     if (tabParam === "orders") return "orders";
     if (viewParam === "route") return "route";
@@ -63,7 +64,9 @@ export function CustomerContent() {
     const viewParam = searchParams.get("view");
     const shopIdParam = searchParams.get("shopId");
 
-    if (tabParam === "qr") {
+    if (tabParam === "map") {
+      setActiveTab("map");
+    } else if (tabParam === "qr") {
       setActiveTab("qr");
     } else if (tabParam === "orders") {
       setActiveTab("orders");
@@ -261,6 +264,8 @@ export function CustomerContent() {
     setActiveTab(tab);
     if (tab === "home") {
       router.push("/customer", { scroll: false });
+    } else if (tab === "map") {
+      router.push("/customer?tab=map", { scroll: false });
     } else if (tab === "qr") {
       const q = selectedShop ? `?tab=qr&shopId=${selectedShop.id}` : "?tab=qr";
       router.push(`/customer${q}`, { scroll: false });
@@ -295,6 +300,7 @@ export function CustomerContent() {
             onSelectShop={handleSelectShop}
             onViewOrders={() => handleSwitchTab("orders")}
             onOpenQR={handlePrepareQR}
+            onOpenMap={() => handleSwitchTab("map")}
             userLocation={userLocation}
             radiusKm={radiusKm}
             onRadiusChange={setRadiusKm}
@@ -303,6 +309,78 @@ export function CustomerContent() {
             sortBy={sortBy}
             onSortChange={setSortBy}
           />
+        </main>
+      ) : activeTab === "map" ? (
+        /* ========================================================================= */
+        /* VIEW: FULL MAP NAVIGATION (Display All Registered Shops)                  */
+        /* ========================================================================= */
+        <main className="flex-1 w-full flex flex-col h-[calc(100vh-64px)]">
+          <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between z-20 shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReturnToHome}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+              >
+                <ChevronLeft size={16} />
+                <span>Return to Home</span>
+              </button>
+              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+              <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <MapPin size={15} className="text-blue-600" />
+                All Registered Laundry Shops ({shops.length})
+              </h2>
+            </div>
+
+            {/* Quick Switcher */}
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => handleSwitchTab("home")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                <Store size={13} />
+                <span className="hidden sm:inline">Home</span>
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-2xs"
+              >
+                <MapPin size={13} />
+                <span>Map</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchTab("qr")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                <QrCode size={13} />
+                <span className="hidden sm:inline">Walk-In QR</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchTab("orders")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                <Package size={13} />
+                <span className="hidden sm:inline">Orders</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full relative">
+            <LaundryMap
+              shops={shops}
+              selectedShop={selectedShop}
+              onSelectShop={(shop) => {
+                setSelectedShop(shop);
+              }}
+              userLocation={userLocation}
+              onUserLocationDetected={(coords) => setUserLocation(coords)}
+              radiusKm={null}
+              onGenerateQR={handlePrepareQR}
+            />
+          </div>
         </main>
       ) : activeTab === "services" && selectedShop ? (
         /* ========================================================================= */
@@ -377,7 +455,7 @@ export function CustomerContent() {
               <button
                 type="button"
                 onClick={() => handleSwitchTab("home")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 <Store size={14} />
                 <span>Home</span>
@@ -385,8 +463,17 @@ export function CustomerContent() {
 
               <button
                 type="button"
+                onClick={() => handleSwitchTab("map")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-slate-600 hover:text-slate-900"
+              >
+                <MapPin size={14} />
+                <span>Map</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleSwitchTab("qr")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "qr"
                     ? "bg-emerald-600 text-white shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
