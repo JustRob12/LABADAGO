@@ -66,8 +66,10 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   const [selectedServiceId, setSelectedServiceId] = useState<string>(
     availableServices[0]?.id || ""
   );
-  const [estimatedWeight, setEstimatedWeight] = useState<string>("5.0");
+  const [estimatedLoads, setEstimatedLoads] = useState<string>("1");
   const [specialNotes, setSpecialNotes] = useState<string>("");
+  const [guestName, setGuestName] = useState<string>("");
+  const [guestPhone, setGuestPhone] = useState<string>("");
 
   const [generatedQRUrl, setGeneratedQRUrl] = useState<string | null>(null);
   const [generatedPayload, setGeneratedPayload] = useState<WalkInQRPayload | null>(null);
@@ -178,22 +180,10 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   const activeService =
     availableServices.find((s) => s.id === selectedServiceId) || availableServices[0];
 
-  const weightNum = parseFloat(estimatedWeight);
-  const validWeight = isNaN(weightNum) ? 0 : weightNum;
+  const parsedLoads = parseInt(estimatedLoads);
+  const loadsNum = isNaN(parsedLoads) || parsedLoads <= 0 ? 1 : parsedLoads;
   const loadCapacity = activeService?.kilos || activeShop?.max_kilo_per_load || 8;
-  const numLoads = validWeight > 0 ? Math.max(1, Math.ceil(validWeight / loadCapacity)) : 1;
-
-  let estimatedAmount = 0;
-  if (activeService) {
-    if (activeService.unit === "load") {
-      estimatedAmount = activeService.price * numLoads;
-    } else if (activeService.unit === "piece") {
-      estimatedAmount = activeService.price;
-    } else {
-      // per kg
-      estimatedAmount = activeService.price * validWeight;
-    }
-  }
+  const estimatedAmount = (activeService?.price || 0) * loadsNum;
 
   const handleGenerateQR = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,18 +191,21 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     setSuccessMessage(null);
 
     const trackingNumber = `LBD-${Math.floor(10000 + Math.random() * 90000)}`;
-    const finalWeight = parseFloat(estimatedWeight);
-    const validFinalWeight = isNaN(finalWeight) || finalWeight <= 0 ? 1.0 : finalWeight;
+    const approxWeight = loadsNum * loadCapacity;
+
+    const resolvedCustomerName = user?.full_name || guestName.trim() || "Walk-In Customer (Guest)";
+    const resolvedCustomerPhone = user?.phone_number || guestPhone.trim() || "";
 
     const payload: WalkInQRPayload = {
       trackingNumber,
-      customerId: user?.id || "guest-customer",
-      customerName: user?.full_name || "Walk-In Customer",
-      customerPhone: user?.phone_number || "",
+      customerId: user?.id && user.id !== "guest-customer" ? user.id : "guest-customer",
+      customerName: resolvedCustomerName,
+      customerPhone: resolvedCustomerPhone,
       shopId: activeShop?.id || selectedShopId,
       shopName: activeShop?.name || "LabadaGo Laundry",
       serviceName: activeService?.service_name || "Wash, Dry & Fold",
-      estimatedWeight: validFinalWeight,
+      estimatedWeight: approxWeight,
+      estimatedLoads: loadsNum,
       estimatedAmount,
       specialNotes: specialNotes.trim() || undefined,
       createdAt: new Date().toISOString(),
@@ -232,6 +225,21 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
 
       // 2. Record transaction in database / store
       await createWalkInTransaction(payload);
+
+      // Persist guest tracking number in localStorage so guests can track their order
+      if (typeof window !== "undefined") {
+        try {
+          const stored: string[] = JSON.parse(
+            localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
+          );
+          if (!stored.includes(payload.trackingNumber)) {
+            stored.unshift(payload.trackingNumber);
+            localStorage.setItem("labadago_guest_tracking_numbers", JSON.stringify(stored));
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       setGeneratedQRUrl(qrDataUrl);
       setGeneratedPayload(payload);
@@ -294,34 +302,12 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
             leftIcon={<ArrowLeft size={14} />}
             className="text-xs self-start sm:self-auto shrink-0"
           >
-            Return to Map & Shops
+            Return to Home &amp; Shops
           </Button>
         )}
       </div>
 
-      {!user || user.id === "guest-customer" ? (
-        <div className="py-12 px-4 text-center max-w-md mx-auto space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-            <User size={26} />
-          </div>
-          <h3 className="text-base font-bold text-slate-900">Account Required</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Guest access is not permitted. Please sign in to your registered account or create an account to generate a scannable Walk-In Fast Pass.
-          </p>
-          <div className="flex items-center justify-center gap-2.5 pt-2">
-            <Link href="/login?redirect=/customer?tab=qr">
-              <Button variant="primary" size="md" className="text-xs">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button variant="success" size="md" className="text-xs">
-                Create Account
-              </Button>
-            </Link>
-          </div>
-        </div>
-      ) : shops.length === 0 ? (
+      {shops.length === 0 ? (
         <div className="py-12 px-4 text-center max-w-md mx-auto space-y-3">
           <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
             <Store size={22} />
@@ -339,7 +325,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
               leftIcon={<MapPin size={14} />}
               className="text-xs mt-2"
             >
-              Back to Map View
+              Back to Home
             </Button>
           )}
         </div>
@@ -350,21 +336,77 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
             <form onSubmit={handleGenerateQR} className="lg:col-span-7 space-y-4">
               {successMessage && <Alert type="success" message={successMessage} />}
 
-              {/* Customer Autofill preview */}
-              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 text-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <User size={14} className="text-blue-600 shrink-0" />
-                  <div>
-                    <span className="font-semibold text-slate-900">{user?.full_name || "Valued Customer"}</span>
-                    {user?.phone_number && (
-                      <span className="text-slate-400 ml-1.5">• {user.phone_number}</span>
-                    )}
+              {/* Customer Profile vs Guest Details Input */}
+              {user && user.id !== "guest-customer" ? (
+                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <User size={14} className="text-blue-600 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-slate-900">{user.full_name || "Valued Customer"}</span>
+                      {user.phone_number && (
+                        <span className="text-slate-400 ml-1.5">• {user.phone_number}</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Registered Profile
+                  </span>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                        G
+                      </div>
+                      <span className="text-xs font-bold text-slate-900">Guest Customer Details</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-md shadow-2xs">
+                      Availing as Guest
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    No account required to avail services! Please enter your name and contact number so the shop can identify your laundry and notify you upon completion.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Your Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder="e.g. Maria Santos"
+                        className="w-full text-xs p-2.5 rounded-xl bg-white border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Mobile Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        placeholder="e.g. 0912 345 6789"
+                        className="w-full text-xs p-2.5 rounded-xl bg-white border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900 font-medium"
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Have an account?</span>
+                    <Link
+                      href={`/login?redirect=${encodeURIComponent("/customer?tab=qr")}`}
+                      className="text-blue-600 font-bold hover:underline"
+                    >
+                      Sign in for saved history &amp; rewards →
+                    </Link>
                   </div>
                 </div>
-                <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  Registered Profile
-                </span>
-              </div>
+              )}
 
               {/* Laundry Shop Selection */}
               <Select
@@ -386,59 +428,78 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                 onChange={(e) => setSelectedServiceId(e.target.value)}
                 options={availableServices.map((srv) => {
                   const kiloTag = srv.kilos
-                    ? ` (${srv.unit === "load" ? `${srv.kilos}kg load` : `up to ${srv.kilos}kg`})`
+                    ? ` (${srv.kilos}kg load)`
                     : "";
                   return {
                     value: srv.id,
-                    label: `${srv.service_name} — ₱${srv.price}/${srv.unit}${kiloTag}`,
+                    label: `${srv.service_name} — ₱${srv.price}/load${kiloTag}`,
                   };
                 })}
                 leftIcon={<Shirt size={15} />}
                 required
               />
 
-              {/* Estimated Weight & Calculation */}
+              {/* Estimated Load(s) & Calculation */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0.5"
-                  max="50"
-                  placeholder="e.g. 5"
-                  label="Estimated Weight (kg)"
-                  value={estimatedWeight}
-                  onChange={(e) => setEstimatedWeight(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (
-                      (e.key === "Backspace" || e.key === "Delete") &&
-                      (estimatedWeight === "0" || estimatedWeight === "0.0" || estimatedWeight === "0.")
-                    ) {
-                      e.preventDefault();
-                      setEstimatedWeight("");
-                    }
-                  }}
-                  onFocus={(e) => {
-                    if (e.target.value === "0" || e.target.value === "0.0") {
-                      setEstimatedWeight("");
-                    } else {
-                      e.target.select();
-                    }
-                  }}
-                  required
-                />
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Estimated Load(s) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="20"
+                      placeholder="1"
+                      value={estimatedLoads}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^[0-9]+$/.test(val)) {
+                          setEstimatedLoads(val);
+                        }
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400 pointer-events-none">
+                      {loadsNum === 1 ? "load" : "loads"}
+                    </span>
+                  </div>
 
-                <div className="flex flex-col justify-end">
-                  <label className="text-xs font-medium text-slate-700 mb-1.5">
+                  {/* Quick Load Preset Chips */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    {[1, 2, 3, 4].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setEstimatedLoads(String(num))}
+                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                          loadsNum === num
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                            : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        {num} {num === 1 ? "Load" : "Loads"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-start">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5">
                     Estimated Total
                   </label>
                   <div className="h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between text-sm">
-                    <span className="text-xs text-slate-500">
-                      {activeService?.unit === "load"
-                        ? `${numLoads} load (${loadCapacity}kg/load)`
-                        : "Approx."}
+                    <span className="text-xs text-slate-600 font-medium">
+                      {loadsNum} {loadsNum === 1 ? "load" : "loads"} ({loadCapacity}kg/load)
                     </span>
-                    <span className="font-bold text-slate-900">₱{estimatedAmount.toFixed(2)}</span>
+                    <span className="font-extrabold text-slate-900">₱{estimatedAmount.toFixed(2)}</span>
                   </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    Rate: ₱{activeService?.price || 0} / load (up to {loadCapacity}kg allowance)
+                  </p>
                 </div>
               </div>
 
@@ -477,20 +538,20 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                         <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                         Awaiting Drop-off Scan at Counter
                       </span>
-                    ) : activeTx.status === "Received" ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
-                        <CheckCircle2 size={13} className="text-blue-600" />
-                        Clothes Received at Counter ✓
-                      </span>
                     ) : activeTx.status === "Ready" ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
                         <CheckCircle2 size={13} className="text-emerald-600" />
-                        Ready for Pickup!
+                        Ready to Pick Up!
+                      </span>
+                    ) : activeTx.status === "Completed" ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 shadow-2xs">
+                        <CheckCircle2 size={13} className="text-slate-600" />
+                        Completed &amp; Claimed
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 shadow-2xs">
-                        <Clock size={13} className="text-indigo-600" />
-                        Laundry Status: {activeTx.status}
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
+                        <Clock size={13} className="text-blue-600 animate-spin" />
+                        Processing in Shop
                       </span>
                     )}
                   </div>
@@ -522,7 +583,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                     </div>
 
                     <p className="text-xs font-bold text-slate-900 mt-2">
-                      {generatedPayload.serviceName} • {generatedPayload.estimatedWeight} kg
+                      {generatedPayload.serviceName} • {generatedPayload.estimatedLoads || Math.max(1, Math.round(generatedPayload.estimatedWeight / 8))} {(generatedPayload.estimatedLoads || Math.max(1, Math.round(generatedPayload.estimatedWeight / 8))) === 1 ? "load" : "loads"}
                     </p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Approx. ₱{generatedPayload.estimatedAmount.toFixed(2)} • {generatedPayload.shopName}
@@ -650,22 +711,22 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                           {tx.status === "Pending" ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                              Pending Drop-off
-                            </span>
-                          ) : tx.status === "Received" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                              <CheckCircle2 size={11} className="text-blue-600" />
-                              Received at Counter
+                              Awaiting Scan
                             </span>
                           ) : tx.status === "Ready" ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                               <CheckCircle2 size={11} className="text-emerald-600" />
-                              Ready for Pickup
+                              Ready to Pick Up
+                            </span>
+                          ) : tx.status === "Completed" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 size={11} className="text-slate-600" />
+                              Completed
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                              <Clock size={11} className="text-indigo-600" />
-                              {tx.status}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                              <Clock size={11} className="text-blue-600 animate-spin" />
+                              Processing
                             </span>
                           )}
                         </div>
@@ -676,7 +737,7 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
                             {tx.shop_name || "LabadaGo Partner Shop"}
                           </h4>
                           <p className="text-[11px] text-slate-500 mt-0.5">
-                            {tx.service_name} • {tx.weight_kg} kg
+                            {tx.service_name} • {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}
                           </p>
                         </div>
 

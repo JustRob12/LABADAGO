@@ -27,6 +27,11 @@ import {
   Banknote,
   Smartphone,
   Eye,
+  PackageCheck,
+  Waves,
+  Wind,
+  Bell,
+  ShoppingBag,
 } from "lucide-react";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
@@ -36,14 +41,15 @@ interface CustomerOrderTrackerProps {
   onReturnToMap?: () => void;
 }
 
-const STATUS_STEPS: { status: OrderStatus; label: string; shortLabel: string }[] = [
-  { status: "Pending", label: "Pending", shortLabel: "Pending" },
-  { status: "Received", label: "Received", shortLabel: "Received" },
-  { status: "Washing", label: "Washing", shortLabel: "Washing" },
-  { status: "Drying", label: "Drying", shortLabel: "Drying" },
-  { status: "Folding", label: "Folding", shortLabel: "Folding" },
-  { status: "Ready", label: "Ready", shortLabel: "Ready" },
-  { status: "Completed", label: "Completed", shortLabel: "Completed" },
+const STATUS_STEPS: {
+  key: string;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}[] = [
+  { key: "Processing", label: "Processing", shortLabel: "Processing", icon: Waves },
+  { key: "Ready", label: "Ready to Pick Up", shortLabel: "Ready to Pick Up", icon: ShoppingBag },
+  { key: "Completed", label: "Completed", shortLabel: "Completed", icon: CheckCircle2 },
 ];
 
 export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
@@ -150,30 +156,52 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
     }
   };
 
-  const getStepIndex = (status: OrderStatus): number => {
-    const idx = STATUS_STEPS.findIndex((s) => s.status === status);
-    return idx >= 0 ? idx : 0;
+  const getStepIndex = (status: OrderStatus | string): number => {
+    if (status === "Pending") return -1; // Not yet scanned at shop
+    if (status === "Ready" || status === "Ready to Pick Up") return 1;
+    if (status === "Completed") return 2;
+    return 0; // "Processing", "Received", "Washing", "Drying", "Folding"
   };
 
-  const getStatusBadge = (status: OrderStatus) => {
-    const map: Record<OrderStatus, { bg: string; text: string; border: string; label: string }> = {
-      Pending: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "Pending Drop-off" },
-      Received: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", label: "Clothes Received" },
-      Washing: { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-200", label: "Washing" },
-      Drying: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "Drying" },
-      Folding: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200", label: "Folding" },
-      Ready: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "Ready for Pickup" },
-      Completed: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200", label: "Completed" },
-      Cancelled: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", label: "Cancelled" },
-    };
-    return (
-      map[status] || {
-        bg: "bg-slate-50",
+  const getStatusBadge = (status: OrderStatus | string) => {
+    if (status === "Pending") {
+      return {
+        bg: "bg-amber-50",
+        text: "text-amber-700",
+        border: "border-amber-200",
+        label: "Awaiting Counter Scan",
+      };
+    }
+    if (status === "Ready" || status === "Ready to Pick Up") {
+      return {
+        bg: "bg-emerald-50",
+        text: "text-emerald-700",
+        border: "border-emerald-200",
+        label: "Ready to Pick Up",
+      };
+    }
+    if (status === "Completed") {
+      return {
+        bg: "bg-slate-100",
         text: "text-slate-700",
         border: "border-slate-200",
-        label: status,
-      }
-    );
+        label: "Completed",
+      };
+    }
+    if (status === "Cancelled") {
+      return {
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        border: "border-rose-200",
+        label: "Cancelled",
+      };
+    }
+    return {
+      bg: "bg-blue-50",
+      text: "text-blue-700",
+      border: "border-blue-200",
+      label: "Processing",
+    };
   };
 
   return (
@@ -285,35 +313,60 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                 </div>
               </div>
 
-              {/* Progress Stepper Bar (7 Steps) */}
-              <div className="py-2">
-                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+              {/* Progress Stepper Bar (Simplified 3 Stages: Processing, Ready to Pick Up, Completed) */}
+              <div className="py-2.5">
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
                   {STATUS_STEPS.map((stepObj, idx) => {
-                    const isDone = idx <= currentStep;
-                    const isCurrent = idx === currentStep;
+                    const isDone = currentStep >= 0 && idx <= currentStep;
+                    const isCurrent = currentStep >= 0 && idx === currentStep;
+                    const StepIcon = stepObj.icon;
 
                     return (
-                      <div key={stepObj.status} className="flex flex-col items-center text-center">
+                      <div key={stepObj.key} className="flex flex-col items-center text-center group">
+                        {/* Segment Bar */}
                         <div
-                          className={`w-full h-1.5 rounded-full mb-1.5 transition-all ${
+                          className={`w-full h-1.5 rounded-full mb-1.5 sm:mb-2 transition-all ${
                             isCurrent
-                              ? stepObj.status === "Pending"
-                                ? "bg-amber-500 ring-2 ring-amber-400/40"
-                                : "bg-blue-600 ring-2 ring-blue-400/40"
+                              ? stepObj.key === "Ready"
+                                ? "bg-emerald-500 ring-2 ring-emerald-400/40"
+                                : stepObj.key === "Completed"
+                                ? "bg-emerald-600 ring-2 ring-emerald-400/40"
+                                : "bg-blue-600 ring-2 ring-blue-400/40 animate-pulse"
                               : isDone
                               ? "bg-blue-600"
                               : "bg-slate-200"
                           }`}
                         />
-                        <span
-                          className={`text-[9px] sm:text-[10px] font-medium truncate w-full ${
+
+                        {/* Simple Step Icon Circle */}
+                        <div
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mb-1 transition-all ${
                             isCurrent
-                              ? stepObj.status === "Pending"
-                                ? "text-amber-600 font-bold"
-                                : "text-blue-600 font-bold"
+                              ? stepObj.key === "Ready"
+                                ? "bg-emerald-500 text-white shadow-xs ring-2 sm:ring-4 ring-emerald-100"
+                                : stepObj.key === "Completed"
+                                ? "bg-emerald-600 text-white shadow-xs ring-2 sm:ring-4 ring-emerald-100"
+                                : "bg-blue-600 text-white shadow-xs ring-2 sm:ring-4 ring-blue-100"
                               : isDone
-                              ? "text-slate-700"
-                              : "text-slate-400"
+                              ? "bg-blue-100 text-blue-700 border border-blue-200"
+                              : "bg-slate-100 text-slate-400 border border-slate-200"
+                          }`}
+                        >
+                          <StepIcon size={14} className="shrink-0" />
+                        </div>
+
+                        {/* Step Label */}
+                        <span
+                          className={`text-[10px] sm:text-xs truncate w-full ${
+                            isCurrent
+                              ? stepObj.key === "Ready"
+                                ? "text-emerald-700 font-extrabold"
+                                : stepObj.key === "Completed"
+                                ? "text-emerald-700 font-extrabold"
+                                : "text-blue-600 font-extrabold"
+                              : isDone
+                              ? "text-slate-800 font-semibold"
+                              : "text-slate-400 font-medium"
                           }`}
                           title={stepObj.label}
                         >
@@ -330,69 +383,33 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/70 border border-amber-200/80 text-amber-900 text-xs">
                   <Clock size={16} className="text-amber-600 shrink-0 mt-0.5 animate-pulse" />
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-amber-900">Pending Drop-off: Clothes Not Yet Received</p>
+                    <p className="font-semibold text-amber-900">Awaiting Counter Scan: Clothes Not Yet Received</p>
                     <p className="text-amber-700 text-[11px] leading-relaxed">
-                      Please bring your laundry to <strong>{tx.shop_name || "the shop"}</strong> and show your QR Fast Pass. Once the counter staff scans your code, your clothes will be officially marked as <strong>Received</strong>.
+                      Please bring your laundry to <strong>{tx.shop_name || "the shop"}</strong> and show your QR Fast Pass. Once the counter staff scans your code, your clothes will immediately start <strong>Processing</strong>.
                     </p>
                   </div>
                 </div>
               )}
 
-              {isReceived && (
+              {(tx.status === "Received" || tx.status === "Washing" || tx.status === "Drying" || tx.status === "Folding" || (tx.status as string) === "Processing") && (
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-blue-50/70 border border-blue-200/80 text-blue-900 text-xs">
-                  <CheckCircle2 size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                  <Waves size={16} className="text-blue-600 shrink-0 mt-0.5 animate-pulse" />
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-blue-900">Clothes Received at Counter</p>
+                    <p className="font-semibold text-blue-900">Order in Progress: Processing</p>
                     <p className="text-blue-700 text-[11px] leading-relaxed">
-                      Your clothes have been scanned, verified, and weighed ({tx.weight_kg} kg) by the counter staff. They are queued for the washing cycle.
+                      Your clothes are currently being processed at <strong>{tx.shop_name || "the shop"}</strong>{tx.machine_number ? ` (${tx.machine_number})` : ""}. Feel free to go shopping or relax — we&apos;ll notify you as soon as they are <strong>Ready to Pick Up</strong>!
                     </p>
                   </div>
                 </div>
               )}
 
-              {tx.status === "Washing" && (
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-cyan-50/70 border border-cyan-200/80 text-cyan-900 text-xs">
-                  <Shirt size={16} className="text-cyan-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-cyan-900">Washing Machine in Progress</p>
-                    <p className="text-cyan-700 text-[11px] leading-relaxed">
-                      Your laundry is currently in the washing cycle with detergent and softener.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {tx.status === "Drying" && (
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/70 border border-amber-200/80 text-amber-900 text-xs">
-                  <Clock size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-amber-900">Drying Cycle Active</p>
-                    <p className="text-amber-700 text-[11px] leading-relaxed">
-                      Clothes have moved to the heated dryer machine.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {tx.status === "Folding" && (
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-indigo-50/70 border border-indigo-200/80 text-indigo-900 text-xs">
-                  <Package size={16} className="text-indigo-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-indigo-900">Folding & Packaging</p>
-                    <p className="text-indigo-700 text-[11px] leading-relaxed">
-                      Your clean clothes are being neatly folded and bagged.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {tx.status === "Ready" && (
+              {(tx.status === "Ready" || (tx.status as string) === "Ready to Pick Up") && (
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-xs">
-                  <Sparkles size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <ShoppingBag size={16} className="text-emerald-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-emerald-900">Ready for Pick-Up!</p>
+                    <p className="font-semibold text-emerald-900">Ready to Pick Up!</p>
                     <p className="text-emerald-700 text-[11px] leading-relaxed">
-                      Your fresh laundry is ready! Please proceed to the counter and show tracking code <strong>{tx.tracking_number}</strong>.
+                      Your fresh laundry is ready! Please proceed to the counter at <strong>{tx.shop_name || "the shop"}</strong> and show tracking code <strong>{tx.tracking_number}</strong>.
                     </p>
                   </div>
                 </div>
@@ -480,7 +497,7 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               {/* Order Meta Footer */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span>Weight: <strong className="text-slate-800">{tx.weight_kg} kg</strong></span>
+                  <span>Load: <strong className="text-slate-800">{Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}</strong></span>
 
                   {/* Machine Number Badge if assigned by staff */}
                   {tx.machine_number && (

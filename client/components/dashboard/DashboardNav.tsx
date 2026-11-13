@@ -20,6 +20,7 @@ import {
   Loader2,
   Users,
   Lock,
+  Store,
 } from "lucide-react";
 
 interface DashboardNavProps {
@@ -235,8 +236,8 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
-                    <MapPin size={14} className="text-blue-600" />
-                    Map &amp; Shops
+                    <Store size={14} className="text-blue-600" />
+                    Home &amp; Shops
                   </span>
                 </Link>
 
@@ -406,8 +407,8 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                           onClick={() => setDropdownOpen(false)}
                           className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
                         >
-                          <MapPin size={14} className="text-blue-600" />
-                          <span>Customer Map & Shops</span>
+                          <Store size={14} className="text-blue-600" />
+                          <span>Customer Home &amp; Shops</span>
                         </Link>
                         <Link
                           href="/customer?tab=qr"
@@ -602,13 +603,13 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             <Link
               href="/customer"
               className={`flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-1.5 sm:px-3 rounded-xl transition-colors ${
-                pathname === "/customer" && (!currentTab || currentTab === "map")
+                pathname === "/customer" && (!currentTab || currentTab === "home")
                   ? "text-blue-600 font-bold bg-blue-50"
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              <MapPin size={18} />
-              <span>Map</span>
+              <Store size={18} />
+              <span>Home</span>
             </Link>
 
             <Link

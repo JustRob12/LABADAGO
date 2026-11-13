@@ -583,7 +583,7 @@ export async function saveLaundryShop(shop: LaundryShop): Promise<{
               service_name: srv.service_name.trim(),
               description: desc,
               price: Number(srv.price) || 0,
-              unit: srv.unit || "kg",
+              unit: "load",
               estimated_minutes: srv.estimated_minutes || 90,
               is_available: srv.is_available !== false,
             };
@@ -719,9 +719,16 @@ export async function createWalkInTransaction(
   };
 
   try {
+    const dbCustomerId =
+      newTx.customer_id &&
+      newTx.customer_id !== "guest-customer" &&
+      newTx.customer_id.length > 20
+        ? newTx.customer_id
+        : null;
+
     await supabase.from("transactions").insert({
       tracking_number: newTx.tracking_number,
-      customer_id: newTx.customer_id,
+      customer_id: dbCustomerId,
       shop_id: newTx.shop_id,
       customer_name: newTx.customer_name,
       customer_phone: newTx.customer_phone,
@@ -785,6 +792,34 @@ export async function getLaundryTransactions(
 }
 
 /**
+ * Fetch transactions matching an array of tracking numbers (for guests and quick lookups)
+ */
+export async function getTransactionsByTrackingNumbers(
+  trackingNumbers: string[]
+): Promise<LaundryTransaction[]> {
+  if (!trackingNumbers || trackingNumbers.length === 0) return [];
+  const cleanList = trackingNumbers.map((t) => t.trim().toUpperCase());
+
+  try {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .in("tracking_number", cleanList)
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch {
+    // fallback
+  }
+
+  return localTransactionsStore.filter((tx) =>
+    cleanList.includes(tx.tracking_number.toUpperCase())
+  );
+}
+
+/**
  * Look up a transaction by tracking number across the database,
  * retrieving its associated shop name and details to verify shop affiliation.
  */
@@ -843,8 +878,10 @@ export async function updateTransactionStatus(
   paymentProofUrl?: string,
   paymentReferenceNo?: string
 ): Promise<boolean> {
+  // Map "Processing" to "Washing" in the database to satisfy the postgres check constraint
+  const dbStatus = newStatus === "Processing" ? "Washing" : newStatus;
   const updatePayload: Record<string, unknown> = {
-    status: newStatus,
+    status: dbStatus,
     updated_at: new Date().toISOString(),
   };
   if (weightKg !== undefined && !isNaN(weightKg)) {

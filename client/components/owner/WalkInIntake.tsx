@@ -31,6 +31,7 @@ import {
   Building2,
   Receipt,
   Smartphone,
+  Loader2,
 } from "lucide-react";
 import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
@@ -101,6 +102,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
 
 
   const incomingWalkIns = transactions.filter((t) => t.is_walkin && t.status === "Pending");
+  const scannedTransactions = transactions.filter((t) => t.status !== "Pending");
   const allWalkIns = transactions.filter((t) => t.is_walkin);
   const displayedWalkIns = walkInFilter === "pending" ? incomingWalkIns : allWalkIns;
 
@@ -207,22 +209,22 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         service_name: parsedPayload.serviceName || "Wash, Dry & Fold",
         weight_kg: Number(parsedPayload.estimatedWeight) || 5.0,
         total_amount: Number(parsedPayload.estimatedAmount) || 150.0,
-        status: "Received", // Counter scan confirms clothes received!
+        status: "Washing", // Counter scan confirms clothes received and tags as Processing!
         payment_status: "Unpaid",
         is_walkin: true,
         special_notes: parsedPayload.specialNotes || "",
         created_at: parsedPayload.createdAt || new Date().toISOString(),
       };
-      await updateTransactionStatus(reconstructed.id, "Received");
+      await updateTransactionStatus(reconstructed.id, "Washing");
       setScannedTx(reconstructed);
       setActualWeight(String(reconstructed.weight_kg));
       setSelectedPaymentTiming("pay_on_complete");
       setScanInput(reconstructed.tracking_number);
       setIntakeSuccess(
-        `QR Scanned! Clothes for ${reconstructed.customer_name} (${reconstructed.tracking_number}) verified and marked as RECEIVED.`
+        `QR Scanned! Clothes for ${reconstructed.customer_name} (${reconstructed.tracking_number}) verified and tagged as PROCESSING.`
       );
       setSmsNotification(
-        `SMS sent to ${reconstructed.customer_phone}: "LabadaGo: Your laundry (${reconstructed.tracking_number}) has been SCANNED and RECEIVED at the counter!"`
+        `SMS sent to ${reconstructed.customer_phone}: "LabadaGo: Your laundry (${reconstructed.tracking_number}) has been SCANNED at the counter and is now PROCESSING!"`
       );
       onTransactionsUpdated();
       return;
@@ -259,7 +261,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
 
       await updateTransactionStatus(
         scannedTx.id,
-        "Received",
+        "Washing",
         validWeight,
         paymentStatus,
         calculatedTotal,
@@ -273,18 +275,18 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       );
 
       setIntakeSuccess(
-        `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as RECEIVED at scale weight ${validWeight}kg${
+        `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as PROCESSING at scale weight ${validWeight}kg${
           machineNumber ? ` (Assigned to ${machineNumber})` : ""
-        }. Payment arrangement: ${
+        }. Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
         }.`
       );
       setSmsNotification(
-        `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) was received at ${validWeight}kg${
+        `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been received at ${validWeight}kg${
           machineNumber ? ` (${machineNumber})` : ""
-        }. Payment: ${
+        } and is now PROCESSING! Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
@@ -344,7 +346,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       setIntakeSuccess(
         `Walk-in load for ${scannedTx.customer_name} accepted! Weighed at ${validWeight}kg${
           machineNumber ? ` in ${machineNumber}` : ""
-        }. Machine timer started. Status updated to Washing. Payment: ${
+        }. Status updated to Processing. Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
@@ -353,7 +355,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       setSmsNotification(
         `SMS Notification sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been weighed (${validWeight}kg)${
           machineNumber ? ` and is in ${machineNumber}` : ""
-        } and is now WASHING! Payment: ${
+        } and is now PROCESSING! Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
@@ -485,7 +487,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                       {tx.service_name}
                     </span>
                     <span className="font-bold text-slate-900">
-                      {tx.weight_kg} kg • ₱{tx.total_amount.toFixed(2)}
+                      {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"} • ₱{tx.total_amount.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -850,7 +852,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 disabled={isSubmittingIntake}
                 className="order-1 sm:order-3"
               >
-                {isSubmittingIntake ? "Saving Intake..." : "Accept & Start Washing"}
+                {isSubmittingIntake ? "Saving Intake..." : "Accept & Start Processing"}
               </Button>
             </div>
           </div>
@@ -866,8 +868,8 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
               Update service progress and trigger automated customer notifications.
             </p>
           </div>
-          <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
-            {transactions.length} Total Orders
+          <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+            {scannedTransactions.length} Total Orders
           </span>
         </div>
 
@@ -878,7 +880,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 <th className="py-2.5 px-3">Tracking</th>
                 <th className="py-2.5 px-3">Customer</th>
                 <th className="py-2.5 px-3">Service</th>
-                <th className="py-2.5 px-3">Weight</th>
+                <th className="py-2.5 px-3">Loads</th>
                 <th className="py-2.5 px-3">Amount</th>
                 <th className="py-2.5 px-3">Payment</th>
                 <th className="py-2.5 px-3">Status</th>
@@ -886,14 +888,14 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {transactions.length === 0 ? (
+              {scannedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
-                    No active transactions or walk-in orders yet.
+                    No active scanned orders yet. Incoming walk-in passes appear in the queue above until scanned.
                   </td>
                 </tr>
               ) : (
-                transactions.map((tx) => (
+                scannedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-3 font-mono font-bold text-blue-600">
                       <div className="flex flex-col gap-0.5">
@@ -918,7 +920,9 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-slate-600">{tx.weight_kg} kg</td>
+                    <td className="py-3 px-3 text-slate-600 font-medium">
+                      {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}
+                    </td>
                     <td className="py-3 px-3 font-bold text-slate-900">₱{tx.total_amount.toFixed(2)}</td>
                     <td className="py-3 px-3">
                       {tx.payment_status === "Paid" ? (
@@ -958,39 +962,40 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      {tx.status === "Pending" ? (
-                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1 w-fit">
-                          <Clock size={11} className="text-amber-600 animate-pulse" />
-                          Pending Scan
-                        </span>
-                      ) : tx.status === "Received" ? (
-                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1 w-fit">
-                          <CheckCircle2 size={11} className="text-blue-600" />
-                          Received
-                        </span>
-                      ) : tx.status === "Ready" ? (
-                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1 w-fit">
+                      {tx.status === "Ready" ? (
+                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-bold bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1 w-fit">
                           <CheckCircle2 size={11} className="text-emerald-600" />
-                          Ready
+                          Ready to Pick Up
+                        </span>
+                      ) : tx.status === "Completed" ? (
+                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-slate-100 text-slate-700 border-slate-200 flex items-center gap-1 w-fit">
+                          <CheckCircle2 size={11} className="text-slate-600" />
+                          Completed
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-medium bg-slate-50 text-slate-700 border-slate-200">
-                          {tx.status}
+                        <span className="px-2 py-0.5 rounded-md border text-[11px] font-bold bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1 w-fit">
+                          <Loader2 size={11} className="text-blue-600 animate-spin" />
+                          Processing
                         </span>
                       )}
                     </td>
                     <td className="py-3 px-3 text-right">
                       <select
-                        value={tx.status}
-                        onChange={(e) => handleStatusChange(tx.id, e.target.value as OrderStatus)}
-                        className="h-7 px-2 text-xs rounded-md border border-slate-200 bg-white font-medium text-slate-700"
+                        value={
+                          tx.status === "Ready"
+                            ? "Ready"
+                            : tx.status === "Completed"
+                            ? "Completed"
+                            : "Processing"
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value as "Processing" | "Ready" | "Completed";
+                          handleStatusChange(tx.id, val === "Processing" ? "Washing" : val);
+                        }}
+                        className="h-7 px-2 text-xs rounded-md border border-slate-300 bg-white font-semibold text-slate-800 shadow-2xs focus:ring-1 focus:ring-blue-500"
                       >
-                        <option value="Pending">Pending (Not Scanned)</option>
-                        <option value="Received">Received (Clothes at Counter)</option>
-                        <option value="Washing">Washing</option>
-                        <option value="Drying">Drying</option>
-                        <option value="Folding">Folding</option>
-                        <option value="Ready">Ready</option>
+                        <option value="Processing">Processing</option>
+                        <option value="Ready">Ready to Pick Up</option>
                         <option value="Completed">Completed</option>
                       </select>
                     </td>

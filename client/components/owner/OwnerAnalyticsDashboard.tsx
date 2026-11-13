@@ -27,15 +27,18 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
 }) => {
   const [timeRange, setTimeRange] = useState<"week" | "month" | "year">("week");
 
-  // Calculate actual revenue from real transactions
-  const totalRevenue = transactions.reduce((sum, tx) => {
+  // Filter out unscanned ("Pending") orders - only count orders received and scanned at counter
+  const scannedTransactions = transactions.filter((tx) => tx.status !== "Pending");
+
+  // Calculate actual revenue from real scanned transactions
+  const totalRevenue = scannedTransactions.reduce((sum, tx) => {
     if (tx.payment_status === "Paid" || tx.status === "Completed") {
       return sum + (Number(tx.total_amount) || 0);
     }
     return sum;
   }, 0);
 
-  const cashRevenue = transactions.reduce((sum, tx) => {
+  const cashRevenue = scannedTransactions.reduce((sum, tx) => {
     if (
       (tx.payment_status === "Paid" || tx.status === "Completed") &&
       (!tx.payment_method || tx.payment_method === "Cash")
@@ -45,7 +48,7 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
     return sum;
   }, 0);
 
-  const gcashRevenue = transactions.reduce((sum, tx) => {
+  const gcashRevenue = scannedTransactions.reduce((sum, tx) => {
     if (
       (tx.payment_status === "Paid" || tx.status === "Completed") &&
       tx.payment_method?.toLowerCase().includes("gcash")
@@ -55,20 +58,20 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
     return sum;
   }, 0);
 
-  const completedOrders = transactions.filter(
-    (tx) => tx.status === "Completed" || tx.status === "Ready"
+  const completedOrders = scannedTransactions.filter(
+    (tx) => tx.status === "Completed"
   ).length;
 
-  const activeOrders = transactions.filter(
+  const activeOrders = scannedTransactions.filter(
     (tx) => tx.status !== "Completed" && tx.status !== "Cancelled"
   ).length;
 
-  // Unique customer count
+  // Unique customer count from scanned orders
   const uniqueCustomers = new Set(
-    transactions.map((tx) => tx.customer_phone || tx.customer_name).filter(Boolean)
+    scannedTransactions.map((tx) => tx.customer_phone || tx.customer_name).filter(Boolean)
   ).size;
 
-  const hasData = transactions.length > 0;
+  const hasData = scannedTransactions.length > 0;
 
   return (
     <div className="space-y-6">
@@ -198,22 +201,32 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
               <h3 className="text-sm font-bold text-slate-900">Recent Service Activity</h3>
               <p className="text-xs text-slate-500">Latest completed and in-progress laundry loads</p>
             </div>
-            <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
-              {transactions.length} Total Logs
+            <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+              {scannedTransactions.length} Total Orders
             </span>
           </div>
 
           <div className="divide-y divide-slate-100">
-            {transactions.slice(0, 5).map((tx) => (
+            {scannedTransactions.slice(0, 5).map((tx) => (
               <div key={tx.id} className="py-3 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-semibold text-slate-900">{tx.service_name} • {tx.weight_kg} kg</p>
+                  <p className="font-semibold text-slate-900">{tx.service_name} • {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5 font-mono">{tx.tracking_number} • {tx.customer_name}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-slate-900">₱{tx.total_amount.toFixed(2)}</p>
-                  <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                    {tx.status}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    tx.status === "Ready"
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      : tx.status === "Completed"
+                      ? "text-slate-700 bg-slate-100 border-slate-200"
+                      : "text-blue-700 bg-blue-50 border-blue-200"
+                  }`}>
+                    {tx.status === "Ready"
+                      ? "Ready to Pick Up"
+                      : tx.status === "Completed"
+                      ? "Completed"
+                      : "Processing"}
                   </span>
                 </div>
               </div>

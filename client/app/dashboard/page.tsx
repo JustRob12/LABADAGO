@@ -234,13 +234,13 @@ function DashboardContent() {
                   <Link href="/customer">
                     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
                       <div className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                        <MapPin size={18} />
+                        <Store size={18} />
                       </div>
                       <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        Interactive Map & Shops
+                        Browse Nearby Laundry Shops
                       </h4>
                       <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        View nearby laundry shops on Leaflet map, check queue availability, and get route navigation.
+                        Find top-rated laundry shops, explore services and pricing, and get turn-by-turn route navigation.
                       </p>
                     </div>
                   </Link>

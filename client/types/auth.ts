@@ -137,6 +137,7 @@ export interface LaundryShop {
 
 export type OrderStatus =
   | "Pending"
+  | "Processing"
   | "Received"
   | "Washing"
   | "Drying"
@@ -184,6 +185,7 @@ export interface WalkInQRPayload {
   shopName: string;
   serviceName: string;
   estimatedWeight: number;
+  estimatedLoads?: number;
   estimatedAmount: number;
   specialNotes?: string;
   createdAt: string;

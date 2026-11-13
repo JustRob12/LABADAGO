@@ -189,10 +189,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     return () => clearInterval(interval);
   }, [assignedShop?.id]);
 
-  // Derived order counts for quick counter metrics
+  // Derived order counts for quick counter metrics (unscanned 'Pending' orders do NOT count towards Total Orders)
   const pendingOrders = useMemo(() => transactions.filter((t) => t.status === "Pending"), [transactions]);
   const washingOrders = useMemo(
-    () => transactions.filter((t) => ["Received", "Washing", "Drying", "Folding"].includes(t.status)),
+    () => transactions.filter((t) => ["Received", "Washing", "Drying", "Folding", "Processing"].includes(t.status)),
     [transactions]
   );
   const readyOrders = useMemo(() => transactions.filter((t) => t.status === "Ready"), [transactions]);
@@ -207,6 +207,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       }),
     [transactions]
   );
+  const totalScannedOrders = useMemo(() => transactions.filter((t) => t.status !== "Pending").length, [transactions]);
 
   // Process scanned QR payload or tracking code
   const handleProcessScan = async (rawCode: string) => {
@@ -317,8 +318,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
           : 50;
       const totalAmount = Math.round(numericWeight * ratePerKg);
 
-      // If staff assigned a machine, set status to Washing; otherwise Received
-      const nextStatus: OrderStatus = machineNumber.trim() ? "Washing" : "Received";
+      // Tag as Processing (saved as Washing to satisfy DB constraint)
+      const nextStatus: OrderStatus = "Washing";
       const finalPaymentStatus: PaymentStatus =
         paymentChoice === "paid" ? "Paid" : activeScannedTx.payment_status;
 
@@ -348,7 +349,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       if (success) {
         showToast(
           "success",
-          `Received order #${activeScannedTx.tracking_number}! ${
+          `Order #${activeScannedTx.tracking_number} received & tagged as Processing! ${
             machineNumber ? `Assigned to ${machineNumber}.` : ""
           } ${paymentChoice === "paid" ? `(Paid via ${staffPayMethod})` : ""}`
         );
@@ -602,7 +603,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider">Ready to Give</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Ready to Pick Up</span>
               <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping" />
             </div>
             <p className="text-2xl font-black text-white mt-1">{readyOrders.length}</p>
@@ -618,11 +619,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider">In Machines</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Processing</span>
               <Shirt size={13} className="text-blue-400" />
             </div>
             <p className="text-2xl font-black text-white mt-1">{washingOrders.length}</p>
-            <p className="text-[10px] text-slate-400 truncate">Washing / Drying</p>
+            <p className="text-[10px] text-slate-400 truncate">Active In Shop</p>
           </button>
 
           <button
@@ -634,7 +635,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider">To Receive</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Pending Scan</span>
               <Clock size={13} className="text-amber-400" />
             </div>
             <p className="text-2xl font-black text-white mt-1">{pendingOrders.length}</p>
@@ -758,7 +759,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              <span>Ready to Give</span>
+              <span>Ready to Pick Up</span>
               <span className="px-1.5 py-0.2 bg-teal-950 text-teal-400 border border-teal-800 rounded-full text-[10px]">
                 {readyOrders.length}
               </span>
@@ -772,7 +773,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              <span>In Machines</span>
+              <span>Processing</span>
               <span className="px-1.5 py-0.2 bg-blue-950 text-blue-400 border border-blue-800 rounded-full text-[10px]">
                 {washingOrders.length}
               </span>
@@ -786,7 +787,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              <span>Pending Intake</span>
+              <span>Pending Scan</span>
               <span className="px-1.5 py-0.2 bg-amber-950 text-amber-400 border border-amber-800 rounded-full text-[10px]">
                 {pendingOrders.length}
               </span>
@@ -844,7 +845,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-400">
-                          {tx.service_name} • {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
+                          {tx.service_name} • {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"} • ₱{tx.total_amount.toFixed(2)}
                         </p>
                         {renderPaymentBadge(tx)}
                       </div>
@@ -883,7 +884,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                             {tx.tracking_number}
                           </span>
                           <span className="text-[10px] uppercase font-bold bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded-md">
-                            {tx.status}
+                            Processing
                           </span>
                           {tx.machine_number ? (
                             <span className="text-[10px] font-bold bg-blue-900/60 text-blue-200 border border-blue-700 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -900,7 +901,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           {tx.customer_name}
                         </div>
                         <p className="text-xs text-slate-400">
-                          {tx.service_name} • {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
+                          {tx.service_name} • {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"} • ₱{tx.total_amount.toFixed(2)}
                         </p>
                         {renderPaymentBadge(tx)}
                       </div>
@@ -943,7 +944,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         </div>
                         <div className="text-sm font-bold text-white">{tx.customer_name}</div>
                         <p className="text-xs text-slate-400">
-                          {tx.service_name} • Est. {tx.weight_kg}kg • ₱{tx.total_amount.toFixed(2)}
+                          {tx.service_name} • Est. {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"} • ₱{tx.total_amount.toFixed(2)}
                         </p>
                         {renderPaymentBadge(tx)}
                       </div>
@@ -1260,7 +1261,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5 order-1 sm:order-2"
                     >
                       <CheckCircle2 size={15} />
-                      {isProcessing ? "Processing..." : "Confirm & Receive Clothes"}
+                      {isProcessing ? "Processing..." : "Confirm & Start Processing"}
                     </Button>
                   </div>
                 </div>
@@ -1409,7 +1410,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs py-2.5 flex items-center justify-center gap-1.5"
                     >
                       <Sparkles size={15} />
-                      Laundry is Done! Advance to &quot;Ready for Pickup&quot;
+                      Laundry is Done! Advance to &quot;Ready to Pick Up&quot;
                     </Button>
 
                     <Button

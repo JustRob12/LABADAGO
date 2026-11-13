@@ -227,9 +227,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
                 ...s,
                 service_name: newServiceName.trim(),
                 price: isNaN(priceNum) ? 0 : priceNum,
-                unit: newServiceUnit,
+                unit: "load",
                 kilos: kilosVal,
-                description: kilosVal ? `Up to ${kilosVal} kg` : s.description || "",
+                description: kilosVal ? `Up to ${kilosVal} kg per load` : s.description || "",
               }
             : s
         ),
@@ -241,9 +241,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
         shop_id: shopData.id,
         service_name: newServiceName.trim(),
         price: isNaN(priceNum) ? 0 : priceNum,
-        unit: newServiceUnit,
+        unit: "load",
         kilos: kilosVal,
-        description: kilosVal ? `Up to ${kilosVal} kg` : "",
+        description: kilosVal ? `Up to ${kilosVal} kg per load` : "",
         estimated_minutes: 90,
         is_available: true,
       };
@@ -262,8 +262,8 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
   const handleEditService = (srv: ShopService) => {
     setNewServiceName(srv.service_name);
     setNewServicePrice(srv.price !== undefined ? String(srv.price) : "");
-    setNewServiceUnit(srv.unit || "load");
-    setNewServiceKilos(srv.kilos ? String(srv.kilos) : "");
+    setNewServiceUnit("load");
+    setNewServiceKilos(srv.kilos ? String(srv.kilos) : "8");
     setEditingServiceId(srv.id);
   };
 
@@ -304,9 +304,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
                 ...s,
                 service_name: newServiceName.trim(),
                 price: isNaN(priceNum) ? 0 : priceNum,
-                unit: newServiceUnit,
+                unit: "load",
                 kilos: kilosVal,
-                description: kilosVal ? `Up to ${kilosVal} kg` : s.description || "",
+                description: kilosVal ? `Up to ${kilosVal} kg per load` : s.description || "",
               }
             : s
         );
@@ -316,9 +316,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
           shop_id: shopData.id,
           service_name: newServiceName.trim(),
           price: isNaN(priceNum) ? 0 : priceNum,
-          unit: newServiceUnit,
+          unit: "load",
           kilos: kilosVal,
-          description: kilosVal ? `Up to ${kilosVal} kg` : "",
+          description: kilosVal ? `Up to ${kilosVal} kg per load` : "",
           estimated_minutes: 90,
           is_available: true,
         });
@@ -983,11 +983,11 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-xs text-slate-900">{srv.service_name}</span>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  ₱{srv.price} per {srv.unit}
+                  ₱{srv.price} per load
                 </span>
                 {srv.kilos ? (
                   <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
-                    ⚖️ {srv.kilos} kg {srv.unit === "load" ? "per load max" : "allowance"}
+                    ⚖️ {srv.kilos} kg per load max
                   </span>
                 ) : null}
               </div>
@@ -1015,28 +1015,27 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
 
         {/* Quick Suggestion Pills */}
         <div className="flex items-center gap-1.5 flex-wrap pt-1">
-          <span className="text-[11px] text-slate-400 font-medium">Quick Suggestions:</span>
+          <span className="text-[11px] text-slate-400 font-medium">Quick Suggestions (All Per Load):</span>
           {[
             { name: "Wash, Dry & Fold", price: "200", unit: "load", kilos: "8" },
-            { name: "Wash, Dry & Fold", price: "45", unit: "kg", kilos: "1" },
             { name: "Wash & Dry", price: "160", unit: "load", kilos: "8" },
             { name: "Wash Only", price: "70", unit: "load", kilos: "8" },
             { name: "Dry Only", price: "70", unit: "load", kilos: "8" },
-            { name: "Comforter / Blanket", price: "180", unit: "piece", kilos: "5" },
-            { name: "Dry Cleaning", price: "150", unit: "piece", kilos: "1" },
+            { name: "Blanket & Comforter", price: "180", unit: "load", kilos: "8" },
+            { name: "Delicates / Gentle Wash", price: "150", unit: "load", kilos: "8" },
           ].map((preset) => (
             <button
-              key={`${preset.name}-${preset.unit}`}
+              key={preset.name}
               type="button"
               onClick={() => {
                 setNewServiceName(preset.name);
                 setNewServicePrice(preset.price);
-                setNewServiceUnit(preset.unit);
+                setNewServiceUnit("load");
                 setNewServiceKilos(preset.kilos);
               }}
               className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 border border-slate-200 cursor-pointer transition-colors"
             >
-              + {preset.name} (₱{preset.price} / {preset.unit === "load" ? `${preset.kilos}kg load` : preset.unit})
+              + {preset.name} (₱{preset.price} / load)
             </button>
           ))}
         </div>
@@ -1100,15 +1099,9 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
               />
             </div>
             <div className="sm:col-span-3 flex items-center gap-1.5">
-              <select
-                value={newServiceUnit}
-                onChange={(e) => setNewServiceUnit(e.target.value)}
-                className="h-9 px-2 text-xs rounded-lg border border-slate-200 bg-white grow min-w-[75px]"
-              >
-                <option value="load">per load</option>
-                <option value="kg">per kg</option>
-                <option value="piece">per pc</option>
-              </select>
+              <span className="h-9 px-3 text-xs font-bold rounded-lg border border-slate-200 bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 shadow-2xs select-none">
+                per load
+              </span>
               <Button
                 type="button"
                 variant={editingServiceId ? "primary" : "outline"}
@@ -1132,7 +1125,7 @@ export const ShopSetupForm: React.FC<ShopSetupFormProps> = ({
             </div>
           </div>
           <p className="text-[11px] text-slate-400 mt-1.5">
-            💡 <strong>Kilo Tip:</strong> Specify how much kilo is covered (e.g. <strong>8 kg</strong> per load) so customers and staff see the exact weight allowance.
+            💡 <strong>Load Pricing:</strong> All services are charged <strong>per load</strong> (e.g. ₱200 / load). Specify the max kilo capacity (e.g. <strong>8 kg</strong>) covered per load.
           </p>
         </div>
       </div>

@@ -154,4 +154,126 @@
   - Removed local storage role overrides in `getCurrentUserProfile` that prevented customer sessions from transitioning to owner mode.
   - Synchronized the active role toggle button on the Hub overview (`app/dashboard/page.tsx`) so users can switch between Customer Mode and Owner Mode directly from their profile hub.
 
+### 16. Customer Home Dashboard Redesign, Shop Services & Turn-by-Turn Route Navigation
+- **Map Removed from Default Dashboard View (`CustomerHomeView.tsx` - Matches Image 1 / Figure 12)**:
+  - Replaced the full-screen map default with a mobile-optimized **Customer Home Dashboard**:
+    - **Header & Greeting Banner**: Contextual greeting ("Good morning / afternoon / evening, [User Name]! 👋"), subtitle "Let's get your laundry done today.", and SVG illustration with washing machine, laundry basket, towels, and detergent.
+    - **Search & Filter Drawer**: Search bar with real-time text filtering and quick filter popup for distance radius (1km, 3km, 5km, 10km, All) and minimum rating (★ 4.5+, 4.0+, 3.5+, All).
+    - **3 Quick Action Shortcuts**: "Find Shops" (auto-scroll), "My Orders" (direct tracker switch), and "Nearby Shops" (quick 3km filter).
+    - **Nearby Laundry Shops Cards Grid**: Rendered matching Image 1 layout with shop cover photo, interactive favorite heart toggle (persisted in `localStorage`), star rating with review counts, distance indicator (`📍 2.3 km away`), live queue badge (`Light Queue`, `Moderate Queue`, `Busy`), estimated turnaround (`⏱ Est. turnaround 2 hrs`), opening status (`Open • Closes 9:00 PM`), and full-width blue **[ Explore Services ]** button.
+    - **Special Offers Just for You! Banner**: Promotional card matching Image 1 with discount badge and laundry graphic.
+- **Shop Services & Details View (`ShopServicesView.tsx` - Matches Image 2)**:
+  - Triggered upon clicking any shop card or "Explore Services":
+    - **Top Bar**: Back button (←) to return to Home, "Shop Services" title, and favorite heart toggle.
+    - **Shop Hero Card**: Cover image with inset brand logo badge, name, rating, hours, and 3-metric row (`📍 2.3 km away`, `⏱ Est. turnaround 2 hrs`, `🟢 Light Queue`).
+    - **Interactive Action Buttons**:
+      - **[ 💬 Message Shop ]**: Modal with direct telephone call (`tel:`), SMS (`sms:`), and pre-filled inquiry prompts.
+      - **[ 🧭 View Route ]**: Primary action button navigating to the interactive route map (Image 3).
+    - **Prepare Transaction QR Card**: Green accent card with **[ Prepare Now > ]** button pre-selecting this laundry shop in the Walk-In QR generator.
+    - **Services Offered Catalog**: Categorized service list with custom icons (Wash & Fold, Wash Dry & Iron, Dry Only, Blanket & Comforter, Shoe Wash), descriptions, and formatted pricing (`₱60.00 / kg`, `₱150.00 / piece`, etc.).
+    - **About This Shop & Operating Hours**: Capacity overview (washers & dryers) and hours breakdown.
+- **Interactive Route & Navigation View (`ShopRouteNavigation.tsx` - Matches Image 3)**:
+  - Triggered upon clicking **[ 🧭 View Route ]** or navigation buttons:
+    - **Header & Floating Shop Summary**: Title "Route to [Shop Name]" with thumbnail, rating, open status, distance, and **[ View Details ]** button.
+    - **Interactive Route Map (Leaflet & CARTO)**:
+      - Origin: Pulsing blue beacon marking "Your Current Location".
+      - Destination: Custom red pin marking the laundry shop.
+      - Route Track: High-contrast street polyline with animated traffic dashes and midpoint travel time badge (`8 min • 2.3 km`).
+      - Locate Me crosshair button for quick re-centering.
+    - **Directions Panel & Travel Modes**:
+      - Origin and destination stops with swap button.
+      - Mode selector: 🚗 **Drive**, 🚶 **Walk**, 🚲 **Bike** with dynamic ETA calculations.
+      - Route Overview summary: street route track, duration, and distance.
+      - **[ 🧭 Start Navigation ]** Button: Launches turn-by-turn simulation HUD and provides direct 1-click launch to native Google Maps / Apple Maps GPS app.
+
+### 17. Guest Mode Support for Availing Laundry Services Without an Account
+- **Unrestricted Guest Browsing (`app/customer/page.tsx`)**:
+  - Removed forced authentication redirects from the customer portal. Guests without an account can now freely browse the customer home dashboard, search laundry shops, filter by distance radius & rating, inspect shop services & pricing, and view interactive route navigation.
+- **Walk-In QR Fast Pass for Guests (`WalkInQRGenerator.tsx`)**:
+  - Removed the "Account Required" gate that previously blocked non-authenticated users.
+  - Added dedicated **Guest Customer Details** input fields for **Full Name** and **Mobile Number** so guests can generate scannable Fast Passes for drop-off.
+  - When the shop owner or staff scans the guest's QR code at the counter, the customer's name, contact number, and selected service are cleanly verified and received.
+- **Guest Transaction Persistence & Tracking (`auth.ts` & `CustomerOrderTracker.tsx`)**:
+  - Safely sets `customer_id` as `null` in Supabase `transactions` table for guest checkouts, complying with Postgres UUID constraints and Supabase RLS policies (`auth.uid() = customer_id or customer_id is null`).
+  - Automatically saves generated guest tracking numbers in browser `localStorage` (`labadago_guest_tracking_numbers`).
+  - Guests can track active order stages (Pending, Received, Washing, Ready for Pickup, Completed), view their QR pass again, and inspect receipt summaries directly in **My Orders** without creating an account.
+
+### 18. Visual Icons on 7-Step Order Progress Tracker (`CustomerOrderTracker.tsx`)
+- **Integrated Icons Across All 7 Laundry Stages**:
+  - Added clean, minimalist circular icon badges above each stage label in the 7-step horizontal progress stepper:
+    1. **Pending**: `<Clock />` (waiting for counter drop-off / scan)
+    2. **Received**: `<PackageCheck />` (weighed & received by counter staff)
+    3. **Washing**: `<Waves />` (washing cycle active with water & detergent)
+    4. **Drying**: `<Wind />` (heated tumble dryer machine active)
+    5. **Folding**: `<Shirt />` (freshly folded and packaged in laundry bag)
+    6. **Ready**: `<Bell />` (ready for customer pick-up at counter)
+    7. **Completed**: `<CheckCircle2 />` (claimed and finished)
+- **Active State Highlighting**:
+  - **Completed Stages**: Tinted blue circle badge with border and stage icon.
+  - **Current Active Stage**: Filled vibrant circle badge (amber for Pending, emerald for Completed, blue for in-progress) with glowing focus ring (`ring-4 ring-blue-100`).
+  - **Upcoming Stages**: Muted slate circular badge with neutral icon.
+  - Synchronized the corresponding icons in the contextual status notification banners below the stepper.
+
+### 19. Total Orders Metric Filtering & Simplified 3-Stage Order Lifecycle (Processing, Ready to Pick Up, Completed)
+- **Unscanned ("Pending") Orders Excluded from Total Orders Metrics**:
+  - **Owner Live Queue (`WalkInIntake.tsx`)**: Unscanned customer walk-in passes (`status === "Pending"`) are now strictly excluded from the **"Total Orders"** count badge (`{scannedTransactions.length} Total Orders`) and live queue table. They remain exclusively in the **"Incoming Customer Walk-In Passes"** review queue and camera scanner until counter staff officially scans and accepts them.
+  - **Owner Business Analytics (`OwnerAnalyticsDashboard.tsx`)**: Filtered out unscanned `"Pending"` orders from revenue calculations, `completedOrders`, `activeOrders`, and the recent service activity logs table so metrics only reflect verified orders dropped off at the shop.
+  - **Staff Counter Hub (`StaffScannerView.tsx`)**: "Total Processed Orders" count and operational metrics only tally orders that have been received and scanned at the counter.
+- **Unified 3-Stage Order Lifecycle Workflow**:
+  - Simplified status stages across dropdowns, buttons, banners, and displays to exactly three intuitive phases:
+    1. **Processing** (replaces granular stages like Received, Washing, Drying, Folding; applied as soon as the shop scans the customer's QR pass and accepts the clothes into service).
+    2. **Ready to Pick Up** (triggered when laundry cycle is done and neatly packed; notifies customer that their laundry is ready to be claimed while they are out shopping or running errands).
+    3. **Completed** (triggered when the customer claims and picks up their fresh laundry at the shop counter).
+  - **Owner & Staff Status Dropdowns**:
+    - Replaced the 7-item dropdown with a clean 3-option selector: `Processing`, `Ready to Pick Up`, `Completed`.
+    - Maintained full backward compatibility with Supabase Postgres check constraint by saving `"Washing"` in the database payload when "Processing" is selected.
+  - **Customer Order Tracker Progress Stepper (`CustomerOrderTracker.tsx`)**:
+    - Transformed into a clean, 3-column progress stepper featuring icons for **Processing** (`<Waves />`), **Ready to Pick Up** (`<ShoppingBag />`), and **Completed** (`<CheckCircle2 />`).
+    - If unscanned (`status === "Pending"`), clearly indicates **"Awaiting Counter Scan at Shop"** with a QR Fast Pass shortcut, notifying the customer that their clothes will begin Processing once scanned at the counter.
+### 19. Total Orders Metric Filtering & Simplified 3-Stage Order Lifecycle (Processing, Ready to Pick Up, Completed)
+- **Unscanned ("Pending") Orders Excluded from Total Orders Metrics**:
+  - **Owner Live Queue (`WalkInIntake.tsx`)**: Unscanned customer walk-in passes (`status === "Pending"`) are now strictly excluded from the **"Total Orders"** count badge (`{scannedTransactions.length} Total Orders`) and live queue table. They remain exclusively in the **"Incoming Customer Walk-In Passes"** review queue and camera scanner until counter staff officially scans and accepts them.
+  - **Owner Business Analytics (`OwnerAnalyticsDashboard.tsx`)**: Filtered out unscanned `"Pending"` orders from revenue calculations, `completedOrders`, `activeOrders`, and the recent service activity logs table so metrics only reflect verified orders dropped off at the shop.
+  - **Staff Counter Hub (`StaffScannerView.tsx`)**: "Total Processed Orders" count and operational metrics only tally orders that have been received and scanned at the counter.
+- **Unified 3-Stage Order Lifecycle Workflow**:
+  - Simplified status stages across dropdowns, buttons, banners, and displays to exactly three intuitive phases:
+    1. **Processing** (replaces granular stages like Received, Washing, Drying, Folding; applied as soon as the shop scans the customer's QR pass and accepts the clothes into service).
+    2. **Ready to Pick Up** (triggered when laundry cycle is done and neatly packed; notifies customer that their laundry is ready to be claimed while they are out shopping or running errands).
+    3. **Completed** (triggered when the customer claims and picks up their fresh laundry at the shop counter).
+  - **Owner & Staff Status Dropdowns**:
+    - Replaced the 7-item dropdown with a clean 3-option selector: `Processing`, `Ready to Pick Up`, `Completed`.
+    - Maintained full backward compatibility with Supabase Postgres check constraint by saving `"Washing"` in the database payload when "Processing" is selected.
+  - **Customer Order Tracker Progress Stepper (`CustomerOrderTracker.tsx`)**:
+    - Transformed into a clean, 3-column progress stepper featuring icons for **Processing** (`<Waves />`), **Ready to Pick Up** (`<ShoppingBag />`), and **Completed** (`<CheckCircle2 />`).
+    - If unscanned (`status === "Pending"`), clearly indicates **"Awaiting Counter Scan at Shop"** with a QR Fast Pass shortcut, notifying the customer that their clothes will begin Processing once scanned at the counter.
+
+### 20. Load-Based Ordering & Admin Setup Exclusively "Per Load"
+- **Customer Walk-In Fast Pass Generator (`WalkInQRGenerator.tsx`)**:
+  - Replaced the confusing "Estimated Weight (kg)" input with **Estimated Load(s)** (`1 load`, `2 loads`, etc.).
+  - Added quick 1-tap load preset buttons: `[1 Load]`, `[2 Loads]`, `[3 Loads]`, `[4 Loads]`.
+  - Service selection options display pricing per load: e.g. `Wash, Dry & Fold — ₱200/load (8kg load)`.
+  - Dynamic estimated total calculates cleanly as `loads × price_per_load` (e.g. 2 loads × ₱200 = ₱400.00), displaying the weight capacity allowance (e.g. `8kg/load`).
+  - Generated QR pass preview and recent passes list reflect the order in loads (e.g. `1 load`, `2 loads`).
+- **Owner / Admin Shop Setup & Service Editor (`ShopSetupForm.tsx`)**:
+  - All pricing is now strictly and exclusively **per load** (`/load`).
+  - Removed options for `kg`, `piece`, or any other units when adding or editing shop services; replaced the unit selector with a fixed **"per load"** tag.
+  - All quick suggestion service presets are pre-configured per load:
+    - `Wash, Dry & Fold` (₱200 / load)
+    - `Wash & Dry` (₱160 / load)
+    - `Wash Only` (₱70 / load)
+    - `Dry Only` (₱70 / load)
+    - `Blanket & Comforter` (₱180 / load)
+    - `Delicates / Gentle Wash` (₱150 / load)
+  - Clear guidance note reminds owners: "All services are charged per load (e.g. ₱200 / load). Specify the max kilo capacity (e.g. 8 kg) covered per load."
+- **Customer Services View & Order Tracking**:
+  - **Shop Catalog (`ShopServicesView.tsx`)**: Displays all services and pricing strictly as `/ load` with full allowance details.
+  - **Customer Tracker & Live Queue (`CustomerOrderTracker.tsx`, `WalkInIntake.tsx`, `StaffScannerView.tsx`)**: Shows the order count in loads (e.g. `1 load`, `2 loads`).
+
+
+
+
+
+
+
+
 
