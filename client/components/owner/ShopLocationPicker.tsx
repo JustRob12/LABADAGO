@@ -66,8 +66,9 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
           scrollWheelZoom: false,
         });
 
-        const cartoApiKey = process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
-        const tileUrl = cartoApiKey
+        const cartoApiKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+        const hasValidKey = cartoApiKey && !cartoApiKey.startsWith("cb1_") && !cartoApiKey.includes("your-carto") && cartoApiKey.length >= 10;
+        const tileUrl = hasValidKey
           ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoApiKey}`
           : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 

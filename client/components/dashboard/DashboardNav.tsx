@@ -425,9 +425,9 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
       </aside>
 
       {/* ==============================================================================
-          2. MOBILE TOP HEADER (Sticky Bar for screens < lg)
+          2. MOBILE TOP HEADER (Sticky Bar for screens < lg - Hidden on full map mobile view)
           ============================================================================== */}
-      <header className="lg:hidden sticky top-0 z-40 bg-white border-b border-slate-200">
+      <header className={`lg:hidden sticky top-0 z-40 bg-white border-b border-slate-200 ${pathname === "/customer" && currentTab === "map" ? "hidden" : ""}`}>
         <div className="px-4 h-15 flex items-center justify-between gap-3">
           {/* Hamburger Menu & Brand */}
           <div className="flex items-center gap-2.5">

@@ -56,24 +56,27 @@ export function calculateDistanceKm(
 }
 
 // CARTO Basemap Styles & User API Key
-const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
 const withCartoKey = (baseUrl: string) => {
-  if (!CARTO_API_KEY) return baseUrl;
-  return `${baseUrl}?key=${CARTO_API_KEY}`;
+  const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+  // CARTO public basemaps do not require an API key; never append broken dummy keys
+  if (!key || key.startsWith("cb1_") || key.includes("your-carto") || key.length < 10) {
+    return baseUrl;
+  }
+  return `${baseUrl}?key=${key}`;
 };
 
 const CARTO_BASEMAPS = {
   voyager: {
     name: "CARTO Voyager",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"),
   },
   positron: {
     name: "CARTO Light (Positron)",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"),
   },
   dark: {
     name: "CARTO Dark Matter",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"),
   },
 };
 
@@ -137,6 +140,54 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
     };
   }, [sidebarOpen, isFullScreen, isInternalFullscreen]);
+
+  // Robust mobile resize & orientation listener to invalidateSize
+  useEffect(() => {
+    const handleResize = () => {
+      if (mapInstanceRef.current && mapInstanceRef.current._container) {
+        try {
+          mapInstanceRef.current.invalidateSize({ animate: false });
+        } catch (_) {}
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    const t1 = setTimeout(handleResize, 100);
+    const t2 = setTimeout(handleResize, 350);
+    const t3 = setTimeout(handleResize, 800);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, []);
+
+  // Auto-fit all registered shops when no shop is selected
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    if (!L || !mapInstanceRef.current || !mapInstanceRef.current._container) return;
+    if (!selectedShop && shops.length > 0) {
+      try {
+        const validShops = shops.filter((s) => s.latitude && s.longitude);
+        if (validShops.length > 0) {
+          const bounds = L.latLngBounds(validShops.map((s) => [s.latitude, s.longitude]));
+          if (liveLocation) {
+            bounds.extend(liveLocation);
+          }
+          mapInstanceRef.current.fitBounds(bounds, {
+            padding: [40, 40],
+            maxZoom: 15,
+            animate: false,
+          });
+        }
+      } catch (_) {}
+    }
+  }, [shops, selectedShop, liveLocation]);
 
   // Detect real customer geolocation once on mount
   useEffect(() => {
@@ -203,6 +254,17 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           subdomains: "abcd",
           maxZoom: 20,
         }).addTo(map);
+
+        tileLayer.on("tileerror", (e: any) => {
+          if (e.tile && !e.tile.dataset.fallbackRetried) {
+            e.tile.dataset.fallbackRetried = "1";
+            const src = e.tile.src || "";
+            const match = src.match(/\/(\d+)\/(\d+)\/(\d+)(?:\.png|\/|\?)/);
+            if (match) {
+              e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+            }
+          }
+        });
 
         tileLayerRef.current = tileLayer;
 
@@ -274,6 +336,16 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         subdomains: "abcd",
         maxZoom: 20,
       }).addTo(mapInstanceRef.current);
+      newLayer.on("tileerror", (e: any) => {
+        if (e.tile && !e.tile.dataset.fallbackRetried) {
+          e.tile.dataset.fallbackRetried = "1";
+          const src = e.tile.src || "";
+          const match = src.match(/\/(\d+)\/(\d+)\/(\d+)(?:\.png|\/|\?)/);
+          if (match) {
+            e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+          }
+        }
+      });
       newLayer.bringToBack();
       tileLayerRef.current = newLayer;
     } catch (_) {}
@@ -821,8 +893,8 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         style={{ touchAction: "none" }}
       />
 
-      {/* Floating Control Buttons (Relocated to bottom-right so top-right is dedicated to shop modal) */}
-      <div className="absolute bottom-8 right-3 sm:right-4 z-20 flex flex-col gap-1.5">
+      {/* Floating Control Buttons (Positioned above floating bottom nav on mobile) */}
+      <div className="absolute bottom-20 lg:bottom-8 right-3 sm:right-4 z-20 flex flex-col gap-1.5">
         <button
           type="button"
           onClick={handleLocateMe}
@@ -920,7 +992,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
       {/* Floating Route Modal (Shop Name, Picture, Distance & Actions) - Positioned on the Right */}
       {selectedShop && (
-        <div className="absolute top-16 sm:top-20 right-3 sm:right-4 z-30 max-w-sm w-[calc(100%-24px)] sm:w-80 md:w-88 bg-white/95 backdrop-blur-md border border-blue-200/90 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-3 sm:top-20 right-3 sm:right-4 z-30 max-w-sm w-[calc(100%-24px)] sm:w-80 md:w-88 bg-white/95 backdrop-blur-md border border-blue-200/90 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
           {/* Shop Picture Header if available */}
           {selectedShop.images && selectedShop.images.length > 0 ? (
             <div className="relative h-28 sm:h-32 w-full bg-slate-100 overflow-hidden">
@@ -1048,8 +1120,8 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         </div>
       )}
 
-      {/* Map Legend (Minimal & Mobile-Friendly) */}
-      <div className="absolute bottom-3 left-3 z-20 bg-white/95 backdrop-blur-md border border-slate-200 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 shadow-sm flex items-center gap-2 flex-wrap">
+      {/* Map Legend (Positioned above floating bottom nav on mobile) */}
+      <div className="absolute bottom-20 lg:bottom-3 left-3 z-20 bg-white/95 backdrop-blur-md border border-slate-200 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 shadow-sm flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1 font-bold text-blue-700">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-600 ring-2 ring-blue-200" />
           You

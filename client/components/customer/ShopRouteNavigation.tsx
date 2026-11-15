@@ -32,10 +32,12 @@ interface ShopRouteNavigationProps {
   distanceKm?: number;
 }
 
-const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
 const withCartoKey = (baseUrl: string) => {
-  if (!CARTO_API_KEY) return baseUrl;
-  return `${baseUrl}?key=${CARTO_API_KEY}`;
+  const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+  if (!key || key.startsWith("cb1_") || key.includes("your-carto") || key.length < 10) {
+    return baseUrl;
+  }
+  return `${baseUrl}?key=${key}`;
 };
 
 export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
