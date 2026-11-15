@@ -331,7 +331,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         special_notes: parsedPayload.specialNotes || "",
         created_at: parsedPayload.createdAt || new Date().toISOString(),
       };
-      await updateTransactionStatus(reconstructed.id, "Washing");
+      await updateTransactionStatus(reconstructed.tracking_number, "Washing");
       setScannedTx(reconstructed);
       setActualWeight(String(reconstructed.weight_kg));
       setSelectedPaymentTiming("pay_on_complete");
@@ -375,8 +375,9 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         );
       }
 
+      const targetId = scannedTx.id || scannedTx.tracking_number;
       await updateTransactionStatus(
-        scannedTx.id,
+        targetId,
         "Washing",
         validWeight,
         paymentStatus,
@@ -417,6 +418,10 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       setIntakeFile(null);
       if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
       setIntakePreviewUrl(null);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("labadago_last_tx_update", Date.now().toString());
+        window.dispatchEvent(new CustomEvent("labadago:transaction-updated"));
+      }
       onTransactionsUpdated();
     } catch {
       setIntakeSuccess("Error saving received intake. Please try again.");
@@ -444,8 +449,9 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         );
       }
 
+      const targetId = scannedTx.id || scannedTx.tracking_number;
       await updateTransactionStatus(
-        scannedTx.id,
+        targetId,
         "Washing",
         validWeight,
         paymentStatus,
@@ -486,6 +492,10 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       setIntakeFile(null);
       if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
       setIntakePreviewUrl(null);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("labadago_last_tx_update", Date.now().toString());
+        window.dispatchEvent(new CustomEvent("labadago:transaction-updated"));
+      }
       onTransactionsUpdated();
     } catch {
       setIntakeSuccess("Error saving order intake. Please try again.");

@@ -661,8 +661,9 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         );
       }
 
+      const targetId = activeScannedTx.id || activeScannedTx.tracking_number;
       const success = await updateTransactionStatus(
-        activeScannedTx.id,
+        targetId,
         nextStatus,
         numericWeight,
         finalPaymentStatus,

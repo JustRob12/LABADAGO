@@ -1437,6 +1437,44 @@ Ensure Reports & Financial Analytics displays and computes metrics **strictly fo
 5. **Build & Quality Verification**:
    - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build.
 
+---
+
+### Update 47: Fix Database Update Failure on Scan Approval & Real-Time Sync Across Staff, Customer, and Owner
+
+**Objective**:
+Fix why approved/scanned orders remained `Pending` in the Supabase database and failed to transition to `Processing` (`Washing`) across Staff, Customer, and Owner dashboards.
+
+#### Root Causes Identified:
+1. **Invalid UUID Syntax on Tracking Number Queries (Postgres Error `22P02`)**:
+   - When staff scanned a pass, `txId` was often the tracking code (e.g., `LBD-26271`).
+   - `updateTransactionStatus` executed `.eq("id", txId)`. Because `id` is a UUID column in Postgres, passing `"LBD-26271"` caused Postgres to reject the query with error code `22P02: invalid input syntax for type uuid: "LBD-26271"`.
+2. **Foreign Key Constraint Rejection on `staff_id` (Postgres Error `23503`)**:
+   - `transactions.staff_id` references `auth.users(id)`. When staff confirmed an order, `staffUser.id` was passed in `updatePayload`. If the staff member's identifier was not present in the underlying `auth.users` table, Postgres rejected the update with error `23503: insert or update on table "transactions" violates foreign key constraint "transactions_staff_id_fkey"`.
+   - The error was caught and silently swallowed, so the row remained `status: 'Pending'` in Supabase.
+3. **Empty Data Fallback in `getLaundryTransactions` & `getTransactionsByTrackingNumbers`**:
+   - Both functions previously used `if (!error && data && data.length > 0)`, which mistakenly fell back to stale mock/in-memory data when the database returned 0 matching records.
+4. **Missing Event Listeners on Owner Dashboard**:
+   - `client/app/owner/page.tsx` lacked real-time listeners for `labadago:transaction-updated` and cross-tab storage events, preventing automatic updates on the owner portal.
+
+#### Changes Implemented:
+1. **`client/lib/supabase/auth.ts`**:
+   - **Type-Safe Query Targeting**: Added `isUuid(txId)` validation in `updateTransactionStatus`, `updateTransactionPayment`, and `deleteTransaction`.
+     - Valid UUIDs query `id = txId`.
+     - Tracking numbers query `tracking_number = txId`.
+   - **Foreign Key Resilience on `staff_id`**:
+     - `staff_id` is only included if it is a valid UUID format.
+     - If Postgres returns foreign key error `23503`, the update automatically retries without `staff_id` so status transitions never fail.
+   - **Accurate Database Returns**: Changed `if (!error && data && data.length > 0)` to `if (!error && data)` across `getLaundryTransactions` and `getTransactionsByTrackingNumbers`.
+2. **`client/components/staff/StaffScannerView.tsx` & `WalkInIntake.tsx`**:
+   - Ensured `targetId = activeScannedTx.id || activeScannedTx.tracking_number` is passed.
+   - Dispatches `labadago:transaction-updated` and updates `localStorage` on status transition.
+3. **`client/app/owner/page.tsx`**:
+   - Added real-time event listeners for `labadago:transaction-updated` and `storage`.
+   - Added a 4-second auto-poll so new intakes and status changes appear live on the owner dashboard.
+4. **Build & Quality Assurance**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
+
+
 
 
 

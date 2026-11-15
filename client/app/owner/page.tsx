@@ -130,6 +130,25 @@ function OwnerContent() {
     setTransactions(txList);
   };
 
+  // Real-time synchronization for owner dashboard
+  useEffect(() => {
+    if (!user || shops.length === 0) return;
+
+    const handleTxUpdate = () => {
+      refreshTransactions();
+    };
+
+    window.addEventListener("labadago:transaction-updated", handleTxUpdate);
+    window.addEventListener("storage", handleTxUpdate);
+    const interval = setInterval(refreshTransactions, 4000);
+
+    return () => {
+      window.removeEventListener("labadago:transaction-updated", handleTxUpdate);
+      window.removeEventListener("storage", handleTxUpdate);
+      clearInterval(interval);
+    };
+  }, [user, shops]);
+
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col lg:flex-row">

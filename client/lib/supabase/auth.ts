@@ -1190,7 +1190,7 @@ export async function getLaundryTransactions(
     }
 
     const { data, error } = await query;
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data;
     }
   } catch {
@@ -1225,7 +1225,7 @@ export async function getTransactionsByTrackingNumbers(
       .in("tracking_number", cleanList)
       .order("created_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data;
     }
   } catch {
@@ -1326,29 +1326,59 @@ export async function updateTransactionStatus(
   if (specialNotes !== undefined) {
     updatePayload.special_notes = specialNotes;
   }
+  const isUuid = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
   if (machineNumber !== undefined) {
     updatePayload.machine_number = machineNumber;
   }
-  if (staffId !== undefined) {
+  if (staffId !== undefined && isUuid(staffId)) {
     updatePayload.staff_id = staffId;
   }
 
   try {
-    // Try matching by id first
-    const res = await supabase
+    const isTxUuid = isUuid(txId);
+    const primaryField = isTxUuid ? "id" : "tracking_number";
+
+    // 1. Primary update attempt
+    let res = await supabase
       .from("transactions")
       .update(updatePayload)
-      .eq("id", txId);
+      .eq(primaryField, txId)
+      .select();
 
-    // If not found by uuid, try matching by tracking_number
-    if (res.error || !res.count) {
-      await supabase
+    // 2. If foreign key check failed on staff_id (code 23503), retry without staff_id
+    if (res.error && (res.error.code === "23503" || res.error.message.includes("staff_id"))) {
+      console.warn("Foreign key check failed on staff_id, retrying without it:", res.error.message);
+      delete updatePayload.staff_id;
+      res = await supabase
         .from("transactions")
         .update(updatePayload)
-        .eq("tracking_number", txId);
+        .eq(primaryField, txId)
+        .select();
     }
-  } catch {
-    // ignore
+
+    // 3. Fallback on alternate field if 0 rows updated
+    if (!res.data || res.data.length === 0) {
+      const fallbackField = isTxUuid ? "tracking_number" : "id";
+      if (!fallbackField.includes("id") || isUuid(txId)) {
+        let fallbackRes = await supabase
+          .from("transactions")
+          .update(updatePayload)
+          .eq(fallbackField, txId)
+          .select();
+        if (fallbackRes.error && (fallbackRes.error.code === "23503" || fallbackRes.error.message.includes("staff_id"))) {
+          delete updatePayload.staff_id;
+          await supabase
+            .from("transactions")
+            .update(updatePayload)
+            .eq(fallbackField, txId)
+            .select();
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error updating transaction status in Supabase:", err);
   }
 
   localTransactionsStore = localTransactionsStore.map((tx) =>
@@ -1379,17 +1409,24 @@ export async function updateTransactionStatus(
  * Permanently delete a transaction by id or tracking number
  */
 export async function deleteTransaction(txId: string): Promise<boolean> {
+  const isUuid = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
   try {
+    const isTxUuid = isUuid(txId);
+    const primaryField = isTxUuid ? "id" : "tracking_number";
+
     const res = await supabase
       .from("transactions")
       .delete()
-      .eq("id", txId);
+      .eq(primaryField, txId)
+      .select();
 
-    if (res.error || !res.count) {
+    if ((!res.data || res.data.length === 0) && isTxUuid) {
       await supabase
         .from("transactions")
         .delete()
-        .eq("tracking_number", txId);
+        .eq("tracking_number", txId)
+        .select();
     }
   } catch (err) {
     console.warn("Error deleting transaction in Supabase:", err);
@@ -1430,20 +1467,28 @@ export async function updateTransactionPayment(
     updatePayload.special_notes = specialNotes;
   }
 
+  const isUuid = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
   try {
+    const isTxUuid = isUuid(txId);
+    const primaryField = isTxUuid ? "id" : "tracking_number";
+
     const res = await supabase
       .from("transactions")
       .update(updatePayload)
-      .eq("id", txId);
+      .eq(primaryField, txId)
+      .select();
 
-    if (res.error || !res.count) {
+    if ((!res.data || res.data.length === 0) && isTxUuid) {
       await supabase
         .from("transactions")
         .update(updatePayload)
-        .eq("tracking_number", txId);
+        .eq("tracking_number", txId)
+        .select();
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn("Error updating transaction payment in Supabase:", err);
   }
 
   localTransactionsStore = localTransactionsStore.map((tx) =>
