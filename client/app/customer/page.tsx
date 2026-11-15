@@ -336,41 +336,6 @@ export function CustomerContent() {
                 All Registered Laundry Shops ({shops.length})
               </h2>
             </div>
-
-            {/* Quick Switcher - Desktop Only (Hidden on Mobile) */}
-            <div className="hidden lg:inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("home")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                <Store size={13} />
-                <span>Home</span>
-              </button>
-              <button
-                type="button"
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-2xs"
-              >
-                <MapPin size={13} />
-                <span>Map</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("qr")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                <QrCode size={13} />
-                <span>Walk-In QR</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("orders")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                <Package size={13} />
-                <span>Orders</span>
-              </button>
-            </div>
           </div>
 
           <div className="flex-1 w-full h-full relative min-h-0">
@@ -453,53 +418,6 @@ export function CustomerContent() {
                   ? "Generate your fast pass QR code to drop off your clothes at the counter."
                   : "Track the live status, wash stage, and receipts of your laundry."}
               </p>
-            </div>
-
-            {/* Quick Tab Switcher - Desktop Only (Hidden on Mobile) */}
-            <div className="hidden lg:inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("home")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                <Store size={14} />
-                <span>Home</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("map")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-slate-600 hover:text-slate-900"
-              >
-                <MapPin size={14} />
-                <span>Map</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("qr")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "qr"
-                    ? "bg-emerald-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <QrCode size={14} />
-                <span>Walk-In QR</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSwitchTab("orders")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === "orders"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Package size={14} />
-                <span>My Orders ({transactions.length})</span>
-              </button>
             </div>
           </div>
 

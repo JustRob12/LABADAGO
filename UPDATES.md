@@ -1205,3 +1205,28 @@ Ensure that when the administrator approves a partner application:
 3. **Build Verification**:
    - Ran `cd client && pnpm run build`.
    - Verified all 13 routes compiled with **0 errors**.
+
+---
+
+### Update 40: Removal of Redundant Top Navigation Bars Across Owner, Customer, and Admin Portals
+
+**Objective**:
+1. Remove redundant top horizontal tab navigation bars (`[ Dashboard | QR Intake & Orders | Shop Setup | Branch Staff ]`, customer quick switchers, and admin top tabs) across Owner, Customer, and Admin pages.
+2. Rely cleanly on the unified `DashboardNav` (fixed desktop left sidebar on `lg+` and floating bottom navigation bar on mobile).
+3. Maximize vertical screen real estate and keep portal interfaces clean, focused, and uncluttered.
+
+#### Changes:
+1. **`client/app/owner/page.tsx`**:
+   - Removed the inline tab navigation bar (`[ Dashboard | QR Intake & Orders | Shop Setup | Branch Staff ]`).
+   - Cleaned up unused Lucide icon imports (`BarChart3`, `ScanLine`, `Settings`, `Store`, `Users`).
+   - Preserved clear active-tab section headers and subheadings for non-analytics views.
+2. **`client/app/customer/page.tsx`**:
+   - Removed redundant top desktop tab switchers from both the map view and fast-pass/orders view.
+   - Preserved seamless sidebar and mobile bar navigation with full state persistence.
+3. **`client/app/admin/page.tsx`**:
+   - Removed the top horizontal pill tab bar (`[ Partner Applications | Shops View | Shop Owners | Customers | Platform Map ]`).
+   - Replaced with a clean header showing the active section title, record counter, and descriptive subtitle alongside the search filter input.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`.
+   - Verified all 13 routes compiled successfully with **0 errors**.
+

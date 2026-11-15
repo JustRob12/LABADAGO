@@ -9,7 +9,7 @@ import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashbo
 import { WalkInIntake } from "@/components/owner/WalkInIntake";
 import { ShopSetupForm } from "@/components/owner/ShopSetupForm";
 import { BranchStaffManagement } from "@/components/owner/BranchStaffManagement";
-import { BarChart3, ScanLine, Settings, Store, Loader2, Users } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 function OwnerContent() {
   const router = useRouter();
@@ -133,90 +133,25 @@ function OwnerContent() {
       />
 
       <main className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8 space-y-6">
-        {/* Owner Portal Sub-Navigation Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {activeTab !== "analytics" ? (
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                {activeTab === "scanner"
-                  ? "QR Intake & Counter Orders"
-                  : activeTab === "setup"
-                  ? "Laundry Shop Configuration"
-                  : "Branch Staff Management"}
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {activeTab === "scanner"
-                  ? "Scan customer passes or manual check-in, set load weight, and update order status."
-                  : activeTab === "setup"
-                  ? "Manage your shop coordinates, machine capacities, pricing, and operating schedule."
-                  : "Register and manage staff accounts, roles, and branch permissions."}
-              </p>
-            </div>
-          ) : (
-            <div className="hidden sm:block" />
-          )}
-
-          {/* Owner Tab Navigation (Only shows setup if owner has no registered shops yet) */}
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-2xs self-start sm:self-auto">
-            {shops.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("analytics")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                    activeTab === "analytics"
-                      ? "bg-blue-600 text-white shadow-2xs font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <BarChart3 size={13} />
-                  <span>Dashboard</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("scanner")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                    activeTab === "scanner"
-                      ? "bg-blue-600 text-white shadow-2xs font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <ScanLine size={13} />
-                  <span>QR Intake & Orders</span>
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("setup")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                activeTab === "setup"
-                  ? "bg-slate-900 text-white shadow-2xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Settings size={13} />
-              <span>Shop Setup</span>
-            </button>
-
-            {shops.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleTabChange("staff")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
-                  activeTab === "staff"
-                    ? "bg-teal-600 text-white shadow-2xs font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Users size={13} />
-                <span>Branch Staff</span>
-              </button>
-            )}
+        {/* Header for non-analytics tabs */}
+        {activeTab !== "analytics" && (
+          <div className="pb-2 border-b border-slate-100">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              {activeTab === "scanner"
+                ? "QR Intake & Counter Orders"
+                : activeTab === "setup"
+                ? "Laundry Shop Configuration"
+                : "Branch Staff Management"}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {activeTab === "scanner"
+                ? "Scan customer passes or manual check-in, set load weight, and update order status."
+                : activeTab === "setup"
+                ? "Manage your shop coordinates, machine capacities, pricing, and operating schedule."
+                : "Register and manage staff accounts, roles, and branch permissions."}
+            </p>
           </div>
-        </div>
+        )}
 
         {/* Tab Content */}
         {isLoading ? (

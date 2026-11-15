@@ -413,74 +413,31 @@ function AdminPageContent() {
           </div>
         </div>
 
-        {/* Tab Switcher & Search Bar */}
+        {/* Header & Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Main Clean Navigation Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-2xl shadow-2xs self-start sm:self-auto overflow-x-auto max-w-full">
-            <button
-              type="button"
-              onClick={() => handleTabChange("applications")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                currentTab === "applications"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <FileText size={14} />
-              <span>Partner Applications ({applications.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("shops")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                currentTab === "shops"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Store size={14} />
-              <span>Shops View ({activeShops.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("owners")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                currentTab === "owners"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Users size={14} />
-              <span>Shop Owners ({ownersList.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("customers")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                currentTab === "customers"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <User size={14} />
-              <span>Customers ({customersList.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("map")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                currentTab === "map"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <MapPin size={14} />
-              <span>Platform Map ({activeShops.length})</span>
-            </button>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              {currentTab === "applications"
+                ? `Partner Applications (${applications.length})`
+                : currentTab === "shops"
+                ? `Platform Shops (${activeShops.length})`
+                : currentTab === "owners"
+                ? `Shop Owners (${ownersList.length})`
+                : currentTab === "customers"
+                ? `Customers (${customersList.length})`
+                : `Platform Map (${activeShops.length})`}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {currentTab === "applications"
+                ? "Review and approve partner requests to register laundry shops."
+                : currentTab === "shops"
+                ? "Inspect registered laundry branches, capacities, and active pricing."
+                : currentTab === "owners"
+                ? "Manage verified shop owners and their laundry branches."
+                : currentTab === "customers"
+                ? "View registered customer accounts and contact records."
+                : "Interactive geographic distribution of partner shops."}
+            </p>
           </div>
 
           {/* Search Box */}
