@@ -1002,7 +1002,7 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
                   }}
                   className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
                 >
-                  View in Queue
+                  View in Processing
                 </button>
               )}
             </div>

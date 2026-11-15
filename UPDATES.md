@@ -1310,5 +1310,35 @@ Ensure that when the administrator approves a partner application:
    - Ran `cd client && pnpm run build`.
    - Verified all 13 routes compiled with **0 errors**.
 
+---
+
+### Update 43: Staff Portal UI Revision, Queue Navigation Consolidation, Live Database Reports, and Responsive Layout Enhancements
+
+**Objective**:
+1. **Revise the Scan Action Modal Design**: Transform the dark `#0b1329` "Order In Progress" (#LBD-95729) modal into a modern, polished light SaaS card layout matching LabadaGo's UI system.
+2. **Remove Redundant Queue Navigation**: Eliminate `{ id: "queue", label: "Queue", icon: ListOrdered }` from desktop and mobile navigation menus because **"Laundry Processing"** already handles active drop-offs, washing cycles, and ready pickups.
+3. **Database-Connected Actual Reports**: Replace the static 3-card placeholder on the "Reports" tab with a comprehensive, actual report driven by live database `transactions` with date-range filtering, gross paid revenue, uncollected receivables, volume in kg, completion rate, Cash vs GCash settlement breakdown, service mix breakdown, printable report export (`window.print()`), and searchable transaction audit table.
+4. **Responsive Layouts & Mobile Padding**: Ensure all staff portal pages have proper responsive paddings (`p-3.5 sm:p-6 lg:p-8 pb-24 lg:pb-8`), horizontal table scrolling (`overflow-x-auto`), and no mobile layout clipping.
+
+#### Changes:
+1. **`client/components/staff/StaffScannerView.tsx`**:
+   - **Modern Light Scan Action Modal**: Replaced dark slate modal with `bg-white border-slate-200 rounded-3xl shadow-2xl`, soft tinted icon badges, monospace `#LBD-XXXXX` tracking tags, clean customer summary card with telephone link and total due, light machine number input with active preset chips (`bg-blue-600 text-white`), prominent primary action button (`✨ Laundry is Done! Advance to "Ready to Pick Up"`), and light theme payment inputs.
+   - **Queue Navigation Removed**: Removed `"queue"` from `currentSidebarTab` state type, desktop sidebar navigation list, and mobile navigation drawer. Changed all queue navigation triggers to `"processing"` with updated labels ("View Laundry Processing").
+   - **Live Database-Connected Reports Dashboard**:
+     - Filter by date range: `Today (Live)`, `Yesterday`, `Last 7 Days`, `This Month`, and `All Records`.
+     - Filter by order status: `All Statuses`, `Completed Only`, `Active (Washing / Ready)`, `Paid Transactions`, and `Unpaid Receivables`.
+     - Search audit ledger by customer name, phone number, tracking number, or service name.
+     - 4 Live KPI Cards: Gross Paid Revenue (`₱X,XXX.XX`), Uncollected Receivables (`₱X,XXX.XX`), Total Laundry Weight (`XX.X kg`), and Completion Rate (`XX%`).
+     - Payment Settlement Breakdown: Cash vs GCash visual split progress bar with exact amounts, percentages, and order counts.
+     - Service Mix & Workload Breakdown: Ranked list of service categories with volume (kg), order count, and revenue.
+     - Transaction Audit Log Table: Full database records with monospace tracking numbers, customer info, service & weight, machine number, total amount & payment status/method, live order status badges, timestamps, and quick action buttons ("Pay", "Proof", "View").
+     - Report Actions: "Print Report" button (`window.print()`) and live "Refresh" button.
+   - **Responsive Padding**: Configured `<main>` tag to `p-3.5 sm:p-6 lg:p-8 pb-24 lg:pb-8` to ensure comfortable scrolling on mobile screens and prevention of bottom-bar occlusions.
+2. **`client/components/staff/CustomerCheckInView.tsx`**:
+   - Updated success modal button from `"View in Queue"` to `"View in Processing"`.
+3. **Build & Type Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
+
+
 
 
