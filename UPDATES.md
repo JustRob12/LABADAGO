@@ -787,6 +787,47 @@ Ensure that when the administrator approves a partner application:
 
 ---
 
+### Update 33: Integrate Scan Customer QR into Customer Check-In Options, Streamline Intake Tabs to Customer Check-In & Transactions, and Fix Full-Screen Mobile Map
+
+**Objective**:
+1. In `CustomerCheckInView` (Step 1: Choose Customer Type):
+   - Option A renamed to **Scan Customer QR** (with camera scanner and tracking code lookup; auto-populates customer details when scanned).
+   - Option B renamed to **Quick Manual Entry** (with 100% untouched intake form UI for unregistered walk-in customers across Sections 2, 3, 4, 5).
+2. In `WalkInIntake`:
+   - Removed obsolete sub-mode tabs (`Scan Customer QR` and `Quick Manual Entry`) from the intake top navigation.
+   - Replaced switcher with two clean tabs: **Customer Check-In** and **Transactions (`${scannedTransactions.length}`)**.
+   - Hides the `Live Service Queue & Transactions` table completely below Customer Check-In so it is only displayed when the Transactions tab is selected.
+3. Mobile Map Display & Header Clean-Up (`client/app/customer/page.tsx` & `LaundryMap.tsx`):
+   - Completely removed the top navigation bar (`< Return to Home`, `All Registered Laundry Shops`, and desktop icons) on mobile viewports (`hidden lg:flex`).
+   - Made the mobile map full-screen (`h-[100dvh]`) with only the bottom floating navigation bar visible.
+   - Fixed Leaflet blank canvas on mobile: applied `absolute inset-0` canvas sizing to prevent 0px flex collapses and added direct centering at zoom 15 for single-shop views.
+
+#### Changes:
+1. **Customer Check-In Options (`client/components/staff/CustomerCheckInView.tsx`)**:
+   - Updated Step 1 cards to:
+     - **Scan Customer QR**: "Scan customer QR code or Fast Pass". Supports camera viewfinder and code lookup with automated payload decoding (JSON passes and `LBD-XXXXX` codes), auto-populating customer name, contact, address, services, kilos, and care notes.
+     - **Quick Manual Entry**: "Manual information entry". Directly fills in customer details, weight, and services for walk-in customers.
+   - Preserved all original form sections (Section 2 Customer Information, Section 3 Available Services, Section 4 Laundry Assessment, Section 5 Order Summary & Checkout) without any UI alteration.
+   - Added success notification banner when a Fast Pass QR code is loaded.
+
+2. **Streamlined Intake Switcher & Conditional Transactions Table (`client/components/owner/WalkInIntake.tsx`)**:
+   - Changed `entryMode` state to `"checkin" | "transactions"`.
+   - Replaced top navigation switcher with two tabs: `[Customer Check-In]` and `[Transactions (n)]`.
+   - Removed obsolete duplicate scanner and manual forms.
+   - Wrapped the `Live Service Queue & Transactions` table in `{entryMode === "transactions" && ( ... )}` so that the table is **never displayed underneath Customer Check-In**.
+
+3. **Mobile Map Experience (`client/app/customer/page.tsx` & `LaundryMap.tsx`)**:
+   - Hidden the top map navigation bar on mobile screens (`hidden lg:flex`), removing `< Return to Home`, shop counts, and icons on mobile devices.
+   - Main map container set to `h-[100dvh] relative` on mobile.
+   - `LaundryMap.tsx`: Updated canvas to `absolute inset-0 w-full h-full min-h-[440px]` to ensure Leaflet accurately detects pixel dimensions on all mobile devices.
+   - Centering logic: Automatically centers directly on registered shop coordinates (e.g. Tawewe at `6.948, 126.228`) at zoom 15 instead of zooming out across the whole country.
+
+4. **Production Build & Verification**:
+   - Ran `cd client && pnpm run build`.
+   - All 13 routes compiled with **0 errors**.
+
+---
+
 ### Update 30: Streamline Admin Page to Partner Approvals, Platform Shops, and Interactive Map (Remove Static Data)
 
 **Objective**:
@@ -972,3 +1013,129 @@ Ensure that when the administrator approves a partner application:
    - Set default map center coordinates to Mati City (`[6.948174, 126.228235]`) where registered shops are located.
 3. Completely remove top map navigation bar on mobile:
    - Added `hidden lg:flex` and `hidden lg:inline-flex` to the top header (`< Return to Home`, shop count, and quick switcher), ensuring mobile screens render an unobstructed full-screen interactive map with only the bottom floating navigation bar.
+
+---
+
+### Update 33: Integrate Scan Customer QR into Customer Check-In Options, Streamline Intake Tabs to Customer Check-In & Transactions, and Fix Full-Screen Mobile Map
+
+**Objective**:
+1. In `CustomerCheckInView` (Step 1: Choose Customer Type):
+   - Option A renamed to **Scan Customer QR** (with camera scanner and tracking code lookup; auto-populates customer details when scanned).
+   - Option B renamed to **Quick Manual Entry** (with 100% untouched intake form UI for unregistered walk-in customers across Sections 2, 3, 4, 5).
+2. In `WalkInIntake`:
+   - Removed obsolete sub-mode tabs (`Scan Customer QR` and `Quick Manual Entry`) from the intake top navigation.
+   - Replaced switcher with two clean tabs: **Customer Check-In** and **Transactions (`${scannedTransactions.length}`)**.
+   - Hides the `Live Service Queue & Transactions` table completely below Customer Check-In so it is only displayed when the Transactions tab is selected.
+3. Mobile Map Display & Header Clean-Up (`client/app/customer/page.tsx` & `LaundryMap.tsx`):
+   - Completely removed the top navigation bar (`< Return to Home`, `All Registered Laundry Shops`, and desktop icons) on mobile viewports (`hidden lg:flex`).
+   - Made the mobile map full-screen (`h-[100dvh]`) with only the bottom floating navigation bar visible.
+   - Fixed Leaflet blank canvas on mobile: applied `absolute inset-0` canvas sizing to prevent 0px flex collapses and added direct centering at zoom 15 for single-shop views.
+
+#### Changes:
+1. **Customer Check-In Options (`client/components/staff/CustomerCheckInView.tsx`)**:
+   - Updated Step 1 cards to:
+     - **Scan Customer QR**: "Scan customer QR code or Fast Pass". Supports camera viewfinder and code lookup with automated payload decoding (JSON passes and `LBD-XXXXX` codes), auto-populating customer name, contact, address, services, kilos, and care notes.
+     - **Quick Manual Entry**: "Manual information entry". Directly fills in customer details, weight, and services for walk-in customers.
+   - Preserved all original form sections (Section 2 Customer Information, Section 3 Available Services, Section 4 Laundry Assessment, Section 5 Order Summary & Checkout) without any UI alteration.
+   - Added success notification banner when a Fast Pass QR code is loaded.
+
+2. **Streamlined Intake Switcher & Conditional Transactions Table (`client/components/owner/WalkInIntake.tsx`)**:
+   - Changed `entryMode` state to `"checkin" | "transactions"`.
+   - Replaced top navigation switcher with two tabs: `[Customer Check-In]` and `[Transactions (n)]`.
+   - Removed obsolete duplicate scanner and manual forms.
+   - Wrapped the `Live Service Queue & Transactions` table in `{entryMode === "transactions" && ( ... )}` so that the table is **never displayed underneath Customer Check-In**.
+
+3. **Mobile Map Experience (`client/app/customer/page.tsx` & `LaundryMap.tsx`)**:
+   - Hidden the top map navigation bar on mobile screens (`hidden lg:flex`), removing `< Return to Home`, shop counts, and icons on mobile devices.
+   - Main map container set to `h-[100dvh] relative` on mobile.
+   - `LaundryMap.tsx`: Updated canvas to `absolute inset-0 w-full h-full min-h-[440px]` to ensure Leaflet accurately detects pixel dimensions on all mobile devices.
+   - Centering logic: Automatically centers directly on registered shop coordinates (e.g. Tawewe at `6.948, 126.228`) at zoom 15 instead of zooming out across the whole country.
+
+4. **Production Build & Verification**:
+   - Ran `cd client && pnpm run build`.
+   - All 13 routes compiled with **0 errors**.
+
+
+---
+
+### Update 34: Remove Static Branch Staff Mock Data, Add Cloudinary Profile Pictures, Birthdate & Gender to Branch Staff Management, and Revise Supabase Schema
+
+**Objective**:
+1. Remove all hardcoded static staff mock data (`getInitialStaffSeed()`, Maria Santos, Allan Reyes, Liza Pascual, Kevin Ramirez, Nicole Rivera, Juan Dela Cruz, Mark Lim, Sofia Cruz) from `client/lib/supabase/auth.ts`.
+2. Ensure `getStoredBranchStaff()` starts with an empty list (`[]`), purges any legacy mock data from `localStorage`, and never seeds mock staff members.
+3. Revise `public.branch_staff` table schema in `client/supabase/schema.sql` to include exact foreign keys (`assigned_by`, `shop_id`, `user_id`), default `'Counter Staff'` role, unique constraint on `user_id`, and added columns:
+   - `birthdate date null`
+   - `gender text null`
+   - `profile_picture text null` (Cloudinary URL link)
+4. Add direct Cloudinary unsigned image upload to the **Register New Staff** and **Edit Staff** modals via `uploadImageToCloudinary()`.
+5. Display profile picture avatar, birthdate, and gender in the branch staff table, profile view modal, and registration forms.
+6. Replace static staff counts (`8`, `6`, `2`) in `OwnerAnalyticsDashboard.tsx` with dynamic calculations based on real registered branch staff.
+
+#### Changes:
+1. **Branch Staff Types (`client/types/auth.ts`)**:
+   - Added `birthdate?: string | null;`, `gender?: string | null;`, `profile_picture?: string | null;` to `BranchStaffMember`.
+2. **Database Schema (`client/supabase/schema.sql`)**:
+   - Updated `public.branch_staff` DDL with foreign key constraints, indexes on `shop_id` and `user_id`, and added migration `alter table public.branch_staff add column if not exists ...` statements for `birthdate`, `gender`, `profile_picture`, `status`, and `staff_id_code`.
+3. **Auth & Staff Storage (`client/lib/supabase/auth.ts`)**:
+   - Removed `getInitialStaffSeed()` mock array.
+   - Updated `getStoredBranchStaff()` to start empty and automatically purge any legacy mock records (`stf-rec-*`).
+   - Updated `getBranchStaff()` with schema tolerance fallback for pending migrations.
+   - Updated `registerStaffMember()` and `updateStaffMember()` to upload and persist `birthdate`, `gender`, and `profile_picture` in both `public.branch_staff` and `public.profiles`.
+4. **Staff Management UI (`client/components/owner/BranchStaffManagement.tsx`)**:
+   - Integrated Cloudinary photo uploader with real-time preview, loading indicator, and remove action in Add & Edit modals.
+   - Added Birthdate date picker and Gender selector to staff modals.
+   - Displayed Cloudinary avatar in the staff table rows and staff profile view modal.
+5. **Analytics Dashboard (`client/components/owner/OwnerAnalyticsDashboard.tsx`)**:
+   - Replaced static staff numbers with dynamic counts (`staffList.length`, active count, on leave count).
+
+---
+
+### Update 35: Fix Mobile Blank Map Canvas, Auto-Center Registered Shops, Clean Tile URLs & Fallbacks, and Remove Mobile Clutter Header
+
+**Objective**:
+1. Fix the blank map canvas issue on mobile devices (`media_1794751396115_dc4c5b93.jpg`):
+   - Removed obsolete `{r}` retina token from CARTO tile URLs that caused tile requests to fail.
+   - Formatted CARTO key query parameter to `?key=...` conforming to CARTO requirements.
+   - Added robust Leaflet ESM import fallback (`(leaf as any).default || leaf`).
+   - Improved `tileerror` fallback regex to extract `/{z}/{x}/{y}` regardless of query params and dynamically fallback to OpenStreetMap.
+   - Added repeated `map.invalidateSize()` calls (0ms, 50ms, 150ms, 350ms, 700ms, 1200ms) on mount, resize, and orientation changes.
+2. Prevent `All Registered Laundry Shops (0)` and resolve shop loading:
+   - Modified `loadData()` in `client/app/customer/page.tsx` to fetch `getCurrentUserProfile()` and `getLaundryShops()` in parallel using `Promise.all` with fail-safes so user profile errors never block shop fetching.
+   - Set `getLaundryShops()` fallback in `client/lib/supabase/auth.ts` to `DEFAULT_REGISTERED_SHOPS` if `localShopsStore` is empty, guaranteeing shops are never zero.
+   - Set default map center coordinates to Mati City (`[6.948174, 126.228235]`) where registered shops are located.
+3. Completely remove top map navigation bar on mobile:
+   - Added `hidden lg:flex` and `hidden lg:inline-flex` to the top header (`< Return to Home`, shop count, and quick switcher), ensuring mobile screens render an unobstructed full-screen interactive map with only the bottom floating navigation bar.
+
+
+---
+
+### Update 36: Dynamic Database Services, Clean Empty Customer Intake, Remove Laundry Assessment, and Dedicated Scan Customer QR Transaction Details
+
+**Objective**:
+1. Connect Customer Check-In Selected Services directly to the Supabase database:
+   - Query `public.shop_services` using `getShopServices(assignedShop.id)`.
+   - Dynamically render shop services with their exact database names, rates, and units (`kg`, `load`, `item`, `pc`).
+2. Make Customer Information inputs empty by default:
+   - Removed static prefilled values (`"John Michael Reyes"`, `"0917 456 7890"`, `"johnmichael.reyes@email.com"`, `"123 Sampaguita St..."`).
+   - Fields now initialize and reset to clean empty strings (`""`).
+3. Remove Section 4: Laundry Assessment:
+   - Removed Actual Weight, Additional Charges/Add-ons, and Notes from the form layout.
+   - Streamlined check-in layout into Customer Information, Database Selected Services, and Transaction Summary.
+4. Dedicated Scan Customer QR workflow:
+   - When **Scan Customer QR** is selected, Customer Information, Selected Services, and Laundry Assessment form fields are completely hidden.
+   - The QR Camera Scanner and tracking code lookup are displayed directly under Scan Customer QR.
+   - When a QR pass is scanned or entered, the app stays on the scan view and displays the **Details of the Transaction** card (Tracking #, Customer Name, Contact, Shop, Service, Weight, Amount, Queue #, Status).
+   - Staff can tap **`Confirm Check-In & Start Processing`** directly on the card to move the order into `Processing` (`Washing`) status without ever switching to or populating the manual entry form.
+   - When **Quick Manual Entry** is selected, the scanner is hidden and only the manual intake form is shown.
+
+#### Changes:
+1. **`client/components/staff/CustomerCheckInView.tsx`**:
+   - Replaced static services array with a dynamic `useEffect` loading from `getShopServices(assignedShop.id)`.
+   - Initialized `custFullName`, `custContactNumber`, `custEmail`, `custAddress` to `""`.
+   - Removed `laundryWeight`, `laundryAddon`, `laundryNotes`, and `addonInfo` state and assessment UI section.
+   - Separated modes into `customerType === "scan"` (dedicated scanner and Scanned Transaction Details Card with confirmation button) and `customerType === "manual"` (clean manual check-in form).
+   - Added `handleConfirmScannedCheckIn` to confirm check-in and tag transaction as Processing.
+   - Added `handleResetScanner` to scan subsequent passes.
+2. **Build Verification**:
+   - Ran `cd client && pnpm run build`.
+   - All 13 routes compiled with **0 errors**.
