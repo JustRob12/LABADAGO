@@ -91,27 +91,8 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
   };
 
   const handleToggleRole = async () => {
-    if (isStaff) return;
-    setIsSwitchingRole(true);
-    const targetRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
-
-    try {
-      await switchUserRole(targetRole);
-      if (onRoleSwitched) {
-        onRoleSwitched(targetRole);
-      }
-      setMobileDrawerOpen(false);
-
-      if (targetRole === UserRole.OWNER) {
-        router.push("/owner");
-      } else {
-        router.push("/customer");
-      }
-    } catch (err) {
-      console.error("Failed to switch role:", err);
-    } finally {
-      setIsSwitchingRole(false);
-    }
+    // Owner role and Staff role are permanent; cannot switch back to customer
+    if (isStaff || isOwner) return;
   };
 
   // Nav Items Builder
@@ -370,23 +351,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           </div>
         )}
 
-        {/* Mode Switcher Button (if Owner or Customer who can switch) */}
+        {/* Status / Partner Button */}
         {activeUser && !isStaff && (
           <div>
             {isOwner ? (
-              <button
-                type="button"
-                disabled={isSwitchingRole}
-                onClick={handleToggleRole}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-100/50 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                {isSwitchingRole ? (
-                  <Loader2 size={13} className="animate-spin text-blue-600" />
-                ) : (
-                  <ArrowRightLeft size={13} className="text-blue-600" />
-                )}
-                <span>Switch to Customer</span>
-              </button>
+              <div className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-emerald-200 bg-emerald-50/60 text-emerald-800 text-xs font-bold select-none shadow-2xs">
+                <Store size={14} className="text-emerald-600" />
+                <span>Verified Shop Owner</span>
+              </div>
             ) : !isAdmin ? (
               <Link
                 href="/partner"

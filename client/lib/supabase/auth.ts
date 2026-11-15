@@ -417,6 +417,20 @@ export async function switchUserRole(newRole: UserRole): Promise<{
       };
     }
 
+    // 2. Check if user is a Laundry Shop OWNER - Owner role is permanent!
+    const isOwner =
+      dbProfile?.role === UserRole.OWNER ||
+      localProfilesStore.some((p) => p.id === user.id && p.role === UserRole.OWNER) ||
+      localShopsStore.some((s) => s.owner_id === user.id);
+
+    if (isOwner && newRole === UserRole.COSTUMER) {
+      return {
+        success: false,
+        role: UserRole.OWNER,
+        error: "Owner accounts are permanent and cannot be changed back to Customer.",
+      };
+    }
+
     // 2. Update Supabase profiles table
     await supabase
       .from("profiles")
@@ -2457,6 +2471,13 @@ export async function reviewPartnerApplication(
         console.warn("Notice inserting approved shop to Supabase:", shopErr);
       }
 
+      // Also upgrade local profiles store
+      const profileIdx = localProfilesStore.findIndex((p) => p.id === targetApp.applicant_id);
+      if (profileIdx >= 0) {
+        localProfilesStore[profileIdx].role = UserRole.OWNER;
+        localProfilesStore[profileIdx].assigned_shop_id = createdShop.id;
+      }
+
       // Add to local shop store
       localShopsStore.unshift(createdShop);
 
@@ -2467,6 +2488,9 @@ export async function reviewPartnerApplication(
           if (cached && cached.id === targetApp.applicant_id) {
             const upgraded = { ...cached, role: UserRole.OWNER, assigned_shop_id: createdShop.id };
             localStorage.setItem("labadago_user_profile", JSON.stringify(upgraded));
+            localStorage.setItem("labadago_cached_profile", JSON.stringify(upgraded));
+            localStorage.setItem(`labadago_active_role_${targetApp.applicant_id}`, String(UserRole.OWNER));
+            localStorage.setItem("labadago_active_role", String(UserRole.OWNER));
           }
         } catch {
           // ignore

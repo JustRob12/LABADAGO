@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   getCurrentUserProfile,
   getCachedUserProfile,
-  switchUserRole,
   getLaundryShops,
   getLaundryTransactions,
 } from "@/lib/supabase/auth";
@@ -71,13 +70,6 @@ function DashboardContent() {
 
   const isOwner = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
   const isStaff = user?.role === UserRole.STAFF;
-
-  const handleRoleToggle = async () => {
-    if (!user || isStaff) return;
-    const nextRole = isOwner ? UserRole.COSTUMER : UserRole.OWNER;
-    await switchUserRole(nextRole);
-    setUser({ ...user, role: nextRole });
-  };
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col lg:flex-row">
@@ -155,36 +147,27 @@ function DashboardContent() {
                     </Button>
                   </Link>
                 ) : isOwner ? (
-                  <>
+                  <Link href="/owner">
                     <Button
-                      variant="outline"
+                      variant="success"
                       size="sm"
-                      onClick={handleRoleToggle}
-                      className="text-xs"
+                      rightIcon={<ArrowRight size={14} />}
+                      className="text-xs font-bold"
                     >
-                      Switch to Customer Mode
+                      Enter Owner Portal
                     </Button>
-                    <Link href="/owner">
-                      <Button
-                        variant="success"
-                        size="sm"
-                        rightIcon={<ArrowRight size={14} />}
-                        className="text-xs"
-                      >
-                        Enter Owner Portal
-                      </Button>
-                    </Link>
-                  </>
+                  </Link>
                 ) : (
                   <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRoleToggle}
-                      className="text-xs"
-                    >
-                      Switch to Owner Mode
-                    </Button>
+                    <Link href="/partner">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs font-semibold text-emerald-800 border-emerald-300 bg-emerald-50 hover:bg-emerald-100"
+                      >
+                        Partner with this website
+                      </Button>
+                    </Link>
                     <Link href="/customer">
                       <Button
                         variant="primary"

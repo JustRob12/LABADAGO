@@ -314,6 +314,11 @@ begin
     return jsonb_build_object('success', false, 'error', 'Staff role is locked. Only your branch owner can remove your staff role.');
   end if;
 
+  -- Owner role is permanent: an approved owner cannot be switched back to Customer (role = 2)
+  if v_current_role = 1 and target_role = 2 then
+    return jsonb_build_object('success', false, 'error', 'Owner accounts are permanent and cannot be changed back to Customer.');
+  end if;
+
   if target_role not in (0, 1, 2) then
     return jsonb_build_object('success', false, 'error', 'Invalid role');
   end if;
@@ -527,6 +532,133 @@ drop policy if exists "Authenticated users can upload payment proofs" on storage
 create policy "Authenticated users can upload payment proofs"
   on storage.objects for insert
   with check (bucket_id = 'payment_proofs' and (auth.role() = 'authenticated' or auth.role() = 'anon'));
+
+-- ==============================================================================
+-- 11. Partner Applications Table and Automated Owner Upgrade Flow
+-- ==============================================================================
+create table if not exists public.partner_applications (
+  id uuid primary key default gen_random_uuid(),
+  applicant_id uuid references auth.users(id) on delete cascade not null,
+  applicant_name text not null,
+  applicant_phone text not null,
+  applicant_email text,
+  shop_name text not null,
+  shop_description text,
+  shop_address text not null,
+  latitude double precision not null,
+  longitude double precision not null,
+  phone_number text not null,
+  open_time text default '07:00',
+  close_time text default '20:00',
+  washer_count int default 6,
+  dryer_count int default 6,
+  max_kilo_per_load numeric(6,2) default 8.0,
+  images text[] default '{}',
+  services jsonb default '[]'::jsonb,
+  status text default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  admin_notes text,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_partner_apps_applicant on public.partner_applications(applicant_id);
+create index if not exists idx_partner_apps_status on public.partner_applications(status);
+
+alter table public.partner_applications enable row level security;
+
+-- Policies for partner applications
+drop policy if exists "Applicants can view their own applications" on public.partner_applications;
+create policy "Applicants can view their own applications"
+  on public.partner_applications for select
+  using (auth.uid() = applicant_id or exists (select 1 from public.profiles where id = auth.uid() and role = 0));
+
+drop policy if exists "Authenticated users can submit partner applications" on public.partner_applications;
+create policy "Authenticated users can submit partner applications"
+  on public.partner_applications for insert
+  with check (auth.uid() = applicant_id);
+
+drop policy if exists "Admins can update partner applications" on public.partner_applications;
+create policy "Admins can update partner applications"
+  on public.partner_applications for update
+  using (exists (select 1 from public.profiles where id = auth.uid() and role = 0));
+
+-- Automated RPC for Admin to Approve Application (Permanent Owner Upgrade)
+create or replace function public.approve_partner_application(
+  p_application_id uuid,
+  p_admin_notes text default 'Approved by Administrator'
+)
+returns jsonb as $$
+declare
+  v_admin_uid uuid := auth.uid();
+  v_is_admin boolean;
+  v_app record;
+  v_shop_id uuid;
+begin
+  -- Verify calling user is Admin (role = 0)
+  select exists(select 1 from public.profiles where id = v_admin_uid and role = 0) into v_is_admin;
+  if not v_is_admin then
+    return jsonb_build_object('success', false, 'error', 'Unauthorized: Only platform administrators can approve partner applications.');
+  end if;
+
+  select * into v_app from public.partner_applications where id = p_application_id;
+  if v_app.id is null then
+    return jsonb_build_object('success', false, 'error', 'Application not found.');
+  end if;
+
+  -- 1. Create the new laundry shop
+  insert into public.laundry_shops (
+    owner_id,
+    name,
+    description,
+    address,
+    latitude,
+    longitude,
+    phone_number,
+    open_time,
+    close_time,
+    washer_count,
+    dryer_count,
+    max_kilo_per_load,
+    images,
+    queue_status,
+    is_open,
+    rating,
+    total_reviews
+  ) values (
+    v_app.applicant_id,
+    v_app.shop_name,
+    coalesce(v_app.shop_description, 'Quality laundry service.'),
+    v_app.shop_address,
+    v_app.latitude,
+    v_app.longitude,
+    v_app.phone_number,
+    v_app.open_time,
+    v_app.close_time,
+    coalesce(v_app.washer_count, 6),
+    coalesce(v_app.dryer_count, 6),
+    coalesce(v_app.max_kilo_per_load, 8.0),
+    coalesce(v_app.images, '{}'),
+    'Low',
+    true,
+    5.0,
+    0
+  ) returning id into v_shop_id;
+
+  -- 2. Upgrade applicant's account role permanently to Shop Owner (role = 1)
+  update public.profiles
+  set role = 1, assigned_shop_id = v_shop_id, updated_at = timezone('utc'::text, now())
+  where id = v_app.applicant_id;
+
+  -- 3. Update application status
+  update public.partner_applications
+  set status = 'approved',
+      admin_notes = coalesce(p_admin_notes, 'Approved by Administrator'),
+      reviewed_at = timezone('utc'::text, now())
+  where id = p_application_id;
+
+  return jsonb_build_object('success', true, 'shop_id', v_shop_id, 'owner_id', v_app.applicant_id);
+end;
+$$ language plpgsql security definer;
 
 -- ==============================================================================
 -- End of Database Schema (Clean production-ready without mock seed data)

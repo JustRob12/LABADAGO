@@ -676,3 +676,25 @@ Completely removed all static data, fake revenue charts, and the placeholder ana
 
 4. **Verification & Build**:
    - Successfully verified with `pnpm run build` across all 13 routes with 0 errors.
+
+---
+
+### Update 31: Enforce Automatic Permanent Role Upgrade to Owner on Admin Approval (Disallow Demoting to Customer)
+
+**Objective**:
+Ensure that when the administrator approves a partner application:
+1. The applicant's account is automatically upgraded to **Shop Owner** (`role = 1`) and linked to their new laundry shop.
+2. The account is permanently locked to the **Shop Owner** role and **cannot switch or downgrade back to Customer** (`role = 2`).
+
+#### Changes:
+1. **Permanent Owner Role Guard (`client/lib/supabase/auth.ts` - `switchUserRole`)**:
+   - Added strict guard preventing owners from switching back to customer role:
+     `if (isOwner && newRole === UserRole.COSTUMER) return { success: false, error: "Owner accounts are permanent and cannot be changed back to Customer." }`.
+2. **Removed "Switch to Customer" Buttons (`client/components/dashboard/DashboardNav.tsx` & `client/app/dashboard/page.tsx`)**:
+   - Replaced the "Switch to Customer" action button in the desktop sidebar and mobile drawer with a permanent `Verified Shop Owner` badge.
+   - Removed the "Switch to Customer Mode" button from the main account profile hub (`/dashboard`).
+3. **Database Schema & SQL Constraints (`client/supabase/schema.sql`)**:
+   - Updated `switch_user_role(target_role smallint)`: Added server-side SQL check preventing `v_current_role = 1` from switching to `target_role = 2`.
+   - Added `public.partner_applications` table schema with RLS policies and `approve_partner_application(p_application_id)` security-definer function for atomic shop provisioning and permanent `profiles.role = 1` upgrade.
+4. **Verification**:
+   - Verified with Next.js Turbopack build (`pnpm run build`): **0 errors across all 13 routes**.
