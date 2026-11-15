@@ -2,12 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { LaundryShop } from "@/types/auth";
-import { MAP_STYLES } from "@/lib/map/maplibreStyles";
 import {
   Navigation,
-  Compass,
   LocateFixed,
-  Loader2,
   Plus,
   Minus,
   X,
@@ -16,9 +13,9 @@ import {
   Minimize2,
   ExternalLink,
   QrCode,
-  Camera,
   Star,
 } from "lucide-react";
+import { patchLeafletPos } from "@/lib/utils/leafletPatch";
 import { Button } from "@/components/ui/Button";
 
 interface LaundryMapProps {
@@ -55,26 +52,28 @@ export function calculateDistanceKm(
   return parseFloat((R * c).toFixed(2));
 }
 
-function createCircleGeoJSON(centerLat: number, centerLng: number, radiusKm: number, points = 64) {
-  const coords: [number, number][] = [];
-  const distanceX = radiusKm / (111.32 * Math.cos((centerLat * Math.PI) / 180));
-  const distanceY = radiusKm / 110.574;
-  for (let i = 0; i < points; i++) {
-    const theta = (i / points) * (2 * Math.PI);
-    const x = distanceX * Math.cos(theta);
-    const y = distanceY * Math.sin(theta);
-    coords.push([centerLng + x, centerLat + y]);
-  }
-  coords.push(coords[0]);
-  return {
-    type: "Feature",
-    geometry: {
-      type: "Polygon",
-      coordinates: [coords],
-    },
-    properties: {},
-  };
-}
+// CARTO Basemap Styles & Free Public CDN Endpoints
+const CARTO_BASEMAPS = {
+  voyager: {
+    name: "CARTO Voyager",
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+  },
+  positron: {
+    name: "CARTO Light (Positron)",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  },
+  osm: {
+    name: "OpenStreetMap (Standard)",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  },
+  dark: {
+    name: "CARTO Dark Matter",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  },
+};
+
+const CARTO_ATTRIBUTION =
+  '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
 export const LaundryMap: React.FC<LaundryMapProps> = ({
   shops,
@@ -92,16 +91,21 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const maplibreglRef = useRef<any>(null);
-  const shopMarkersRef = useRef<any[]>([]);
-  const userMarkerRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
+  const userLayerGroupRef = useRef<any>(null);
+  const radiusLayerGroupRef = useRef<any>(null);
+  const shopsLayerGroupRef = useRef<any>(null);
+  const routeLayerGroupRef = useRef<any>(null);
+  const leafletModuleRef = useRef<any>(null);
+  const lastFittedShopIdRef = useRef<string | null>(null);
+  const lastRadiusRef = useRef<number | null>(null);
+  const resizeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [basemapStyle, setBasemapStyle] = useState<"voyager" | "positron" | "osm" | "dark">("voyager");
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [liveLocation, setLiveLocation] = useState<[number, number] | null>(
     initialUserLocation || [14.65, 121.05]
   );
-  const [isLocating, setIsLocating] = useState(false);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
   const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
   const [isInternalFullscreen, setIsInternalFullscreen] = useState(false);
@@ -113,30 +117,81 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     }
   }, [initialUserLocation]);
 
-  // Handle resizing on sidebar toggle or fullscreen
+  // Invalidate map size whenever sidebar toggles or fullscreen changes
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapInstanceRef.current) {
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    resizeTimerRef.current = setTimeout(() => {
+      if (mapInstanceRef.current && mapInstanceRef.current._container) {
         try {
-          mapInstanceRef.current.resize();
+          mapInstanceRef.current.invalidateSize({ animate: false });
         } catch (_) {}
       }
-    }, 120);
-    return () => clearTimeout(timer);
+    }, 150);
+    return () => {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    };
   }, [sidebarOpen, isFullScreen, isInternalFullscreen]);
 
-  // Window resize listener
+  // Robust container ResizeObserver & window resize listener
   useEffect(() => {
     const handleResize = () => {
-      if (mapInstanceRef.current) {
+      if (mapInstanceRef.current && mapInstanceRef.current._container) {
         try {
-          mapInstanceRef.current.resize();
+          mapInstanceRef.current.invalidateSize({ animate: false });
         } catch (_) {}
       }
     };
+
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    let observer: ResizeObserver | null = null;
+    if (mapContainerRef.current && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        handleResize();
+      });
+      observer.observe(mapContainerRef.current);
+    }
+
+    const t1 = setTimeout(handleResize, 60);
+    const t2 = setTimeout(handleResize, 200);
+    const t3 = setTimeout(handleResize, 500);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      if (observer) observer.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, []);
+
+  // Auto-fit all registered shops when no shop is selected
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    if (!L || !mapInstanceRef.current || !mapInstanceRef.current._container) return;
+    if (!selectedShop && shops.length > 0) {
+      try {
+        const validShops = shops.filter((s) => s.latitude && s.longitude);
+        if (validShops.length === 1) {
+          mapInstanceRef.current.setView([validShops[0].latitude, validShops[0].longitude], 15, { animate: false });
+        } else if (validShops.length > 1) {
+          const bounds = L.latLngBounds(validShops.map((s) => [s.latitude, s.longitude]));
+          if (liveLocation) {
+            const dist = calculateDistanceKm(liveLocation[0], liveLocation[1], validShops[0].latitude, validShops[0].longitude);
+            if (dist < 80) bounds.extend(liveLocation);
+          }
+          mapInstanceRef.current.fitBounds(bounds, {
+            padding: [40, 40],
+            maxZoom: 15,
+            animate: false,
+          });
+        }
+        mapInstanceRef.current.invalidateSize({ animate: false });
+      } catch (_) {}
+    }
+  }, [shops, selectedShop, liveLocation]);
 
   // Detect customer GPS on mount
   useEffect(() => {
@@ -153,59 +208,127 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           }
         },
         (error) => {
-          console.warn("Geolocation permission notice:", error.message);
+          console.warn("Geolocation permission not granted:", error.message);
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
     }
   }, []);
 
-  // Initialize MapLibre GL Map on Mount
+  // 1. Initialize Leaflet Map ONCE on Mount with CARTO Voyager
   useEffect(() => {
     if (typeof window === "undefined" || !mapContainerRef.current) return;
-    let isCancelled = false;
+
+    let isMounted = true;
 
     async function initMap() {
       try {
-        const maplibregl = await import("maplibre-gl");
-        if (isCancelled || !mapContainerRef.current) return;
-        maplibreglRef.current = maplibregl;
+        const leaf = await import("leaflet");
+        const L = (leaf as any).default || leaf;
+        if (!isMounted || !mapContainerRef.current) return;
+
+        patchLeafletPos(L);
+        leafletModuleRef.current = L;
 
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
+          try {
+            mapInstanceRef.current.stop();
+          } catch (_) {}
+          try {
+            mapInstanceRef.current.remove();
+          } catch (_) {}
           mapInstanceRef.current = null;
         }
 
         const validShop = shops.find((s) => s.latitude && s.longitude);
-        const centerLng = validShop ? validShop.longitude : liveLocation ? liveLocation[1] : 121.05;
-        const centerLat = validShop ? validShop.latitude : liveLocation ? liveLocation[0] : 14.65;
+        const centerCoords: [number, number] = validShop
+          ? [validShop.latitude, validShop.longitude]
+          : liveLocation || [14.65, 121.05];
 
-        const map = new maplibregl.Map({
-          container: mapContainerRef.current,
-          style: MAP_STYLES[basemapStyle].style as any,
-          center: [centerLng, centerLat],
-          zoom: 13,
-          attributionControl: false,
+        const map = L.map(mapContainerRef.current, {
+          center: centerCoords,
+          zoom: 14,
+          scrollWheelZoom: true,
+          dragging: true,
+          touchZoom: true,
+          doubleClickZoom: true,
+          boxZoom: true,
+          keyboard: true,
+          zoomControl: false,
         });
+
+        const tileLayer = L.tileLayer(CARTO_BASEMAPS[basemapStyle].url, {
+          attribution: CARTO_ATTRIBUTION,
+          subdomains: "abcd",
+          maxZoom: 20,
+        }).addTo(map);
+
+        tileLayer.on("tileerror", (e: any) => {
+          if (e.tile && !e.tile.dataset.fallbackRetried) {
+            e.tile.dataset.fallbackRetried = "1";
+            const src = e.tile.src || "";
+            const match = src.match(/\/(\d+)\/(\d+)\/(\d+)/);
+            if (match) {
+              e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+            }
+          }
+        });
+
+        tileLayerRef.current = tileLayer;
+
+        radiusLayerGroupRef.current = L.layerGroup().addTo(map);
+        userLayerGroupRef.current = L.layerGroup().addTo(map);
+        shopsLayerGroupRef.current = L.layerGroup().addTo(map);
+        routeLayerGroupRef.current = L.layerGroup().addTo(map);
 
         mapInstanceRef.current = map;
 
-        map.on("load", () => {
-          if (isCancelled) return;
-          map.resize();
-          renderRadiusLayer(map);
-          renderRouteLayer(map);
-        });
+        const triggerInvalidate = () => {
+          if (isMounted && mapInstanceRef.current && mapInstanceRef.current._container) {
+            try {
+              mapInstanceRef.current.invalidateSize({ animate: false });
+            } catch (_) {}
+          }
+        };
+
+        triggerInvalidate();
+        setTimeout(triggerInvalidate, 80);
+        setTimeout(triggerInvalidate, 250);
+        setTimeout(triggerInvalidate, 600);
       } catch (err) {
-        console.error("Error setting up MapLibre map:", err);
+        console.error("Error initializing Leaflet map:", err);
       }
     }
 
     initMap();
 
     return () => {
-      isCancelled = true;
+      isMounted = false;
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      if (routeLayerGroupRef.current) {
+        try {
+          routeLayerGroupRef.current.clearLayers();
+        } catch (_) {}
+      }
+      if (shopsLayerGroupRef.current) {
+        try {
+          shopsLayerGroupRef.current.clearLayers();
+        } catch (_) {}
+      }
+      if (userLayerGroupRef.current) {
+        try {
+          userLayerGroupRef.current.clearLayers();
+        } catch (_) {}
+      }
+      if (radiusLayerGroupRef.current) {
+        try {
+          radiusLayerGroupRef.current.clearLayers();
+        } catch (_) {}
+      }
       if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.stop();
+        } catch (_) {}
         try {
           mapInstanceRef.current.remove();
         } catch (_) {}
@@ -214,103 +337,85 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     };
   }, []);
 
-  // Switch basemap style
-  const handleSwitchBasemap = (styleKey: "voyager" | "positron" | "osm" | "dark") => {
-    setBasemapStyle(styleKey);
-    setShowLayerMenu(false);
-    if (mapInstanceRef.current) {
-      try {
-        mapInstanceRef.current.setStyle(MAP_STYLES[styleKey].style);
-        mapInstanceRef.current.once("style.load", () => {
-          renderRadiusLayer(mapInstanceRef.current);
-          renderRouteLayer(mapInstanceRef.current);
-        });
-      } catch (err) {
-        console.warn("Error changing basemap style:", err);
-      }
-    }
-  };
-
-  // Render User Location Marker
+  // Update Basemap Layer when style changes
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    const maplibregl = maplibreglRef.current;
-    if (!map || !maplibregl || !liveLocation) return;
+    const L = leafletModuleRef.current;
+    if (!L || !mapInstanceRef.current || !tileLayerRef.current) return;
 
-    if (userMarkerRef.current) {
-      userMarkerRef.current.setLngLat([liveLocation[1], liveLocation[0]]);
-    } else {
-      const userEl = document.createElement("div");
-      userEl.innerHTML = `
-        <div style="position: relative; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-          <div style="position: absolute; width: 26px; height: 26px; border-radius: 50%; background: rgba(37, 99, 235, 0.35); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-          <div style="width: 14px; height: 14px; border-radius: 50%; background: #2563EB; border: 2.5px solid #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.3); position: relative; z-index: 2;"></div>
-        </div>
-      `;
-      userMarkerRef.current = new maplibregl.Marker({ element: userEl })
-        .setLngLat([liveLocation[1], liveLocation[0]])
-        .addTo(map);
-    }
+    try {
+      mapInstanceRef.current.removeLayer(tileLayerRef.current);
+      const newLayer = L.tileLayer(CARTO_BASEMAPS[basemapStyle].url, {
+        attribution: CARTO_ATTRIBUTION,
+        subdomains: "abcd",
+        maxZoom: 20,
+      }).addTo(mapInstanceRef.current);
+      newLayer.on("tileerror", (e: any) => {
+        if (e.tile && !e.tile.dataset.fallbackRetried) {
+          e.tile.dataset.fallbackRetried = "1";
+          const src = e.tile.src || "";
+          const match = src.match(/\/(\d+)\/(\d+)\/(\d+)/);
+          if (match) {
+            e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+          }
+        }
+      });
+      newLayer.bringToBack();
+      tileLayerRef.current = newLayer;
+    } catch (_) {}
+  }, [basemapStyle]);
+
+  // 2. Render / Update Customer Live Location Marker ("You") - Clean Pulse Puck
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    if (
+      !L ||
+      !mapInstanceRef.current ||
+      !mapInstanceRef.current._container ||
+      !userLayerGroupRef.current ||
+      !liveLocation
+    )
+      return;
+
+    userLayerGroupRef.current.clearLayers();
+
+    const userIconHtml = `
+      <div style="position: relative; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: pointer;">
+        <div style="position: absolute; width: 24px; height: 24px; border-radius: 50%; background: rgba(37, 99, 235, 0.22); animation: pulsePin 2s infinite ease-out;"></div>
+        <div style="width: 13px; height: 13px; border-radius: 50%; background: #2563EB; border: 2.5px solid #FFFFFF; box-shadow: 0 1.5px 5px rgba(0,0,0,0.3); position: relative; z-index: 2;"></div>
+      </div>
+    `;
+
+    const userIcon = L.divIcon({
+      html: userIconHtml,
+      className: "customer-live-location-pin",
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+
+    const uMarker = L.marker(liveLocation, { icon: userIcon, zIndexOffset: 1000 });
+    uMarker.bindPopup(`
+      <div style="font-family: inherit; font-size: 11px; font-weight: 700; color: #1E40AF; text-align: center; padding: 2px 4px;">
+        📍 Your Location
+      </div>
+    `);
+
+    userLayerGroupRef.current.addLayer(uMarker);
   }, [liveLocation]);
 
-  // Render / Update Radius Circle
-  const renderRadiusLayer = (map: any) => {
-    if (!map || !map.isStyleLoaded()) return;
-
-    if (radiusKm && radiusKm > 0 && liveLocation) {
-      const circleData = createCircleGeoJSON(liveLocation[0], liveLocation[1], radiusKm);
-      if (map.getSource("radius-source")) {
-        (map.getSource("radius-source") as any).setData(circleData);
-      } else {
-        map.addSource("radius-source", {
-          type: "geojson",
-          data: circleData,
-        });
-        map.addLayer({
-          id: "radius-fill",
-          type: "fill",
-          source: "radius-source",
-          paint: {
-            "fill-color": "#3B82F6",
-            "fill-opacity": 0.08,
-          },
-        });
-        map.addLayer({
-          id: "radius-line",
-          type: "line",
-          source: "radius-source",
-          paint: {
-            "line-color": "#2563EB",
-            "line-width": 1.5,
-            "line-dasharray": [3, 3],
-          },
-        });
-      }
-    } else {
-      if (map.getLayer("radius-line")) map.removeLayer("radius-line");
-      if (map.getLayer("radius-fill")) map.removeLayer("radius-fill");
-      if (map.getSource("radius-source")) map.removeSource("radius-source");
-    }
-  };
-
+  // 3. Render / Update Shop Markers - Clean Vector Teardrop Pin
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      renderRadiusLayer(mapInstanceRef.current);
-    }
-  }, [radiusKm, liveLocation]);
+    const L = leafletModuleRef.current;
+    if (
+      !L ||
+      !mapInstanceRef.current ||
+      !mapInstanceRef.current._container ||
+      !shopsLayerGroupRef.current
+    )
+      return;
 
-  // Render Shop Markers
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    const maplibregl = maplibreglRef.current;
-    if (!map || !maplibregl) return;
-
-    // Clear previous shop markers
-    shopMarkersRef.current.forEach((m) => m.remove());
-    shopMarkersRef.current = [];
+    shopsLayerGroupRef.current.clearLayers();
 
     shops.forEach((shop) => {
-      if (!shop.latitude || !shop.longitude) return;
       const isSelected = selectedShop?.id === shop.id;
       const queueColor =
         shop.queue_status === "Low"
@@ -319,164 +424,331 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           ? "#F59E0B"
           : "#EF4444";
 
-      const pinEl = document.createElement("div");
-      pinEl.innerHTML = `
-        <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; transform: ${
-          isSelected ? "scale(1.15)" : "scale(1)"
-        }; transition: transform 0.2s;">
-          <div style="width: 32px; height: 32px; border-radius: 50%; background: ${
-            isSelected ? "#2563EB" : queueColor
-          }; border: 3px solid #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-          </div>
-          <div style="background: white; border: 1.5px solid ${
-            isSelected ? "#2563EB" : "#E2E8F0"
-          }; border-radius: 6px; padding: 2px 6px; font-size: 10px; font-weight: 800; color: #1E293B; box-shadow: 0 2px 6px rgba(0,0,0,0.15); margin-top: 3px; white-space: nowrap;">
+      const pinWidth = isSelected ? 34 : 28;
+      const pinHeight = isSelected ? 44 : 36;
+      const anchorX = isSelected ? 17 : 14;
+      const anchorY = isSelected ? 44 : 36;
+
+      const html = isSelected
+        ? `
+        <div style="position: relative; width: ${pinWidth}px; height: ${pinHeight}px; display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25)); transition: transform 0.15s ease;">
+          <div style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-5px); background: #0F172A; color: #FFFFFF; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.28); pointer-events: none; border: 1px solid rgba(255,255,255,0.18);">
             ${shop.name}
           </div>
+          <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 44C15.6 39.8 0 27.2 0 17C0 7.6 7.6 0 17 0C26.4 0 34 7.6 34 17C34 27.2 18.4 39.8 17 44Z" fill="#2563EB" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="10.5" y="9" width="13" height="15" rx="2.5" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+            <circle cx="17" cy="17.8" r="4.2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+            <circle cx="13.8" cy="12" r="0.9" fill="#FFFFFF"/>
+            <line x1="16.5" y1="12" x2="20.5" y2="12" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="26" cy="8" r="4" fill="${queueColor}" stroke="#FFFFFF" stroke-width="1.5"/>
+          </svg>
+        </div>
+        `
+        : `
+        <div style="position: relative; width: ${pinWidth}px; height: ${pinHeight}px; display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.18)); transition: transform 0.15s ease;">
+          <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 36C12.8 32.5 0 22 0 14C0 6.3 6.3 0 14 0C21.7 0 28 6.3 28 14C28 22 15.2 32.5 14 36Z" fill="#FFFFFF" stroke="${queueColor}" stroke-width="2"/>
+            <rect x="8.5" y="7.5" width="11" height="13" rx="2" fill="none" stroke="${queueColor}" stroke-width="1.5"/>
+            <circle cx="14" cy="15" r="3.5" fill="none" stroke="${queueColor}" stroke-width="1.4"/>
+            <circle cx="11.2" cy="10.2" r="0.75" fill="${queueColor}"/>
+            <line x1="13.5" y1="10.2" x2="16.8" y2="10.2" stroke="${queueColor}" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="21.5" cy="6.5" r="3.2" fill="${queueColor}" stroke="#FFFFFF" stroke-width="1.2"/>
+          </svg>
+        </div>
+        `;
+
+      const customIcon = L.divIcon({
+        html,
+        className: "custom-laundry-pin",
+        iconSize: [pinWidth, pinHeight],
+        iconAnchor: [anchorX, anchorY],
+      });
+
+      const marker = L.marker([shop.latitude, shop.longitude], {
+        icon: customIcon,
+        zIndexOffset: isSelected ? 800 : 200,
+      });
+
+      marker.on("click", () => {
+        onSelectShop(shop);
+      });
+
+      shopsLayerGroupRef.current.addLayer(marker);
+    });
+  }, [shops, selectedShop, onSelectShop]);
+
+  // 4. Render / Update Route Line from You to Selected Shop
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    if (!L || !mapInstanceRef.current || !routeLayerGroupRef.current) return;
+
+    routeLayerGroupRef.current.clearLayers();
+
+    if (!selectedShop) {
+      setCalculatedDistance(null);
+      setCalculatedDuration(null);
+      return;
+    }
+
+    if (!liveLocation) {
+      if (selectedShop.id !== lastFittedShopIdRef.current) {
+        lastFittedShopIdRef.current = selectedShop.id;
+        if (mapInstanceRef.current && mapInstanceRef.current._container) {
+          try {
+            mapInstanceRef.current.setView(
+              [selectedShop.latitude, selectedShop.longitude],
+              15,
+              { animate: false }
+            );
+          } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    const userLat = liveLocation[0];
+    const userLng = liveLocation[1];
+    const shopLat = selectedShop.latitude;
+    const shopLng = selectedShop.longitude;
+
+    const straightDist = calculateDistanceKm(userLat, userLng, shopLat, shopLng);
+    setCalculatedDistance(straightDist);
+    setCalculatedDuration(Math.max(1, Math.round(straightDist * 3.5)));
+
+    const addMidpointBadge = (coords: [number, number], distKm: number, durationMins: number) => {
+      if (!routeLayerGroupRef.current) return;
+      const badgeHtml = `
+        <div style="
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: #0F172A;
+          padding: 2.5px 8px;
+          border-radius: 9999px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 10.5px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+          border: 1px solid #E2E8F0;
+          pointer-events: none;
+          transform: translate(-50%, -50%);
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        ">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#2563EB" stroke="#2563EB" stroke-width="1.5">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+          </svg>
+          <span>${distKm} km</span>
+          <span style="color: #CBD5E1;">•</span>
+          <span style="color: #2563EB;">~${durationMins}m</span>
         </div>
       `;
 
-      pinEl.onclick = () => {
-        onSelectShop(shop);
-        map.flyTo({
-          center: [shop.longitude, shop.latitude],
-          zoom: 15,
-        });
-      };
+      const badgeIcon = L.divIcon({
+        html: badgeHtml,
+        className: "route-midpoint-badge",
+        iconSize: [0, 0],
+      });
 
-      const marker = new maplibregl.Marker({ element: pinEl })
-        .setLngLat([shop.longitude, shop.latitude])
-        .addTo(map);
+      const badgeMarker = L.marker(coords, {
+        icon: badgeIcon,
+        interactive: false,
+      });
+      routeLayerGroupRef.current.addLayer(badgeMarker);
+    };
 
-      shopMarkersRef.current.push(marker);
-    });
-  }, [shops, selectedShop?.id]);
+    const renderRoadTrack = (
+      roadLatLngs: [number, number][],
+      distKm: number,
+      mins: number
+    ) => {
+      if (
+        !routeLayerGroupRef.current ||
+        !mapInstanceRef.current ||
+        !mapInstanceRef.current._container
+      )
+        return;
 
-  // Render Route Line to Selected Shop
-  const renderRouteLayer = async (map: any) => {
-    if (!map || !map.isStyleLoaded()) return;
+      routeLayerGroupRef.current.clearLayers();
 
-    if (selectedShop && liveLocation) {
-      const userLng = liveLocation[1];
-      const userLat = liveLocation[0];
-      const shopLng = selectedShop.longitude;
-      const shopLat = selectedShop.latitude;
+      const roadCasing = L.polyline(roadLatLngs, {
+        color: "#1E3A8A",
+        weight: 7,
+        opacity: 0.25,
+        lineCap: "round",
+        lineJoin: "round",
+      });
 
-      const dist = calculateDistanceKm(userLat, userLng, shopLat, shopLng);
-      setCalculatedDistance(dist);
-      setCalculatedDuration(Math.max(1, Math.round((dist / 25) * 60)));
+      const roadPolyline = L.polyline(roadLatLngs, {
+        color: "#2563EB",
+        weight: 4,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round",
+      });
 
-      let routeCoords: [number, number][] = [
-        [userLng, userLat],
-        [shopLng, shopLat],
-      ];
+      const dashOverlay = L.polyline(roadLatLngs, {
+        color: "#93C5FD",
+        weight: 2,
+        dashArray: "6, 10",
+        lineCap: "round",
+        lineJoin: "round",
+        className: "animated-route-line",
+      });
 
-      // Try OSRM driving route
+      routeLayerGroupRef.current.addLayer(roadCasing);
+      routeLayerGroupRef.current.addLayer(roadPolyline);
+      routeLayerGroupRef.current.addLayer(dashOverlay);
+
+      const midIndex = Math.floor(roadLatLngs.length / 2);
+      const midPoint =
+        roadLatLngs[midIndex] || [(userLat + shopLat) / 2, (userLng + shopLng) / 2];
+      addMidpointBadge(midPoint, distKm, mins);
+
       try {
-        const res = await fetch(
-          `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${shopLng},${shopLat}?overview=full&geometries=geojson`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.routes?.[0]?.geometry?.coordinates) {
-            routeCoords = data.routes[0].geometry.coordinates;
-          }
+        const bounds = roadPolyline.getBounds();
+        if (bounds && bounds.isValid() && mapInstanceRef.current && mapInstanceRef.current._mapPane) {
+          mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: false });
         }
       } catch (_) {}
+    };
 
-      const geojsonLine = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: routeCoords,
-        },
-      };
-
-      if (map.getSource("selected-route")) {
-        (map.getSource("selected-route") as any).setData(geojsonLine);
-      } else {
-        map.addSource("selected-route", {
-          type: "geojson",
-          data: geojsonLine,
-        });
-        map.addLayer({
-          id: "selected-route-casing",
-          type: "line",
-          source: "selected-route",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#1E3A8A",
-            "line-width": 7,
-            "line-opacity": 0.35,
-          },
-        });
-        map.addLayer({
-          id: "selected-route-line",
-          type: "line",
-          source: "selected-route",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#2563EB",
-            "line-width": 4.5,
-            "line-opacity": 0.95,
-          },
-        });
-      }
-    } else {
-      if (map.getLayer("selected-route-line")) map.removeLayer("selected-route-line");
-      if (map.getLayer("selected-route-casing")) map.removeLayer("selected-route-casing");
-      if (map.getSource("selected-route")) map.removeSource("selected-route");
-      setCalculatedDistance(null);
-      setCalculatedDuration(null);
+    if (selectedShop.id !== lastFittedShopIdRef.current) {
+      lastFittedShopIdRef.current = selectedShop.id;
+      try {
+        const initialBounds = L.latLngBounds([
+          [userLat, userLng],
+          [shopLat, shopLng],
+        ]);
+        if (initialBounds.isValid() && mapInstanceRef.current && mapInstanceRef.current._mapPane) {
+          mapInstanceRef.current.fitBounds(initialBounds, { padding: [50, 50], maxZoom: 16, animate: false });
+        }
+      } catch (_) {}
     }
-  };
 
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${shopLng},${shopLat}?overview=full&geometries=geojson`;
+
+    fetch(osrmUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error("OSRM routing network error");
+        return res.json();
+      })
+      .then((data) => {
+        if (data.code === "Ok" && data.routes && data.routes[0]) {
+          const route = data.routes[0];
+          const rawCoords = route.geometry.coordinates;
+          const roadLatLngs: [number, number][] = rawCoords.map((c: [number, number]) => [
+            c[1],
+            c[0],
+          ]);
+
+          const realDistanceKm = parseFloat((route.distance / 1000).toFixed(2));
+          const durationMins = Math.max(1, Math.round(route.duration / 60));
+
+          setCalculatedDistance(realDistanceKm);
+          setCalculatedDuration(durationMins);
+
+          renderRoadTrack(roadLatLngs, realDistanceKm, durationMins);
+        } else {
+          fallbackStraightRoute();
+        }
+      })
+      .catch(() => {
+        fallbackStraightRoute();
+      });
+
+    function fallbackStraightRoute() {
+      const straightLine: [number, number][] = [
+        [userLat, userLng],
+        [shopLat, shopLng],
+      ];
+      renderRoadTrack(straightLine, straightDist, Math.max(1, Math.round(straightDist * 3.5)));
+    }
+  }, [selectedShop, liveLocation]);
+
+  // 5. Render / Update Search Radius Circle
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      renderRouteLayer(mapInstanceRef.current);
-    }
-  }, [selectedShop?.id, liveLocation]);
+    const L = leafletModuleRef.current;
+    if (
+      !L ||
+      !mapInstanceRef.current ||
+      !mapInstanceRef.current._container ||
+      !radiusLayerGroupRef.current
+    )
+      return;
 
+    radiusLayerGroupRef.current.clearLayers();
+
+    if (!radiusKm || !liveLocation) {
+      lastRadiusRef.current = null;
+      return;
+    }
+
+    const circle = L.circle(liveLocation, {
+      radius: radiusKm * 1000,
+      color: "#3B82F6",
+      fillColor: "#60A5FA",
+      fillOpacity: 0.08,
+      weight: 1.5,
+      dashArray: "4, 6",
+    });
+
+    radiusLayerGroupRef.current.addLayer(circle);
+
+    if (radiusKm !== lastRadiusRef.current && !selectedShop) {
+      lastRadiusRef.current = radiusKm;
+      try {
+        const bounds = circle.getBounds();
+        if (bounds && bounds.isValid() && mapInstanceRef.current && mapInstanceRef.current._mapPane) {
+          mapInstanceRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 15, animate: false });
+        }
+      } catch (_) {}
+    }
+  }, [radiusKm, liveLocation, selectedShop]);
+
+  // Controls Handlers
   const handleZoomIn = () => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.zoomIn();
+      try {
+        mapInstanceRef.current.zoomIn();
+      } catch (_) {}
     }
   };
 
   const handleZoomOut = () => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.zoomOut();
+      try {
+        mapInstanceRef.current.zoomOut();
+      } catch (_) {}
     }
   };
 
   const handleRecenter = () => {
     if (mapInstanceRef.current && liveLocation) {
-      mapInstanceRef.current.flyTo({
-        center: [liveLocation[1], liveLocation[0]],
-        zoom: 15,
-      });
+      try {
+        mapInstanceRef.current.setView(liveLocation, 15, { animate: true });
+      } catch (_) {}
     }
   };
 
   const toggleInternalFullscreen = () => {
     if (onToggleFullScreen) {
       onToggleFullScreen();
-    } else {
-      setIsInternalFullscreen((prev) => !prev);
+      return;
     }
+    setIsInternalFullscreen((prev) => !prev);
   };
 
   const openGoogleMapsDirections = () => {
     if (!selectedShop) return;
     const dest = `${selectedShop.latitude},${selectedShop.longitude}`;
-    const orig = liveLocation ? `${liveLocation[0]},${liveLocation[1]}` : "";
-    const url = orig
-      ? `https://www.google.com/maps/dir/?api=1&origin=${orig}&destination=${dest}&travelmode=driving`
+    const origin = liveLocation ? `${liveLocation[0]},${liveLocation[1]}` : "";
+    const url = origin
+      ? `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving`
       : `https://www.google.com/maps/search/?api=1&query=${dest}`;
     window.open(url, "_blank");
   };
@@ -484,64 +756,73 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   return (
     <div
       ref={wrapperRef}
-      className={`relative w-full h-full overflow-hidden bg-slate-100 ${
-        isFullScreen || isInternalFullscreen ? "fixed inset-0 z-50 rounded-none" : "rounded-2xl"
-      } ${className}`}
+      className={`relative w-full h-full min-h-[400px] overflow-hidden select-none bg-slate-100 ${
+        isInternalFullscreen || isFullScreen
+          ? "fixed inset-0 z-50 w-screen h-screen"
+          : className
+      }`}
     >
-      {/* Map Viewport Container */}
-      <div ref={mapContainerRef} className="w-full h-full min-h-[380px]" />
+      {/* Leaflet Map DOM Container */}
+      <div ref={mapContainerRef} className="w-full h-full min-h-[400px]" />
 
-      {/* Top Map Controls Floating Bar */}
-      <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-2">
-        {/* Layer Selector Toggle */}
+      {/* Floating Basemap Style Switcher */}
+      <div className="absolute top-4 left-4 z-20">
         <div className="relative">
           <button
             type="button"
-            onClick={() => setShowLayerMenu(!showLayerMenu)}
-            className="w-10 h-10 rounded-xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-blue-600 hover:bg-slate-50 transition-all cursor-pointer active:scale-95"
-            title="Map Style"
+            onClick={() => setShowLayerMenu((prev) => !prev)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md text-xs font-bold text-slate-700 hover:text-blue-600 hover:bg-slate-50 transition-all cursor-pointer"
+            title="Change Basemap Style"
           >
-            <Layers size={18} />
+            <Layers size={15} />
+            <span className="hidden sm:inline">{CARTO_BASEMAPS[basemapStyle].name}</span>
           </button>
 
           {showLayerMenu && (
-            <div className="absolute right-0 top-12 w-48 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-xl p-2 z-30 space-y-1 animate-in fade-in zoom-in-95">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block">
-                Free Map Styles
-              </span>
-              {(Object.keys(MAP_STYLES) as Array<keyof typeof MAP_STYLES>).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleSwitchBasemap(key)}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                    basemapStyle === key
-                      ? "bg-blue-50 text-blue-700 font-bold"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  <span>{MAP_STYLES[key].name}</span>
-                  {basemapStyle === key && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
-                </button>
-              ))}
+            <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl border border-slate-200 shadow-xl p-1.5 space-y-1 z-30 animate-in fade-in zoom-in-95 duration-150">
+              {(Object.keys(CARTO_BASEMAPS) as (keyof typeof CARTO_BASEMAPS)[]).map((key) => {
+                const isSelected = basemapStyle === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setBasemapStyle(key);
+                      setShowLayerMenu(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-50 text-blue-700 font-bold"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>{CARTO_BASEMAPS[key].name}</span>
+                    {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
+      </div>
 
+      {/* Floating Map Action Buttons (Right Side) */}
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
         {/* Zoom Controls */}
-        <div className="flex flex-col rounded-xl overflow-hidden bg-white/95 backdrop-blur-md border border-slate-200 shadow-md divide-y divide-slate-100">
+        <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-md overflow-hidden flex flex-col">
           <button
             type="button"
             onClick={handleZoomIn}
-            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:bg-slate-50 transition-colors cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors cursor-pointer active:bg-slate-100"
             title="Zoom In"
           >
             <Plus size={18} />
           </button>
+          <div className="h-px w-full bg-slate-200" />
           <button
             type="button"
             onClick={handleZoomOut}
-            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:text-blue-600 hover:bg-slate-50 transition-colors cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors cursor-pointer active:bg-slate-100"
             title="Zoom Out"
           >
             <Minus size={18} />
@@ -572,7 +853,6 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       {/* Selected Shop Floating Drawer / Bottom Sheet */}
       {selectedShop && (
         <div className="absolute bottom-4 left-3 right-3 sm:left-auto sm:right-4 sm:w-80 z-30 bg-white rounded-2xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-3 duration-200">
-          {/* Shop Photo Header if available */}
           {selectedShop.images && selectedShop.images.length > 0 ? (
             <div className="relative h-28 w-full bg-slate-100 overflow-hidden">
               <img
@@ -589,7 +869,6 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
                 <X size={14} />
               </button>
 
-              {/* Queue Badge */}
               <div className="absolute top-2 left-2">
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs backdrop-blur-md border ${
@@ -604,7 +883,6 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
                 </span>
               </div>
 
-              {/* Rating on image */}
               <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white text-[11px] font-bold border border-white/10">
                 <Star size={11} className="text-amber-400 fill-amber-400" />
                 <span>
@@ -619,7 +897,6 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
             </div>
           ) : null}
 
-          {/* Modal Content Body */}
           <div className="p-3.5 space-y-2.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-start gap-2">

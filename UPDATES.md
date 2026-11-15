@@ -1598,3 +1598,46 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
    - In `ShopServicesView.tsx`: Initialized `isFavorited` to `false` and loaded persisted state in `useEffect`.
 4. **Build Verification**:
    - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+
+---
+
+### Update 51: Restored Leaflet Map Engine Across Customer and Owner Portals
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request for Leaflet Engine**:
+   - The user requested returning to the Leaflet map engine on both customer and owner maps.
+2. **Hardening Against Leaflet DOM / Animation Race Conditions (`_leaflet_pos`)**:
+   - Leaflet previously threw `TypeError: Cannot set properties of undefined (setting '_leaflet_pos')` when `map.fitBounds` or `getBoundsZoom` ran before map container dimensions were established or when bounds had zero area.
+
+#### Changes Implemented:
+1. **Engine Hardening (`client/lib/utils/leafletPatch.ts`)**:
+   - Expanded `patchLeafletPos(L)` to guard:
+     - `L.DomUtil.getPosition` and `L.DomUtil.setPosition` against undefined DOM elements.
+     - `L.Map.prototype.getBoundsZoom`: Prevents `-Infinity` / `Infinity` when map container width/height is 0.
+     - `L.Map.prototype.fitBounds`: Safely handles identical coordinates, zero-sized containers, and guards with `{ animate: false }`.
+     - `L.Map.prototype.setView`: Guards against non-finite or NaN zoom parameters.
+2. **Customer Discovery Map (`client/components/customer/LaundryMap.tsx`)**:
+   - Restored Leaflet map engine with free CARTO Voyager, CARTO Positron, OSM Standard, and CARTO Dark Matter basemap presets.
+   - Vector teardrop pins for laundry shops with live queue status dots, washing machine icons, and price pills.
+   - Pulsing blue GPS puck for user location.
+   - Search radius circle via `L.circle`.
+   - Real-road street route polyline from OSRM driving service with road casing, animated direction dash, and midpoint ETA pill.
+   - Controls: Basemap style switcher, Zoom +/- buttons, Recenter GPS, and Fullscreen toggle.
+   - Selected shop bottom sheet drawer with walk-in QR and directions.
+3. **Customer Turn-by-Turn Route Navigation (`client/components/customer/ShopRouteNavigation.tsx`)**:
+   - Restored Leaflet map engine for customer route navigation.
+   - User pulse puck, shop red pin with name label, and turn-by-turn road polyline with midpoint ETA badge.
+   - Travel mode selector (Drive, Walk, Bike) updating OSRM road geometry dynamically.
+   - Safe `fitBounds` with validity checks and size invalidation.
+4. **Owner Branch Location Picker (`client/components/owner/ShopLocationPicker.tsx`)**:
+   - Restored Leaflet map engine for owner branch location selection.
+   - Draggable emerald shop pin with `L.divIcon`.
+   - Map click listener to place pin directly on shop entrance.
+   - Device GPS detection button and quick major hub preset chips.
+5. **CSS & Asset Cleanup**:
+   - Imported `leaflet/dist/leaflet.css` in `client/app/globals.css`.
+   - Removed unused `client/lib/map/maplibreStyles.ts`.
+6. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.

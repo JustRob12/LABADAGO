@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { LocateFixed, MapPin, Navigation, AlertCircle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
-import { MAP_STYLES } from "@/lib/map/maplibreStyles";
+import { LocateFixed, MapPin, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { patchLeafletPos } from "@/lib/utils/leafletPatch";
 
 interface ShopLocationPickerProps {
   latitude: number;
@@ -19,12 +19,15 @@ const PRESET_LOCATIONS = [
   { name: "Cebu IT Park, Cebu", lat: 10.3298, lng: 123.9056 },
 ];
 
+const CARTO_VOYAGER_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const CARTO_ATTRIBUTION =
+  '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
+
 export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
   latitude,
   longitude,
   onChangeCoords,
 }) => {
-  const [mode, setMode] = useState<"live" | "manual">("live");
   const [isLocating, setIsLocating] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
 
-  // 1. Initialize MapLibre GL Map on Mount
+  // 1. Initialize Leaflet Map ONCE on Mount
   useEffect(() => {
     if (typeof window === "undefined" || !mapContainerRef.current) return;
 
@@ -41,73 +44,93 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
 
     async function initPickerMap() {
       try {
-        const maplibregl = await import("maplibre-gl");
+        const leaf = await import("leaflet");
+        const L = (leaf as any).default || leaf;
         if (!isMounted || !mapContainerRef.current) return;
 
+        patchLeafletPos(L);
+
+        // Clean up previous map if exists
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
+          try {
+            mapInstanceRef.current.remove();
+          } catch (_) {}
           mapInstanceRef.current = null;
         }
 
         const initialLat = latitude || 14.6402;
         const initialLng = longitude || 121.0744;
 
-        const map = new maplibregl.Map({
-          container: mapContainerRef.current,
-          style: MAP_STYLES.voyager.style as any,
-          center: [initialLng, initialLat],
+        const map = L.map(mapContainerRef.current, {
+          center: [initialLat, initialLng],
           zoom: 15,
-          attributionControl: false,
+          scrollWheelZoom: true,
+          zoomControl: true,
         });
 
-        map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
+        L.tileLayer(CARTO_VOYAGER_URL, {
+          attribution: CARTO_ATTRIBUTION,
+          subdomains: "abcd",
+          maxZoom: 20,
+        }).addTo(map);
 
         mapInstanceRef.current = map;
 
         // Custom Green Shop Pin Element
-        const pinEl = document.createElement("div");
-        pinEl.innerHTML = `
-          <div style="
-            width: 38px;
-            height: 38px;
-            background: #10B981;
-            border: 3px solid #FFFFFF;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-            cursor: grab;
-          ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-        `;
+        const shopPin = L.divIcon({
+          html: `
+            <div style="
+              width: 36px;
+              height: 36px;
+              background: #10B981;
+              border: 3px solid #FFFFFF;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+              cursor: grab;
+            ">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+          `,
+          className: "owner-shop-location-picker-pin",
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
 
-        const marker = new maplibregl.Marker({
-          element: pinEl,
+        // Marker (Draggable)
+        const marker = L.marker([initialLat, initialLng], {
+          icon: shopPin,
           draggable: true,
-        })
-          .setLngLat([initialLng, initialLat])
-          .addTo(map);
+        }).addTo(map);
 
-        marker.on("dragend", () => {
-          const lngLat = marker.getLngLat();
-          const newLat = parseFloat(lngLat.lat.toFixed(6));
-          const newLng = parseFloat(lngLat.lng.toFixed(6));
+        marker.on("dragend", (e: any) => {
+          const latLng = e.target.getLatLng();
+          const newLat = parseFloat(latLng.lat.toFixed(6));
+          const newLng = parseFloat(latLng.lng.toFixed(6));
           onChangeCoords(newLat, newLng);
         });
 
         map.on("click", (e: any) => {
-          const newLat = parseFloat(e.lngLat.lat.toFixed(6));
-          const newLng = parseFloat(e.lngLat.lng.toFixed(6));
-          marker.setLngLat([newLng, newLat]);
+          const newLat = parseFloat(e.latlng.lat.toFixed(6));
+          const newLng = parseFloat(e.latlng.lng.toFixed(6));
+          marker.setLatLng([newLat, newLng]);
           onChangeCoords(newLat, newLng);
         });
 
         markerRef.current = marker;
+
+        setTimeout(() => {
+          if (isMounted && mapInstanceRef.current === map) {
+            try {
+              map.invalidateSize({ animate: false });
+            } catch (_) {}
+          }
+        }, 150);
       } catch (err) {
         console.error("Error setting up shop location picker map:", err);
       }
@@ -118,7 +141,9 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
     return () => {
       isMounted = false;
       if (markerRef.current) {
-        markerRef.current.remove();
+        try {
+          markerRef.current.remove();
+        } catch (_) {}
         markerRef.current = null;
       }
       if (mapInstanceRef.current) {
@@ -133,19 +158,18 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
   // 2. Sync marker position when external coords change
   useEffect(() => {
     if (markerRef.current && mapInstanceRef.current) {
-      const currentLngLat = markerRef.current.getLngLat();
-      const currentLat = currentLngLat.lat;
-      const currentLng = currentLngLat.lng;
+      const currentLatLng = markerRef.current.getLatLng();
+      const currentLat = currentLatLng.lat;
+      const currentLng = currentLatLng.lng;
 
       if (
         Math.abs(currentLat - latitude) > 0.0001 ||
         Math.abs(currentLng - longitude) > 0.0001
       ) {
-        markerRef.current.setLngLat([longitude, latitude]);
-        mapInstanceRef.current.flyTo({
-          center: [longitude, latitude],
-          zoom: 15,
-        });
+        markerRef.current.setLatLng([latitude, longitude]);
+        try {
+          mapInstanceRef.current.panTo([latitude, longitude], { animate: true });
+        } catch (_) {}
       }
     }
   }, [latitude, longitude]);
@@ -169,11 +193,10 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
         onChangeCoords(detectedLat, detectedLng);
 
         if (markerRef.current && mapInstanceRef.current) {
-          markerRef.current.setLngLat([detectedLng, detectedLat]);
-          mapInstanceRef.current.flyTo({
-            center: [detectedLng, detectedLat],
-            zoom: 16,
-          });
+          markerRef.current.setLatLng([detectedLat, detectedLng]);
+          try {
+            mapInstanceRef.current.setView([detectedLat, detectedLng], 16, { animate: true });
+          } catch (_) {}
         }
 
         setIsLocating(false);
@@ -197,11 +220,10 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
   const handleApplyPreset = (presetLat: number, presetLng: number) => {
     onChangeCoords(presetLat, presetLng);
     if (markerRef.current && mapInstanceRef.current) {
-      markerRef.current.setLngLat([presetLng, presetLat]);
-      mapInstanceRef.current.flyTo({
-        center: [presetLng, presetLat],
-        zoom: 15,
-      });
+      markerRef.current.setLatLng([presetLat, presetLng]);
+      try {
+        mapInstanceRef.current.setView([presetLat, presetLng], 15, { animate: true });
+      } catch (_) {}
     }
   };
 
@@ -269,7 +291,7 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
         </div>
       </div>
 
-      {/* MapLibre GL Map Viewport */}
+      {/* Leaflet Map Viewport */}
       <div className="relative w-full h-64 sm:h-72 rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
         <div ref={mapContainerRef} className="w-full h-full" />
       </div>
