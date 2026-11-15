@@ -384,22 +384,37 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   const completedOrders = useMemo(
     () =>
       transactions.filter((t) => {
-        if (t.status !== "Completed") return false;
-        // Today's completed orders
-        const isToday =
-          new Date(t.updated_at || t.created_at).toDateString() === new Date().toDateString();
-        return isToday;
+        if ((t.status || "").trim().toLowerCase() !== "completed") return false;
+        // Today's completed orders (timezone-tolerant check)
+        const rawTime = t.updated_at || t.created_at;
+        const txDate = new Date(rawTime);
+        const now = new Date();
+        const isLocalToday = txDate.toDateString() === now.toDateString();
+        const isUtcToday = txDate.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+        const isWithin24h = Math.abs(now.getTime() - txDate.getTime()) <= 24 * 60 * 60 * 1000;
+        return isLocalToday || isUtcToday || isWithin24h;
       }),
+    [transactions]
+  );
+  const allCompletedOrders = useMemo(
+    () => transactions.filter((t) => (t.status || "").trim().toLowerCase() === "completed"),
     [transactions]
   );
   const totalScannedOrders = useMemo(() => transactions.filter((t) => t.status !== "Pending").length, [transactions]);
 
-  // Reports & Financial Analytics State (Connected to Live Database)
-  const [reportRange, setReportRange] = useState<"today" | "yesterday" | "7days" | "month" | "all">("today");
-  const [reportStatusFilter, setReportStatusFilter] = useState<"all" | "completed" | "active" | "paid" | "unpaid">("all");
+  // Reports & Financial Analytics State (Connected to Live Database — Strictly Completed Orders)
+  const [reportRange, setReportRange] = useState<"all" | "today" | "yesterday" | "7days" | "month">("all");
+  const [reportStatusFilter, setReportStatusFilter] = useState<"all" | "paid" | "unpaid" | "cash" | "gcash">("all");
   const [reportSearchQuery, setReportSearchQuery] = useState("");
 
-  // Filtered transactions for the selected report scope
+  // Base list of completed transactions for reports and analytics
+  const completedOnlyTransactions = useMemo(() => {
+    return transactions.filter(
+      (tx) => (tx.status || "").trim().toLowerCase() === "completed"
+    );
+  }, [transactions]);
+
+  // Filtered transactions for the selected report scope (strictly completed transactions)
   const reportFilteredTransactions = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -408,23 +423,41 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     const sevenDaysAgoStart = todayStart - 6 * 24 * 60 * 60 * 1000;
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
-    return transactions.filter((tx) => {
-      const txTime = new Date(tx.created_at).getTime();
+    return completedOnlyTransactions.filter((tx) => {
+      const rawTime = tx.updated_at || tx.created_at;
+      const txDate = new Date(rawTime);
+      const txTime = txDate.getTime();
 
-      if (reportRange === "today") {
-        if (isNaN(txTime) || txTime < todayStart || txTime >= todayEnd) return false;
-      } else if (reportRange === "yesterday") {
-        if (isNaN(txTime) || txTime < yesterdayStart || txTime >= todayStart) return false;
-      } else if (reportRange === "7days") {
-        if (isNaN(txTime) || txTime < sevenDaysAgoStart) return false;
-      } else if (reportRange === "month") {
-        if (isNaN(txTime) || txTime < monthStart) return false;
+      if (reportRange !== "all") {
+        if (isNaN(txTime)) return false;
+
+        if (reportRange === "today") {
+          const isLocalToday = txDate.toDateString() === now.toDateString();
+          const isUtcToday = txDate.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+          const isWithin24h = Math.abs(now.getTime() - txTime) <= 24 * 60 * 60 * 1000;
+          const isInTodayBounds = txTime >= todayStart && txTime < todayEnd;
+          if (!isLocalToday && !isUtcToday && !isWithin24h && !isInTodayBounds) return false;
+        } else if (reportRange === "yesterday") {
+          const yDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const isLocalYesterday = txDate.toDateString() === yDate.toDateString();
+          const isUtcYesterday = txDate.toISOString().slice(0, 10) === yDate.toISOString().slice(0, 10);
+          const isInYesterdayBounds = txTime >= yesterdayStart && txTime < todayStart;
+          if (!isLocalYesterday && !isUtcYesterday && !isInYesterdayBounds) return false;
+        } else if (reportRange === "7days") {
+          if (txTime < sevenDaysAgoStart) return false;
+        } else if (reportRange === "month") {
+          const isSameMonth = txDate.getFullYear() === now.getFullYear() && txDate.getMonth() === now.getMonth();
+          if (!isSameMonth && txTime < monthStart) return false;
+        }
       }
 
-      if (reportStatusFilter === "completed" && tx.status !== "Completed") return false;
-      if (reportStatusFilter === "active" && tx.status === "Completed") return false;
-      if (reportStatusFilter === "paid" && tx.payment_status !== "Paid") return false;
-      if (reportStatusFilter === "unpaid" && tx.payment_status === "Paid") return false;
+      const isPaid = (tx.payment_status || "").trim().toLowerCase() === "paid";
+      const method = (tx.payment_method || "").trim().toLowerCase();
+
+      if (reportStatusFilter === "paid" && !isPaid) return false;
+      if (reportStatusFilter === "unpaid" && isPaid) return false;
+      if (reportStatusFilter === "cash" && method !== "cash") return false;
+      if (reportStatusFilter === "gcash" && method === "cash") return false;
 
       if (reportSearchQuery.trim()) {
         const q = reportSearchQuery.toLowerCase();
@@ -439,7 +472,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
       return true;
     });
-  }, [transactions, reportRange, reportStatusFilter, reportSearchQuery]);
+  }, [completedOnlyTransactions, reportRange, reportStatusFilter, reportSearchQuery]);
 
   // Aggregated KPI & Financial Metrics for the Report
   const reportStats = useMemo(() => {
@@ -450,19 +483,20 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     let cashCount = 0;
     let gcashPaid = 0;
     let gcashCount = 0;
-    let completedCount = 0;
-    let activeCount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
 
     const serviceMap = new Map<string, { count: number; totalWeight: number; revenue: number }>();
 
     reportFilteredTransactions.forEach((tx) => {
       const amount = Number(tx.total_amount) || 0;
       const weight = Number(tx.weight_kg) || 0;
-      const isPaid = tx.payment_status === "Paid";
+      const isPaid = (tx.payment_status || "").trim().toLowerCase() === "paid";
 
       if (isPaid) {
         grossPaid += amount;
-        const method = (tx.payment_method || "").toLowerCase();
+        paidCount += 1;
+        const method = (tx.payment_method || "").trim().toLowerCase();
         if (method === "cash") {
           cashPaid += amount;
           cashCount += 1;
@@ -472,15 +506,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         }
       } else {
         uncollected += amount;
+        unpaidCount += 1;
       }
 
       totalWeight += weight;
-
-      if (tx.status === "Completed") {
-        completedCount += 1;
-      } else {
-        activeCount += 1;
-      }
 
       const sName = tx.service_name || "Standard Laundry";
       const existing = serviceMap.get(sName) || { count: 0, totalWeight: 0, revenue: 0 };
@@ -491,7 +520,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     });
 
     const totalOrders = reportFilteredTransactions.length;
-    const completionRate = totalOrders > 0 ? Math.round((completedCount / totalOrders) * 100) : 100;
     const servicesRanked = Array.from(serviceMap.entries())
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.count - a.count);
@@ -501,9 +529,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       uncollected,
       totalWeight,
       totalOrders,
-      completedCount,
-      activeCount,
-      completionRate,
+      paidCount,
+      unpaidCount,
       cashPaid,
       cashCount,
       gcashPaid,
@@ -1552,18 +1579,18 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     <p className="text-xs text-slate-500">History of customer drop-offs and claimed laundry</p>
                   </div>
                   <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                    {completedOrders.length} records today
+                    {allCompletedOrders.length} completed records
                   </span>
                 </div>
 
                 <div className="pt-4 space-y-3">
-                  {completedOrders.length === 0 ? (
+                  {allCompletedOrders.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 text-xs">
                       <FileText size={36} className="mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold text-slate-600">No completed transactions recorded yet.</p>
                     </div>
                   ) : (
-                    completedOrders.map((tx) => (
+                    allCompletedOrders.map((tx) => (
                       <div
                         key={tx.id}
                         className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between gap-4"
@@ -1779,11 +1806,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       <span>Range:</span>
                     </div>
                     {[
+                      { id: "all", label: "All Records" },
                       { id: "today", label: "Today (Live)" },
                       { id: "yesterday", label: "Yesterday" },
                       { id: "7days", label: "Last 7 Days" },
                       { id: "month", label: "This Month" },
-                      { id: "all", label: "All Records" },
                     ].map((rng) => (
                       <button
                         key={rng.id}
@@ -1808,11 +1835,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         onChange={(e) => setReportStatusFilter(e.target.value as any)}
                         className="w-full text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                       >
-                        <option value="all">All Statuses</option>
-                        <option value="completed">Completed Only</option>
-                        <option value="active">Active (Washing / Ready)</option>
-                        <option value="paid">Paid Transactions</option>
+                        <option value="all">All Completed Orders</option>
+                        <option value="paid">Paid &amp; Settled</option>
                         <option value="unpaid">Unpaid Receivables</option>
+                        <option value="cash">Cash Settlement</option>
+                        <option value="gcash">GCash Settlement</option>
                       </select>
                     </div>
 
@@ -1873,7 +1900,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] text-amber-700 pt-1">
                     <span className="font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
-                      {reportFilteredTransactions.filter((t) => t.payment_status !== "Paid").length} unpaid
+                      {reportStats.unpaidCount} unpaid
                     </span>
                     <span className="text-slate-400">pay at pickup</span>
                   </div>
@@ -1895,23 +1922,23 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     {reportStats.totalOrders > 0
                       ? (reportStats.totalWeight / reportStats.totalOrders).toFixed(1)
                       : "0.0"}{" "}
-                    kg per customer load
+                    kg per completed order
                   </div>
                 </div>
 
-                {/* 4. Completion Rate */}
+                {/* 4. Completed Orders */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">Completion Rate</span>
+                    <span className="text-xs font-semibold text-slate-500">Completed Orders</span>
                     <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
                       <CheckCircle2 size={16} />
                     </div>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-teal-600">
-                    {reportStats.completionRate}%
+                    {reportStats.totalOrders} <span className="text-sm font-bold text-slate-500">orders</span>
                   </div>
                   <div className="text-[11px] text-slate-400 pt-1">
-                    {reportStats.completedCount} completed of {reportStats.totalOrders} total in range
+                    100% completed &amp; handed over
                   </div>
                 </div>
               </div>
@@ -2041,12 +2068,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   <div>
                     <h4 className="text-sm font-bold text-slate-900">Transaction Audit Log</h4>
                     <p className="text-xs text-slate-500">
-                      Synchronized database transactions ({reportFilteredTransactions.length} records)
+                      Synchronized database completed transactions ({reportFilteredTransactions.length} records)
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
-                      Filtered: {reportFilteredTransactions.length} of {transactions.length} total
+                      Filtered: {reportFilteredTransactions.length} of {completedOnlyTransactions.length} completed
                     </span>
                   </div>
                 </div>
@@ -2061,7 +2088,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <th className="py-3 px-4">Machine</th>
                         <th className="py-3 px-4">Amount &amp; Payment</th>
                         <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Date / Time</th>
+                        <th className="py-3 px-4">Completed Date</th>
                         <th className="py-3 px-4 text-right">Action</th>
                       </tr>
                     </thead>
@@ -2070,9 +2097,9 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-slate-400">
                             <FileText size={32} className="mx-auto mb-2 text-slate-300" />
-                            <p className="font-semibold text-slate-600">No matching transactions found.</p>
+                            <p className="font-semibold text-slate-600">No completed transactions found.</p>
                             <p className="text-[11px] text-slate-400 mt-0.5">
-                              Try adjusting your date range or clearing your search filter.
+                              Only orders marked &quot;Completed&quot; in the database appear in reports and financial analytics.
                             </p>
                           </td>
                         </tr>
@@ -2119,7 +2146,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span
                                   className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border ${
-                                    tx.payment_status === "Paid"
+                                    (tx.payment_status || "").toLowerCase() === "paid"
                                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                       : "bg-amber-50 text-amber-700 border-amber-200"
                                   }`}
@@ -2136,26 +2163,17 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
                             {/* Order Status */}
                             <td className="py-3 px-4">
-                              <span
-                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                                  tx.status === "Completed"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : tx.status === "Ready"
-                                    ? "bg-teal-50 text-teal-700 border-teal-200"
-                                    : tx.status === "Washing" || tx.status === "Processing"
-                                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                                    : "bg-slate-100 text-slate-700 border-slate-200"
-                                }`}
-                              >
-                                {tx.status}
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 inline-flex items-center gap-1">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                Completed
                               </span>
                             </td>
 
                             {/* Date / Time */}
                             <td className="py-3 px-4 text-slate-500 text-[11px]">
-                              <div>{new Date(tx.created_at).toLocaleDateString()}</div>
+                              <div>{new Date(tx.updated_at || tx.created_at).toLocaleDateString()}</div>
                               <div className="text-[10px] text-slate-400">
-                                {new Date(tx.created_at).toLocaleTimeString([], {
+                                {new Date(tx.updated_at || tx.created_at).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}

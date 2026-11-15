@@ -80,30 +80,40 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
   const filteredTransactions = useMemo(() => {
     const now = new Date();
     const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
     if (selectedDateFilter === "Today (Live)") {
       const start = startOf(now);
-      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+      return transactions.filter((tx) => {
+        const d = new Date(tx.updated_at || tx.created_at);
+        const isLocal = d.toDateString() === now.toDateString();
+        const isUtc = d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+        const isWithin24h = Math.abs(now.getTime() - d.getTime()) <= 24 * 60 * 60 * 1000;
+        return d >= start || isLocal || isUtc || isWithin24h;
+      });
     }
     if (selectedDateFilter === "Yesterday") {
       const start = startOf(now);
       start.setDate(start.getDate() - 1);
       const end = startOf(now);
+      const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       return transactions.filter((tx) => {
-        const d = new Date(tx.created_at);
-        return d >= start && d < end;
+        const d = new Date(tx.updated_at || tx.created_at);
+        const isLocal = d.toDateString() === yesterdayDate.toDateString();
+        const isUtc = d.toISOString().slice(0, 10) === yesterdayDate.toISOString().slice(0, 10);
+        return (d >= start && d < end) || isLocal || isUtc;
       });
     }
     if (selectedDateFilter === "Last 7 Days") {
       const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+      return transactions.filter((tx) => new Date(tx.updated_at || tx.created_at) >= start);
     }
     if (selectedDateFilter === "Last 14 Days") {
       const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+      return transactions.filter((tx) => new Date(tx.updated_at || tx.created_at) >= start);
     }
     if (selectedDateFilter === "This Month") {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+      return transactions.filter((tx) => new Date(tx.updated_at || tx.created_at) >= start);
     }
     return transactions;
   }, [transactions, selectedDateFilter]);
@@ -111,7 +121,7 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
   // ── KPI Metrics (all from real data) ────────────────────────────────────────
   const totalTransactionsCount = filteredTransactions.length;
   const completedTransactionsCount = filteredTransactions.filter(
-    (tx) => tx.status === "Completed"
+    (tx) => (tx.status || "").trim().toLowerCase() === "completed"
   ).length;
   const completionRate =
     totalTransactionsCount > 0
@@ -128,7 +138,9 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
 
   const estimatedRevenue = useMemo(() => {
     return filteredTransactions.reduce((sum, tx) => {
-      if (tx.payment_status === "Paid" || tx.status === "Completed") {
+      const isPaid = (tx.payment_status || "").trim().toLowerCase() === "paid";
+      const isCompleted = (tx.status || "").trim().toLowerCase() === "completed";
+      if (isPaid || isCompleted) {
         return sum + (Number(tx.total_amount) || 0);
       }
       return sum;
@@ -140,21 +152,26 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
   const onLeaveStaffCount = staffList.filter((s) => s.status === "On Leave").length;
 
   // ── Operational Overview (from real transactions) ────────────────────────────
-  const processingCount = filteredTransactions.filter(
-    (tx) => tx.status === "Washing" || tx.status === "Processing"
+  const processingCount = filteredTransactions.filter((tx) =>
+    ["washing", "processing", "drying", "folding", "received"].includes((tx.status || "").trim().toLowerCase())
   ).length;
   const readyPickupCount = filteredTransactions.filter(
-    (tx) => tx.status === "Ready"
+    (tx) => (tx.status || "").trim().toLowerCase() === "ready"
   ).length;
   const completedTodayCount = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    return transactions.filter(
-      (tx) => tx.status === "Completed" && new Date(tx.created_at) >= start
-    ).length;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return transactions.filter((tx) => {
+      if ((tx.status || "").trim().toLowerCase() !== "completed") return false;
+      const d = new Date(tx.updated_at || tx.created_at);
+      const isLocal = d.toDateString() === now.toDateString();
+      const isUtc = d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+      const isWithin24h = Math.abs(now.getTime() - d.getTime()) <= 24 * 60 * 60 * 1000;
+      return d >= start || isLocal || isUtc || isWithin24h;
+    }).length;
   }, [transactions]);
   const pendingTransactionsCount = filteredTransactions.filter(
-    (tx) => tx.status === "Pending"
+    (tx) => (tx.status || "").trim().toLowerCase() === "pending"
   ).length;
 
   // ── Transaction Trend Chart (grouped by day) ─────────────────────────────────

@@ -1376,6 +1376,41 @@ Ensure that when the administrator approves a partner application:
 5. **Build Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build.
 
+---
+
+### Update 45: Restrict Reports & Analytics Strictly to Completed Transactions
+
+**Objective**:
+Ensure Reports & Financial Analytics displays and computes metrics **strictly for completed transactions** from Supabase. Active/in-progress orders (`Washing`, `Pending`, `Received`, `Ready`) must be excluded from reports, and all orders marked as `Completed` in the database must appear accurately without timezone or default filter occlusions.
+
+#### Root Causes Identified:
+1. **Uncompleted Orders Mixed in Filter Scope**:
+   - The Reports tab previously accepted all order statuses by default, which included unfinished orders in the audit ledger and denominator calculations.
+2. **Default Range and Timezone Offset Occlusion**:
+   - The report range filter defaulted to `"today"` and compared only `tx.created_at` against local midnight (`new Date(now.getFullYear(), now.getMonth(), now.getDate())`).
+   - If an order was completed on a previous day or if the database timestamp was UTC while the client rolled over midnight, the transaction was excluded, resulting in `Filtered: 0 of 2 total` and ₱0.00 cards.
+
+#### Changes Implemented:
+1. **`client/components/staff/StaffScannerView.tsx`**:
+   - **Strict Completed Filter**: Created `completedOnlyTransactions` memoized filter `(tx.status || "").trim().toLowerCase() === "completed"`. All analytics, KPI cards, charts, and audit table rows now derive exclusively from this completed dataset.
+   - **Default Range Set to `"all"` (`All Records`)**: Staff members immediately see all completed database records upon opening the Reports tab without empty zero states.
+   - **Timezone-Tolerant Date Comparison**: Enhanced `"today"` and `"yesterday"` date filters to check completion time (`tx.updated_at || tx.created_at`), matching local calendar day (`toDateString()`), UTC calendar day (`toISOString().slice(0, 10)`), or within the last 24 hours (`Math.abs(now - txTime) <= 24h`).
+   - **Settlement Filter Dropdown**: Replaced the previous mixed status filter with completed-specific settlement options:
+     - `All Completed Orders`
+     - `Paid & Settled`
+     - `Unpaid Receivables`
+     - `Cash Settlement`
+     - `GCash Settlement`
+   - **KPI Card 4 Revamped**: Changed from redundant "Completion Rate 100%" to **Completed Orders** (`{reportStats.totalOrders} orders` • `100% completed & handed over`).
+   - **Audit Ledger Header**: Updated badge to `Filtered: {reportFilteredTransactions.length} of {completedOnlyTransactions.length} completed`.
+   - **Audit Table Rows**: Standardized the status column to display a verified green `Completed` badge with icon and the completion timestamp (`tx.updated_at || tx.created_at`).
+   - **Transactions Tab (Tab 4)**: Updated to display `allCompletedOrders` instead of only today's completed orders.
+2. **`client/components/owner/OwnerAnalyticsDashboard.tsx`**:
+   - Updated `filteredTransactions`, `completedTransactionsCount`, and `completedTodayCount` to use case-insensitive status matching and timezone-tolerant date comparisons on `tx.updated_at || tx.created_at`.
+   - Updated `estimatedRevenue` to include transactions where `isPaid || isCompleted`.
+3. **Build & Quality Assurance**:
+   - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
+
 
 
 
