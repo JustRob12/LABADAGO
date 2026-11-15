@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   BranchStaffMember,
   ShopReview,
+  PartnerApplication,
 } from "@/types/auth";
 
 // In-memory fallback stores for session
@@ -20,6 +21,7 @@ let localTransactionsStore: LaundryTransaction[] = [];
 let localStaffStore: BranchStaffMember[] = [];
 let localReviewsStore: ShopReview[] = [];
 let localProfilesStore: UserProfile[] = [];
+let localPartnerApplicationsStore: PartnerApplication[] = [];
 
 /**
  * Register a new user with Supabase Auth
@@ -1988,4 +1990,314 @@ export async function getShopReviews(shopId: string): Promise<ShopReview[]> {
     // fallback
   }
   return localReviewsStore.filter((r) => r.shop_id === shopId);
+}
+
+// =============================================================================
+// PARTNER APPLICATION FUNCTIONS ("Partner with this website" & Admin Portal)
+// =============================================================================
+
+/**
+ * Get partner application submitted by a specific user
+ */
+export async function getUserPartnerApplication(userId: string): Promise<PartnerApplication | null> {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("partner_applications")
+      .select("*")
+      .eq("applicant_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as PartnerApplication;
+    }
+  } catch (err) {
+    console.warn("Could not query partner_applications from Supabase, checking local store:", err);
+  }
+
+  const local = localPartnerApplicationsStore.find((a) => a.applicant_id === userId);
+  return local || null;
+}
+
+/**
+ * Submit a new partner application to register a laundry shop
+ */
+export async function submitPartnerApplication(
+  params: Omit<PartnerApplication, "id" | "status" | "created_at">
+): Promise<{ success: boolean; application?: PartnerApplication; error?: string }> {
+  try {
+    const newApp: PartnerApplication = {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `app-${Date.now()}`,
+      ...params,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from("partner_applications")
+        .insert({
+          applicant_id: newApp.applicant_id,
+          applicant_name: newApp.applicant_name,
+          applicant_email: newApp.applicant_email,
+          applicant_phone: newApp.applicant_phone,
+          shop_name: newApp.shop_name,
+          shop_description: newApp.shop_description || null,
+          shop_address: newApp.shop_address,
+          latitude: newApp.latitude,
+          longitude: newApp.longitude,
+          phone_number: newApp.phone_number,
+          open_time: newApp.open_time,
+          close_time: newApp.close_time,
+          washer_count: newApp.washer_count,
+          dryer_count: newApp.dryer_count,
+          max_kilo_per_load: newApp.max_kilo_per_load || 8,
+          images: newApp.images || [],
+          services: newApp.services || [],
+          status: "pending",
+          admin_notes: newApp.admin_notes || null,
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        newApp.id = data.id;
+      }
+    } catch (dbErr) {
+      console.warn("Direct partner_applications table insert notice, saving to local store:", dbErr);
+    }
+
+    // Update local fallback store
+    const existingIdx = localPartnerApplicationsStore.findIndex(
+      (a) => a.applicant_id === newApp.applicant_id
+    );
+    if (existingIdx >= 0) {
+      localPartnerApplicationsStore[existingIdx] = newApp;
+    } else {
+      localPartnerApplicationsStore.unshift(newApp);
+    }
+
+    return { success: true, application: newApp };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to submit partner application.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Fetch all partner applications for Platform Admin review
+ */
+export async function getPartnerApplications(): Promise<PartnerApplication[]> {
+  try {
+    const { data, error } = await supabase
+      .from("partner_applications")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data as PartnerApplication[];
+    }
+  } catch (err) {
+    console.warn("Could not query partner_applications from Supabase, checking local store:", err);
+  }
+
+  // Seed sample application if store is empty so admin UI is never blank
+  if (localPartnerApplicationsStore.length === 0) {
+    localPartnerApplicationsStore = [
+      {
+        id: "app-seed-001",
+        applicant_id: "user-seed-applicant-1",
+        applicant_name: "Roberto Dela Cruz",
+        applicant_email: "roberto.delacruz@gmail.com",
+        applicant_phone: "0917 888 1234",
+        shop_name: "Spin & Glow Laundry Hub",
+        shop_description: "Modern self-service and drop-off laundromat equipped with high-efficiency heavy-duty commercial washers.",
+        shop_address: "Central Boulevard, Mati City, Davao Oriental",
+        latitude: 6.9585,
+        longitude: 126.2185,
+        phone_number: "0917 888 1234",
+        open_time: "07:00",
+        close_time: "21:00",
+        washer_count: 8,
+        dryer_count: 8,
+        max_kilo_per_load: 8,
+        images: ["https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80"],
+        services: [
+          {
+            id: "srv-1",
+            shop_id: "app-seed-001",
+            service_name: "Wash, Dry & Fold",
+            price: 200,
+            unit: "load",
+            kilos: 8,
+            estimated_minutes: 120,
+            is_available: true,
+          },
+          {
+            id: "srv-2",
+            shop_id: "app-seed-001",
+            service_name: "Wash & Dry",
+            price: 160,
+            unit: "load",
+            kilos: 8,
+            estimated_minutes: 90,
+            is_available: true,
+          },
+        ],
+        status: "pending",
+        admin_notes: "Mayor's Permit and DTI registration submitted and verified.",
+        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      },
+    ];
+  }
+
+  return localPartnerApplicationsStore;
+}
+
+/**
+ * Approve or reject a partner application
+ */
+export async function reviewPartnerApplication(
+  applicationId: string,
+  status: "approved" | "rejected",
+  adminNotes?: string
+): Promise<{ success: boolean; shop?: LaundryShop; error?: string }> {
+  try {
+    let targetApp: PartnerApplication | undefined = localPartnerApplicationsStore.find(
+      (a) => a.id === applicationId
+    );
+
+    try {
+      const { data } = await supabase
+        .from("partner_applications")
+        .select("*")
+        .eq("id", applicationId)
+        .single();
+      if (data) {
+        targetApp = data as PartnerApplication;
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!targetApp) {
+      return { success: false, error: "Application not found." };
+    }
+
+    targetApp.status = status;
+    targetApp.admin_notes = adminNotes || targetApp.admin_notes;
+    targetApp.reviewed_at = new Date().toISOString();
+
+    // 1. Update status in partner_applications table
+    try {
+      await supabase
+        .from("partner_applications")
+        .update({
+          status,
+          admin_notes: targetApp.admin_notes,
+          reviewed_at: targetApp.reviewed_at,
+        })
+        .eq("id", applicationId);
+    } catch (dbErr) {
+      console.warn("Notice updating partner_applications status in Supabase:", dbErr);
+    }
+
+    let createdShop: LaundryShop | undefined;
+
+    // 2. If approved, provision the shop and upgrade the applicant to Owner (role = 1)
+    if (status === "approved") {
+      const newShopId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `shop-${Date.now()}`;
+      const newShop: LaundryShop = {
+        id: newShopId,
+        owner_id: targetApp.applicant_id,
+        name: targetApp.shop_name,
+        description: targetApp.shop_description || "Quality laundry services by our certified partner.",
+        address: targetApp.shop_address,
+        phone_number: targetApp.phone_number,
+        latitude: targetApp.latitude,
+        longitude: targetApp.longitude,
+        open_time: targetApp.open_time,
+        close_time: targetApp.close_time,
+        queue_status: "Low",
+        is_open: true,
+        washer_count: targetApp.washer_count,
+        dryer_count: targetApp.dryer_count,
+        max_kilo_per_load: targetApp.max_kilo_per_load || 8,
+        images:
+          targetApp.images && targetApp.images.length > 0
+            ? targetApp.images
+            : ["https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80"],
+        rating: 5.0,
+        total_reviews: 0,
+        services: targetApp.services || [],
+      };
+      createdShop = newShop;
+
+      try {
+        const { data: dbShop } = await supabase
+          .from("laundry_shops")
+          .insert({
+            owner_id: newShop.owner_id,
+            name: newShop.name,
+            address: newShop.address,
+            phone_number: newShop.phone_number,
+            latitude: newShop.latitude,
+            longitude: newShop.longitude,
+            open_time: newShop.open_time,
+            close_time: newShop.close_time,
+            washer_count: newShop.washer_count,
+            dryer_count: newShop.dryer_count,
+            max_kilo_per_load: newShop.max_kilo_per_load,
+            images: newShop.images,
+            rating: 5.0,
+            total_reviews: 0,
+            queue_status: "Low",
+            is_open: true,
+          })
+          .select()
+          .single();
+
+        if (dbShop) {
+          createdShop.id = dbShop.id;
+        }
+
+        // Upgrade applicant's profile to Shop Owner (role = 1)
+        await supabase
+          .from("profiles")
+          .update({ role: UserRole.OWNER, assigned_shop_id: createdShop.id })
+          .eq("id", targetApp.applicant_id);
+      } catch (shopErr) {
+        console.warn("Notice inserting approved shop to Supabase:", shopErr);
+      }
+
+      // Add to local shop store
+      localShopsStore.unshift(createdShop);
+
+      // Upgrade local cached profile if current user is the applicant
+      if (typeof window !== "undefined") {
+        try {
+          const cached = getCachedUserProfile();
+          if (cached && cached.id === targetApp.applicant_id) {
+            const upgraded = { ...cached, role: UserRole.OWNER, assigned_shop_id: createdShop.id };
+            localStorage.setItem("labadago_user_profile", JSON.stringify(upgraded));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Update in local store
+    const localIdx = localPartnerApplicationsStore.findIndex((a) => a.id === applicationId);
+    if (localIdx >= 0) {
+      localPartnerApplicationsStore[localIdx] = targetApp;
+    }
+
+    return { success: true, shop: createdShop };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to review application.";
+    return { success: false, error: message };
+  }
 }
