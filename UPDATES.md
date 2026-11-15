@@ -573,3 +573,26 @@ Transform the primary application navigation from a top horizontal header bar in
   - Changed container from `flex flex-col` to `flex flex-col lg:flex-row`.
   - On desktop, the sidebar stays sticky to the left while the `<main>` content smoothly scrolls on the right with `flex-1 min-w-0`.
 - Successfully verified with clean production build (`rm -rf .next && pnpm run build`) with **0 errors across all 13 routes**.
+
+
+---
+
+### Update 28: Remove Duplicate "Partner With This Website" Nav Link and Position Under User Profile
+
+**Objective**:
+Eliminate redundant second "Partner with this website" link in the main navigation menu list, retaining it strictly as an action button directly beneath the user's name card in the bottom profile section.
+
+#### Changes:
+1. **Removed from Main Nav Links (`client/components/dashboard/DashboardNav.tsx`)**:
+   - Removed `cust-partner` item from the customer `navItems` list in the sidebar.
+   - The primary navigation links now cleanly include:
+     - `Home & Shops` (`/customer`)
+     - `Laundry Map` (`/customer?tab=map`)
+     - `Walk-In Fast Pass (QR)` (`/customer?tab=qr`)
+     - `Live Order Tracker` (`/customer?tab=orders`)
+     - `My Profile & Hub` (`/dashboard`)
+2. **Dedicated Position Under User Card**:
+   - Kept strictly below the user identity card at the bottom of the sidebar:
+     - Styled as an emerald pill action button: `<Handshake size={14} /> Partner with this website`.
+3. **Build & Deploy Verification**:
+   - Production build verified with zero errors across all 13 routes.

@@ -259,13 +259,6 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         active: pathname === "/customer" && currentTab === "orders",
       },
       {
-        id: "cust-partner",
-        href: "/partner",
-        label: "Partner with this website",
-        icon: Handshake,
-        active: pathname === "/partner",
-      },
-      {
         id: "cust-hub",
         href: "/dashboard",
         label: "My Profile & Hub",
@@ -398,10 +391,10 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             ) : !isAdmin ? (
               <Link
                 href="/partner"
-                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/50 text-emerald-700 text-xs font-semibold transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors shadow-2xs"
               >
                 <Handshake size={14} className="text-emerald-600" />
-                <span>Partner with us</span>
+                <span>Partner with this website</span>
               </Link>
             ) : null}
           </div>
