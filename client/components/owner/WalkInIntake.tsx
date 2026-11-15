@@ -114,8 +114,8 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   const scannedTransactions = transactions.filter((t) => t.status !== "Pending");
 
 
-  // Intake Mode State (Full Customer Check-In, Scan Fast Pass QR, or Quick Manual)
-  const [entryMode, setEntryMode] = useState<"checkin" | "scan" | "manual">("checkin");
+  // Intake Mode State: Customer Check-In or Transactions Queue
+  const [entryMode, setEntryMode] = useState<"checkin" | "transactions">("checkin");
   const [manualCustomerName, setManualCustomerName] = useState("");
   const [manualCustomerPhone, setManualCustomerPhone] = useState("");
   const [manualService, setManualService] = useState("Wash, Dry & Fold");
@@ -208,7 +208,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         setManualFile(null);
         if (manualPreviewUrl) URL.revokeObjectURL(manualPreviewUrl);
         setManualPreviewUrl(null);
-        setEntryMode("scan"); // Switch to live orders view
+        setEntryMode("transactions"); // Switch to live orders view
 
         onTransactionsUpdated();
       } else {
@@ -564,7 +564,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
           <button
             type="button"
             onClick={() => setEntryMode("checkin")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               entryMode === "checkin"
                 ? "bg-blue-600 text-white shadow-2xs font-extrabold"
                 : "text-slate-600 hover:text-slate-900"
@@ -575,27 +575,15 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setEntryMode("scan")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              entryMode === "scan"
-                ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <ScanLine size={14} />
-            <span>Scan Customer QR</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setEntryMode("manual")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              entryMode === "manual"
-                ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
+            onClick={() => setEntryMode("transactions")}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              entryMode === "transactions"
+                ? "bg-blue-600 text-white shadow-2xs font-extrabold"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <FileText size={14} />
-            <span>Quick Manual Entry</span>
+            <span>Transactions ({scannedTransactions.length})</span>
           </button>
         </div>
 
@@ -621,516 +609,16 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                 );
               }}
               todayTransactionsCount={scannedTransactions.length}
+              onViewQueue={() => setEntryMode("transactions")}
             />
           </div>
         )}
 
-        {/* MODE 1: QR SCANNER */}
-        {entryMode === "scan" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                Scan customer&apos;s QR code with device camera or enter their tracking number.
-              </p>
-              <Button
-                type="button"
-                variant={isCameraActive ? "outline" : "primary"}
-                size="sm"
-                leftIcon={<Camera size={15} />}
-                onClick={() => setIsCameraActive((prev) => !prev)}
-                className="shadow-sm font-medium"
-              >
-                {isCameraActive ? "Close Camera" : "Scan with Camera"}
-              </Button>
-            </div>
-
-            {/* Live Camera QR Viewfinder */}
-            {isCameraActive && (
-              <div className="mt-2">
-                <QRCameraScanner
-                  onScanSuccess={(decodedText) => {
-                    setIsCameraActive(false);
-                    processCodeOrPayload(decodedText);
-                  }}
-                  onClose={() => setIsCameraActive(false)}
-                  incomingPasses={transactions.map((t) => ({
-                    tracking_number: t.tracking_number,
-                    customer_name: t.customer_name,
-                  }))}
-                />
-              </div>
-            )}
-
-            <form onSubmit={handleLookup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="flex-1">
-                <Input
-                  placeholder="Scan with camera or enter Tracking Number (e.g. LBD-96532)"
-                  value={scanInput}
-                  onChange={(e) => setScanInput(e.target.value)}
-                  leftIcon={<Search size={15} />}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant={isCameraActive ? "ghost" : "outline"}
-                  size="md"
-                  leftIcon={<Camera size={15} />}
-                  onClick={() => setIsCameraActive((prev) => !prev)}
-                >
-                  {isCameraActive ? "Hide Camera" : "Camera"}
-                </Button>
-                <Button type="submit" variant="primary" size="md" leftIcon={<ScanLine size={15} />}>
-                  Verify Code
-                </Button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* MODE 2: MANUAL WALK-IN ENTRY FORM */}
-        {entryMode === "manual" && (
-          <form onSubmit={handleManualIntakeSubmit} className="space-y-4 animate-fadeIn">
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-800">
-              💡 <strong>Direct Counter Intake:</strong> Register walk-in customers who don&apos;t have a phone QR code. Orders immediately start as <strong>Processing</strong> in the queue.
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <Input
-                label="Customer Full Name *"
-                placeholder="e.g. Maria Santos"
-                value={manualCustomerName}
-                onChange={(e) => setManualCustomerName(e.target.value)}
-                leftIcon={<User size={15} />}
-                required
-              />
-              <Input
-                type="tel"
-                label="Customer Phone Number *"
-                placeholder="09XXXXXXXXX"
-                value={manualCustomerPhone}
-                onChange={(e) => setManualCustomerPhone(e.target.value)}
-                leftIcon={<Phone size={15} />}
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                  Laundry Service *
-                </label>
-                <select
-                  value={manualService}
-                  onChange={(e) => setManualService(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                >
-                  {activeServices.map((srv) => (
-                    <option key={srv.id || srv.service_name} value={srv.service_name}>
-                      {srv.service_name} — ₱{srv.price}/load ({srv.kilos || 8}kg load)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                  Number of Loads *
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={manualLoads}
-                    onChange={(e) => setManualLoads(e.target.value)}
-                    className="w-24 h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    required
-                  />
-                  <span className="text-xs text-slate-500 font-medium">
-                    load(s) • Total: <strong className="text-slate-900 text-sm">₱{manualTotalAmount.toFixed(2)}</strong> ({manualCapacityKg} kg allowance)
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Machine Assignment */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                <Shirt size={14} className="text-blue-600" />
-                Machine Number (Optional)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. Washer 1, Dryer 2"
-                  value={manualMachineNumber}
-                  onChange={(e) => setManualMachineNumber(e.target.value)}
-                  className="w-48 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium focus:border-blue-500 focus:outline-none"
-                />
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                  {["Washer 1", "Washer 2", "Washer 3", "Dryer 1", "Dryer 2"].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setManualMachineNumber(p)}
-                      className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
-                        manualMachineNumber === p
-                          ? "bg-blue-100 text-blue-800 border-blue-300 font-bold"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Timing Selection */}
-            <div className="space-y-2 pt-1 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <CreditCard size={14} className="text-blue-600" />
-                Payment Arrangement *
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setManualPaymentTiming("pay_first")}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    manualPaymentTiming === "pay_first"
-                      ? "border-emerald-500 bg-emerald-50/80 ring-1 ring-emerald-500 shadow-xs"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <CheckCircle2 size={14} className="text-emerald-600" />
-                      1. Paid Now (Drop-Off)
-                    </span>
-                    <span className="text-xs font-bold text-emerald-800">₱{manualTotalAmount.toFixed(2)}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">Customer is paying immediately at counter.</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setManualPaymentTiming("pay_on_complete")}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    manualPaymentTiming === "pay_on_complete"
-                      ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-500 shadow-xs"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <Clock size={14} className="text-amber-600" />
-                      2. Pay on Pickup (Unpaid)
-                    </span>
-                    <span className="text-xs font-bold text-amber-800">₱{manualTotalAmount.toFixed(2)}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">Collect payment when clothes are claimed.</p>
-                </button>
-              </div>
-            </div>
-
-            {manualPaymentTiming === "pay_first" && (
-              <PaymentInputSection
-                theme="light"
-                method={manualPaymentMethod}
-                onMethodChange={setManualPaymentMethod}
-                referenceNo={manualReferenceNo}
-                onReferenceNoChange={setManualReferenceNo}
-                selectedFile={manualFile}
-                previewUrl={manualPreviewUrl}
-                onFileSelect={(file) => {
-                  setManualFile(file);
-                  setManualPreviewUrl(URL.createObjectURL(file));
-                }}
-                onFileClear={() => {
-                  setManualFile(null);
-                  if (manualPreviewUrl) URL.revokeObjectURL(manualPreviewUrl);
-                  setManualPreviewUrl(null);
-                }}
-                amount={manualTotalAmount}
-              />
-            )}
-
-            <Input
-              type="text"
-              label="Special Instructions / Care (Optional)"
-              placeholder="e.g. Separate delicate whites, hypoallergenic detergent"
-              value={manualSpecialNotes}
-              onChange={(e) => setManualSpecialNotes(e.target.value)}
-            />
-
-            <div className="pt-2 flex justify-end">
-              <Button
-                type="submit"
-                variant="success"
-                size="md"
-                leftIcon={<PlusCircle size={15} />}
-                isLoading={isSubmittingManual}
-              >
-                Register &amp; Start Processing
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {/* Scanned Verification Card */}
-        {scannedTx && (
-          <div className="mt-4 p-4 rounded-xl border border-blue-200 bg-blue-50/50 space-y-3 animate-fadeIn">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-blue-700 bg-white px-2.5 py-1 rounded-md border border-blue-200">
-                  {scannedTx.tracking_number}
-                </span>
-                <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-md flex items-center gap-1.5">
-                  <CheckCircle2 size={13} className="text-blue-600" />
-                  Clothes Received at Counter
-                </span>
-              </div>
-              <span className="text-[11px] font-medium text-slate-500">
-                Customer Pass Verified ✓
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <p className="text-slate-400">Customer Name</p>
-                <p className="font-bold text-slate-900">{scannedTx.customer_name}</p>
-              </div>
-              <div>
-                <p className="text-slate-400">Phone</p>
-                <p className="font-bold text-slate-900">{scannedTx.customer_phone}</p>
-              </div>
-              <div>
-                <p className="text-slate-400">Service Requested</p>
-                <p className="font-bold text-slate-900">{scannedTx.service_name}</p>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-blue-200/60 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-700">Counter Scale Weight:</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  max="100"
-                  placeholder="5.0"
-                  value={actualWeight}
-                  onChange={(e) => setActualWeight(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (
-                      (e.key === "Backspace" || e.key === "Delete") &&
-                      (actualWeight === "0" || actualWeight === "0.0" || actualWeight === "0.")
-                    ) {
-                      e.preventDefault();
-                      setActualWeight("");
-                    }
-                  }}
-                  onFocus={(e) => {
-                    if (e.target.value === "0" || e.target.value === "0.0") {
-                      setActualWeight("");
-                    } else {
-                      e.target.select();
-                    }
-                  }}
-                  className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold"
-                />
-                <span className="text-xs text-slate-500">kg</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs bg-white px-3 py-1.5 rounded-lg border border-blue-200">
-                <span className="text-slate-500">Calculated Total:</span>
-                <span className="font-bold text-slate-900 text-sm">₱{calculatedTotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Machine Number (Optional) */}
-            <div className="pt-2 border-t border-blue-200/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Shirt size={14} className="text-blue-600" />
-                  Machine Number <span className="text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <span className="text-[10px] text-slate-500">Assign washer or dryer for this load</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. Washer 1, Dryer 2"
-                  value={machineNumber}
-                  onChange={(e) => setMachineNumber(e.target.value)}
-                  className="w-44 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium focus:border-blue-500 focus:outline-none"
-                />
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                  {["Washer 1", "Washer 2", "Washer 3", "Dryer 1", "Dryer 2"].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setMachineNumber(p)}
-                      className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
-                        machineNumber === p
-                          ? "bg-blue-100 text-blue-800 border-blue-300 font-bold"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  {machineNumber && (
-                    <button
-                      type="button"
-                      onClick={() => setMachineNumber("")}
-                      className="text-[10px] text-rose-600 hover:text-rose-700 px-1.5 py-1"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Choice Selection */}
-            <div className="pt-2 border-t border-blue-200/60 space-y-2">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <CreditCard size={14} className="text-blue-600" />
-                Select Customer Payment Arrangement:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPaymentTiming("pay_first")}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    selectedPaymentTiming === "pay_first"
-                      ? "border-emerald-500 bg-emerald-50/80 ring-1 ring-emerald-500 shadow-xs"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <CreditCard size={14} className="text-emerald-600" />
-                      1. Pay First (Paid Now)
-                    </span>
-                    {selectedPaymentTiming === "pay_first" && (
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Customer pays right now at the counter upon drop-off.
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                      Mark as Paid ✓
-                    </span>
-                    <span className="text-xs font-bold text-emerald-800">
-                      ₱{calculatedTotal.toFixed(2)}
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedPaymentTiming("pay_on_complete")}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    selectedPaymentTiming === "pay_on_complete"
-                      ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-500 shadow-xs"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <Clock size={14} className="text-amber-600" />
-                      2. Pay When Complete
-                    </span>
-                    {selectedPaymentTiming === "pay_on_complete" && (
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Customer will pay upon pickup when clothes are claimed.
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                      Collect on Pickup
-                    </span>
-                    <span className="text-xs font-bold text-amber-800">
-                      ₱{calculatedTotal.toFixed(2)}
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* If Pay First is selected, render PaymentInputSection */}
-            {selectedPaymentTiming === "pay_first" && (
-              <div className="pt-1 animate-fadeIn">
-                <PaymentInputSection
-                  theme="light"
-                  method={intakePaymentMethod}
-                  onMethodChange={setIntakePaymentMethod}
-                  referenceNo={intakeReferenceNo}
-                  onReferenceNoChange={setIntakeReferenceNo}
-                  selectedFile={intakeFile}
-                  previewUrl={intakePreviewUrl}
-                  onFileSelect={(file) => {
-                    setIntakeFile(file);
-                    setIntakePreviewUrl(URL.createObjectURL(file));
-                  }}
-                  onFileClear={() => {
-                    setIntakeFile(null);
-                    if (intakePreviewUrl) URL.revokeObjectURL(intakePreviewUrl);
-                    setIntakePreviewUrl(null);
-                  }}
-                  amount={calculatedTotal}
-                />
-              </div>
-            )}
-
-            <div className="pt-3 border-t border-blue-200/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setScannedTx(null)}
-                className="text-xs order-3 sm:order-1"
-                disabled={isSubmittingIntake}
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                leftIcon={<CheckCircle2 size={14} className="text-blue-600" />}
-                onClick={handleKeepAsReceived}
-                className="text-xs order-2"
-                disabled={isSubmittingIntake}
-              >
-                Confirm Received Only
-              </Button>
-              <Button
-                type="button"
-                variant="success"
-                size="sm"
-                leftIcon={<Check size={14} />}
-                onClick={handleConfirmIntake}
-                disabled={isSubmittingIntake}
-                className="order-1 sm:order-3"
-              >
-                {isSubmittingIntake ? "Saving Intake..." : "Accept & Start Processing"}
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Live Service Transactions Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+      {/* Live Service Transactions Table (Hidden below Customer Check-In; shown only in Transactions view) */}
+      {entryMode === "transactions" && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Live Service Queue & Transactions</h3>
@@ -1276,6 +764,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SHOP MISMATCH WARNING MODAL                                               */}

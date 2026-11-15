@@ -314,18 +314,19 @@ export function CustomerContent() {
         /* ========================================================================= */
         /* VIEW: FULL MAP NAVIGATION (Display All Registered Shops)                  */
         /* ========================================================================= */
-        <main className="flex-1 w-full flex flex-col h-[calc(100dvh-60px)] lg:h-[calc(100vh)] min-h-0">
-          <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between z-20 shrink-0">
+        <main className="flex-1 w-full flex flex-col h-[100dvh] lg:h-[calc(100vh)] min-h-0 relative">
+          {/* Top Header Navigation - Hidden on Mobile to give clean full-screen map */}
+          <div className="hidden lg:flex bg-white border-b border-slate-200 px-4 py-2.5 items-center justify-between z-20 shrink-0">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleReturnToHome}
-                className="hidden lg:inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
               >
                 <ChevronLeft size={16} />
                 <span>Return to Home</span>
               </button>
-              <div className="h-4 w-px bg-slate-200 hidden lg:block" />
+              <div className="h-4 w-px bg-slate-200" />
               <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
                 <MapPin size={15} className="text-blue-600" />
                 All Registered Laundry Shops ({shops.length})
@@ -333,7 +334,7 @@ export function CustomerContent() {
             </div>
 
             {/* Quick Switcher - Desktop Only (Hidden on Mobile) */}
-            <div className="hidden lg:inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
                 onClick={() => handleSwitchTab("home")}
@@ -368,7 +369,7 @@ export function CustomerContent() {
             </div>
           </div>
 
-          <div className="flex-1 w-full relative min-h-0">
+          <div className="flex-1 w-full h-full relative min-h-0">
             <LaundryMap
               shops={shops}
               selectedShop={selectedShop}

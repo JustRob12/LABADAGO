@@ -291,13 +291,66 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
   };
 
   // Scan simulation or manual tracking lookup for registered customer
-  const handleLookupRegisteredCustomer = () => {
-    if (!searchTrackingCode.trim()) return;
-    setScannerMessage(`Loaded details for Fast Pass ${searchTrackingCode.toUpperCase()}`);
+  const handleProcessScannedQR = (rawText: string) => {
+    if (!rawText || !rawText.trim()) return;
+    const text = rawText.trim();
+
+    try {
+      // 1. Try parsing JSON payload from WalkInQRGenerator
+      if (text.startsWith("{") && text.endsWith("}")) {
+        const payload = JSON.parse(text);
+        if (payload.customer_name) setCustFullName(payload.customer_name);
+        if (payload.phone_number || payload.customer_phone) {
+          setCustContactNumber(payload.phone_number || payload.customer_phone);
+        }
+        if (payload.email) setCustEmail(payload.email);
+        if (payload.weight || payload.kilos) setLaundryWeight(String(payload.weight || payload.kilos));
+        if (payload.notes) setLaundryNotes(payload.notes);
+
+        if (Array.isArray(payload.services) && payload.services.length > 0) {
+          setServices((prev) =>
+            prev.map((srv) => {
+              const matched = payload.services.find(
+                (ps: any) =>
+                  ps.id === srv.id ||
+                  (ps.name && ps.name.toLowerCase() === srv.name.toLowerCase()) ||
+                  (ps.service_name && ps.service_name.toLowerCase() === srv.name.toLowerCase())
+              );
+              if (matched) {
+                return {
+                  ...srv,
+                  selected: true,
+                  quantity: matched.quantity || srv.quantity || 1,
+                };
+              }
+              return srv;
+            })
+          );
+        }
+
+        setScannerMessage(`✓ Verified QR Fast Pass! Details loaded for ${payload.customer_name || "Customer"}.`);
+        setIsCameraActive(false);
+        setCustomerType("unregistered"); // Switches to form view with pre-filled details
+        return;
+      }
+    } catch {
+      // ignore JSON parse error and fallback to string matching
+    }
+
+    // 2. String tracking number or phone search
+    const trackingMatch = text.match(/LBD-[A-Z0-9]+/i);
+    const trackingCode = trackingMatch ? trackingMatch[0].toUpperCase() : text.toUpperCase();
+
     setCustFullName("Roberto Prisoris");
-    setCustContactNumber("09123456789");
+    setCustContactNumber("0912 345 6789");
     setCustEmail("roberto@email.com");
-    setCustomerType("unregistered"); // switches to form view with pre-filled details
+    setScannerMessage(`✓ Loaded Fast Pass details for tracking code ${trackingCode}.`);
+    setIsCameraActive(false);
+    setCustomerType("unregistered");
+  };
+
+  const handleLookupRegisteredCustomer = () => {
+    handleProcessScannedQR(searchTrackingCode);
   };
 
   return (
@@ -315,7 +368,7 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          {/* Option A: Registered Customer */}
+          {/* Option A: Scan Customer QR */}
           <div
             onClick={() => setCustomerType("registered")}
             className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
@@ -337,15 +390,15 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
               <QrCode size={20} />
             </div>
             <div className="flex-1">
-              <h4 className="text-xs font-bold text-slate-900">Registered Customer</h4>
-              <p className="text-[11px] font-semibold text-slate-600 mt-0.5">Scan customer QR code</p>
+              <h4 className="text-xs font-bold text-slate-900">Scan Customer QR</h4>
+              <p className="text-[11px] font-semibold text-slate-600 mt-0.5">Scan customer QR code or Fast Pass</p>
               <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
-                Quick and easy check-in for registered customers.
+                Scan customer phone QR pass or lookup tracking code to auto-fill check-in.
               </p>
             </div>
           </div>
 
-          {/* Option B: Unregistered Customer (Selected in Screenshot) */}
+          {/* Option B: Quick Manual Entry */}
           <div
             onClick={() => setCustomerType("unregistered")}
             className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
@@ -367,16 +420,16 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
               <UserPlus size={20} />
             </div>
             <div className="flex-1">
-              <h4 className="text-xs font-bold text-slate-900">Unregistered Customer</h4>
+              <h4 className="text-xs font-bold text-slate-900">Quick Manual Entry</h4>
               <p className="text-[11px] font-semibold text-slate-600 mt-0.5">Manual information entry</p>
               <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
-                For walk-in customers or those without a QR code.
+                Directly fill in customer details, weight, and services for walk-in customers.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Registered Customer Scanner Panel */}
+        {/* Scan Customer QR Scanner Panel */}
         {customerType === "registered" && (
           <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 space-y-3 mt-3 animate-in fade-in">
             <div className="flex items-center justify-between">
@@ -387,7 +440,7 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCameraActive(!isCameraActive)}
-                className="text-xs font-bold text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-100"
+                className="text-xs font-bold text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-100 cursor-pointer transition-colors"
               >
                 {isCameraActive ? "Close Camera" : "Open Camera Scanner"}
               </button>
@@ -397,9 +450,7 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
               <div className="p-3 bg-white rounded-xl border border-slate-200">
                 <QRCameraScanner
                   onScanSuccess={(code) => {
-                    setIsCameraActive(false);
-                    setSearchTrackingCode(code);
-                    handleLookupRegisteredCustomer();
+                    handleProcessScannedQR(code);
                   }}
                   onClose={() => setIsCameraActive(false)}
                 />
@@ -415,25 +466,48 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
                   onChange={(e) => setSearchTrackingCode(e.target.value)}
                   placeholder="Or enter tracking code (e.g. LBD-83289)..."
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleProcessScannedQR(searchTrackingCode);
+                    }
+                  }}
                 />
               </div>
               <button
                 type="button"
-                onClick={handleLookupRegisteredCustomer}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                onClick={() => handleProcessScannedQR(searchTrackingCode)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
                 Lookup Pass
               </button>
             </div>
 
             {scannerMessage && (
-              <p className="text-xs text-emerald-700 font-semibold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                ✓ {scannerMessage}
+              <p className="text-xs text-emerald-700 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                {scannerMessage}
               </p>
             )}
           </div>
         )}
       </section>
+
+      {/* Scanned Success Notification Banner */}
+      {scannerMessage && customerType === "unregistered" && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-800 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span className="font-semibold">{scannerMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScannerMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 p-1 rounded-lg cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* 2-COLUMN MAIN INTAKE GRID (Matches Image Sections 2, 3, 4, 5) */}
       <form onSubmit={handleCreateTransaction} className="space-y-6">

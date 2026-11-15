@@ -191,10 +191,13 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     if (!selectedShop && shops.length > 0) {
       try {
         const validShops = shops.filter((s) => s.latitude && s.longitude);
-        if (validShops.length > 0) {
+        if (validShops.length === 1) {
+          mapInstanceRef.current.setView([validShops[0].latitude, validShops[0].longitude], 15, { animate: false });
+        } else if (validShops.length > 1) {
           const bounds = L.latLngBounds(validShops.map((s) => [s.latitude, s.longitude]));
           if (liveLocation) {
-            bounds.extend(liveLocation);
+            const dist = calculateDistanceKm(liveLocation[0], liveLocation[1], validShops[0].latitude, validShops[0].longitude);
+            if (dist < 80) bounds.extend(liveLocation);
           }
           mapInstanceRef.current.fitBounds(bounds, {
             padding: [40, 40],
@@ -252,7 +255,10 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           mapInstanceRef.current = null;
         }
 
-        const centerCoords = liveLocation || [14.5800, 121.0350];
+        const validShop = shops.find((s) => s.latitude && s.longitude);
+        const centerCoords: [number, number] = validShop
+          ? [validShop.latitude, validShop.longitude]
+          : liveLocation || [14.5800, 121.0350];
 
         const map = L.map(mapContainerRef.current, {
           center: centerCoords,
@@ -911,7 +917,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       {/* Map Canvas */}
       <div
         ref={mapContainerRef}
-        className="w-full h-full min-h-[440px] z-10 cursor-grab active:cursor-grabbing"
+        className="absolute inset-0 w-full h-full min-h-[440px] z-10 cursor-grab active:cursor-grabbing"
         style={{ touchAction: "none", minHeight: "440px" }}
       />
 

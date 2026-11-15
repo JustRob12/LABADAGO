@@ -743,3 +743,181 @@ Ensure that when the administrator approves a partner application:
 5. **Build & Production Verification**:
    - Executed `cd client && pnpm run build`.
    - All 13 static pages compiled successfully in 1.8s with **0 errors**.
+
+---
+
+### Update 33: Integrate Scan Customer QR into Customer Check-In Options, Streamline Intake Tabs to Customer Check-In & Transactions, and Fix Full-Screen Mobile Map
+
+**Objective**:
+1. In `CustomerCheckInView` (Step 1: Choose Customer Type):
+   - Option A renamed to **Scan Customer QR** (with camera scanner and tracking code lookup; auto-populates customer details when scanned).
+   - Option B renamed to **Quick Manual Entry** (with 100% untouched intake form UI for unregistered walk-in customers across Sections 2, 3, 4, 5).
+2. In `WalkInIntake`:
+   - Removed obsolete sub-mode tabs (`Scan Customer QR` and `Quick Manual Entry`) from the intake top navigation.
+   - Replaced switcher with two clean tabs: **Customer Check-In** and **Transactions (`${scannedTransactions.length}`)**.
+   - Hides the `Live Service Queue & Transactions` table completely below Customer Check-In so it is only displayed when the Transactions tab is selected.
+3. Mobile Map Display & Header Clean-Up (`client/app/customer/page.tsx` & `LaundryMap.tsx`):
+   - Completely removed the top navigation bar (`< Return to Home`, `All Registered Laundry Shops`, and desktop icons) on mobile viewports (`hidden lg:flex`).
+   - Made the mobile map full-screen (`h-[100dvh]`) with only the bottom floating navigation bar visible.
+   - Fixed Leaflet blank canvas on mobile: applied `absolute inset-0` canvas sizing to prevent 0px flex collapses and added direct centering at zoom 15 for single-shop views.
+
+#### Changes:
+1. **Customer Check-In Options (`client/components/staff/CustomerCheckInView.tsx`)**:
+   - Updated Step 1 cards to:
+     - **Scan Customer QR**: "Scan customer QR code or Fast Pass". Supports camera viewfinder and code lookup with automated payload decoding (JSON passes and `LBD-XXXXX` codes), auto-populating customer name, contact, address, services, kilos, and care notes.
+     - **Quick Manual Entry**: "Manual information entry". Directly fills in customer details, weight, and services for walk-in customers.
+   - Preserved all original form sections (Section 2 Customer Information, Section 3 Available Services, Section 4 Laundry Assessment, Section 5 Order Summary & Checkout) without any UI alteration.
+   - Added success notification banner when a Fast Pass QR code is loaded.
+
+2. **Streamlined Intake Switcher & Conditional Transactions Table (`client/components/owner/WalkInIntake.tsx`)**:
+   - Changed `entryMode` state to `"checkin" | "transactions"`.
+   - Replaced top navigation switcher with two tabs: `[Customer Check-In]` and `[Transactions (n)]`.
+   - Removed obsolete duplicate scanner and manual forms.
+   - Wrapped the `Live Service Queue & Transactions` table in `{entryMode === "transactions" && ( ... )}` so that the table is **never displayed underneath Customer Check-In**.
+
+3. **Mobile Map Experience (`client/app/customer/page.tsx` & `LaundryMap.tsx`)**:
+   - Hidden the top map navigation bar on mobile screens (`hidden lg:flex`), removing `< Return to Home`, shop counts, and icons on mobile devices.
+   - Main map container set to `h-[100dvh] relative` on mobile.
+   - `LaundryMap.tsx`: Updated canvas to `absolute inset-0 w-full h-full min-h-[440px]` to ensure Leaflet accurately detects pixel dimensions on all mobile devices.
+   - Centering logic: Automatically centers directly on registered shop coordinates (e.g. Tawewe at `6.948, 126.228`) at zoom 15 instead of zooming out across the whole country.
+
+4. **Production Build & Verification**:
+   - Ran `cd client && pnpm run build`.
+   - All 13 routes compiled with **0 errors**.
+
+---
+
+### Update 30: Streamline Admin Page to Partner Approvals, Platform Shops, and Interactive Map (Remove Static Data)
+
+**Objective**:
+Streamline the Admin page (`/admin`) exclusively for:
+1. Reviewing and accepting/approving (or declining) client partner applications.
+2. Displaying registered platform laundry shops.
+3. Interactive platform map showing all shop locations.
+Completely removed all static data, fake revenue charts, and the placeholder analytics dashboard.
+
+#### Changes:
+1. **Removed Static Analytics & Dashboard Component (`client/app/admin/page.tsx`)**:
+   - Completely removed `OwnerAnalyticsDashboard` and all placeholder metrics (`₱12,450`, static weekly trend lines, fake transaction lists, and mock charts).
+   - Filter counters now display 100% real dynamic data directly from database/stores: Real Pending Applications, Real Approved Partners, Real Rejected Applications, and Real Registered Shops.
+   - Clicking any top stat card directly filters the applications list or switches to the shops tab.
+
+2. **Core Admin Navigation Tabs**:
+   - **Partner Applications** (`/admin?tab=applications`): Full review workflow for incoming partnership requests submitted via `/partner`. Displays applicant details (Name, Contact, Email), proposed shop location, operating hours, washer/dryer capacity, kilo limits, and configured services with prices. Includes "Approve Partner & Shop" (upgrades user to Owner role and registers shop) and "Decline" with feedback modal.
+   - **Platform Shops** (`/admin?tab=shops`): Clean directory of all registered laundry shops with address, live queue status, machine counts, and priced service catalogs. Includes a direct "Locate on Map" action.
+   - **Platform Map** (`/admin?tab=map`): Embedded interactive `LaundryMap` with full Leaflet road mapping, live pins with queue indicators, and shop details modal.
+
+3. **Admin Sidebar & Mobile Bottom Navigation Updates (`client/components/dashboard/DashboardNav.tsx`)**:
+   - Updated desktop sidebar links for Admin to: `Partner Applications`, `Platform Shops`, `Platform Map`, `Owner Portal`, `Customer View`, and `Admin Profile & Hub`.
+   - Added dedicated admin mobile bottom navigation bar with one-tap switching: `Partners`, `Shops`, `Map`, and `Profile`.
+
+4. **Verification & Build**:
+   - Successfully verified with `pnpm run build` across all 13 routes with 0 errors.
+
+---
+
+### Update 31: Enforce Automatic Permanent Role Upgrade to Owner on Admin Approval (Disallow Demoting to Customer)
+
+**Objective**:
+Ensure that when the administrator approves a partner application:
+1. The applicant's account is automatically upgraded to **Shop Owner** (`role = 1`) and linked to their new laundry shop.
+2. The account is permanently locked to the **Shop Owner** role and **cannot switch or downgrade back to Customer** (`role = 2`).
+
+#### Changes:
+1. **Permanent Owner Role Guard (`client/lib/supabase/auth.ts` - `switchUserRole`)**:
+   - Added strict guard preventing owners from switching back to customer role:
+     `if (isOwner && newRole === UserRole.COSTUMER) return { success: false, error: "Owner accounts are permanent and cannot be changed back to Customer." }`.
+2. **Removed "Switch to Customer" Buttons (`client/components/dashboard/DashboardNav.tsx` & `client/app/dashboard/page.tsx`)**:
+   - Replaced the "Switch to Customer" action button in the desktop sidebar and mobile drawer with a permanent `Verified Shop Owner` badge.
+   - Removed the "Switch to Customer Mode" button from the main account profile hub (`/dashboard`).
+3. **Database Schema & SQL Constraints (`client/supabase/schema.sql`)**:
+   - Updated `switch_user_role(target_role smallint)`: Added server-side SQL check preventing `v_current_role = 1` from switching to `target_role = 2`.
+   - Added `public.partner_applications` table schema with RLS policies and `approve_partner_application(p_application_id)` security-definer function for atomic shop provisioning and permanent `profiles.role = 1` upgrade.
+4. **Verification**:
+   - Verified with Next.js Turbopack build (`pnpm run build`): **0 errors across all 13 routes**.
+
+---
+
+### Update 32: Fix Admin Map Display with CARTO API Key, Remove Owner Portal & Static Data from Admin, and Add Dedicated Shop Owners & Customers Views
+
+**Objective**:
+1. Fix the Admin and customer map display so map tiles render properly without blank canvases, utilizing the user's CARTO API key (`cb1_430d_1_0464d8b330e7d05226c320d8`), automatic Leaflet `ResizeObserver` / multi-interval `invalidateSize()`, and OpenStreetMap fallback.
+2. Remove "Owner Portal" and static data / mock charts (`OwnerAnalyticsDashboard`) from the Admin profile and navigation.
+3. Enable the Admin to inspect both **Shop Owners** (`/admin?tab=owners`) and **Customers** (`/admin?tab=customers`), alongside **Partner Applications**, **Shops View**, and **Platform Map**.
+
+#### Changes:
+1. **Interactive Map Display Fix (`client/components/customer/LaundryMap.tsx`)**:
+   - Updated CARTO basemap key handling in `withCartoKey()` to support user's API key `cb1_430d_1_0464d8b330e7d05226c320d8` (`api_key=${CARTO_API_KEY}`).
+   - Added a `ResizeObserver` on `mapContainerRef.current` and staggered invalidation calls (50ms, 150ms, 350ms, 700ms, 1200ms) to ensure Leaflet calculates non-zero container dimensions when switching tabs.
+   - Added `min-height: 440px` and explicit dimensions to container canvas.
+   - Enhanced `tileerror` fallback: individual tiles fall back to OpenStreetMap, and persistent tile errors automatically switch the basemap layer to OpenStreetMap Standard (`osm`).
+
+2. **Remove Owner Portal & Static Data from Admin Profile (`client/app/dashboard/page.tsx` & `DashboardNav.tsx`)**:
+   - Separated role checks: `isAdmin = user?.role === UserRole.ADMIN` and `isOwner = user?.role === UserRole.OWNER`.
+   - For Admin on `/dashboard`:
+     - Completely removed `OwnerAnalyticsDashboard` with its mock revenue (`₱12,450`), fake transaction trends line chart, and static staff overview.
+     - Removed the "Enter Owner Portal" button.
+     - Displayed the dedicated **Platform Super Admin Hub** with real metrics (Total Platform Shops, Shop Owners, Registered Customers, Pending Applications) and quick links to Shops View, Shop Owners, Customers Directory, Platform Map, and Partner Applications.
+   - In `DashboardNav.tsx`:
+     - Removed "Owner Portal" (`/owner`) from Admin's navigation menu.
+     - Removed "Customer View" (`/customer`) from Admin's navigation menu.
+     - Updated desktop sidebar with: `Partner Applications`, `Shops View`, `Shop Owners`, `Customers`, `Platform Map`, and `Admin Profile & Hub`.
+     - Updated mobile bottom floating nav for Admin with: `Partners`, `Shops`, `Owners`, `Users`, `Map`, and `Hub`.
+
+3. **Dedicated Shop Owners & Customers Management Tabs (`client/app/admin/page.tsx` & `client/lib/supabase/auth.ts`)**:
+   - Added `getPlatformUsers()` in `client/lib/supabase/auth.ts`: queries `profiles` joined with `laundry_shops`, merging with local store and seeded default owners/customers.
+   - Added **Shop Owners Tab** (`/admin?tab=owners`):
+     - Displays all verified shop owners with initials avatar, full name, email, phone number, joined date, and status badge (`Shop Owner (Role 1)`).
+     - Shows assigned laundry branch with address and a direct "Locate on Map" action button.
+   - Added **Customers Tab** (`/admin?tab=customers`):
+     - Displays all registered customer accounts with initials avatar, full name, email, phone number, gender, registration date, and status badge (`Customer (Role 2)`).
+   - Added real-time search filtering across shop owners (by name, email, phone, shop) and customers (by name, email, phone, gender).
+
+4. **Map Tab Sizing in Admin (`client/app/admin/page.tsx`)**:
+   - Replaced `<div className="flex-1 w-full relative min-h-0">` with an explicit pixel container `<div className="w-full h-[650px] min-h-[500px] relative">`.
+   - Guaranteed Leaflet tile requests and layout are never blocked by 0px height calculation.
+
+5. **Build & Production Verification**:
+   - Executed `cd client && pnpm run build`.
+   - All 13 static pages compiled successfully in 1.8s with **0 errors**.
+
+---
+
+### Update 33: Integrate Scan Customer QR into Customer Check-In Options, Streamline Intake Tabs to Customer Check-In & Transactions, and Fix Full-Screen Mobile Map
+
+**Objective**:
+1. In `CustomerCheckInView` (Step 1: Choose Customer Type):
+   - Option A renamed to **Scan Customer QR** (with camera scanner and tracking code lookup; auto-populates customer details when scanned).
+   - Option B renamed to **Quick Manual Entry** (with 100% untouched intake form UI for unregistered walk-in customers across Sections 2, 3, 4, 5).
+2. In `WalkInIntake`:
+   - Removed obsolete sub-mode tabs (`Scan Customer QR` and `Quick Manual Entry`) from the intake top navigation.
+   - Replaced switcher with two clean tabs: **Customer Check-In** and **Transactions (`${scannedTransactions.length}`)**.
+   - Hides the `Live Service Queue & Transactions` table completely below Customer Check-In so it is only displayed when the Transactions tab is selected.
+3. Mobile Map Display & Header Clean-Up (`client/app/customer/page.tsx` & `LaundryMap.tsx`):
+   - Completely removed the top navigation bar (`< Return to Home`, `All Registered Laundry Shops`, and desktop icons) on mobile viewports (`hidden lg:flex`).
+   - Made the mobile map full-screen (`h-[100dvh]`) with only the bottom floating navigation bar visible.
+   - Fixed Leaflet blank canvas on mobile: applied `absolute inset-0` canvas sizing to prevent 0px flex collapses and added direct centering at zoom 15 for single-shop views.
+
+#### Changes:
+1. **Customer Check-In Options (`client/components/staff/CustomerCheckInView.tsx`)**:
+   - Updated Step 1 cards to:
+     - **Scan Customer QR**: "Scan customer QR code or Fast Pass". Supports camera viewfinder and code lookup with automated payload decoding (JSON passes and `LBD-XXXXX` codes), auto-populating customer name, contact, address, services, kilos, and care notes.
+     - **Quick Manual Entry**: "Manual information entry". Directly fills in customer details, weight, and services for walk-in customers.
+   - Preserved all original form sections (Section 2 Customer Information, Section 3 Available Services, Section 4 Laundry Assessment, Section 5 Order Summary & Checkout) without any UI alteration.
+   - Added success notification banner when a Fast Pass QR code is loaded.
+
+2. **Streamlined Intake Switcher & Conditional Transactions Table (`client/components/owner/WalkInIntake.tsx`)**:
+   - Changed `entryMode` state to `"checkin" | "transactions"`.
+   - Replaced top navigation switcher with two tabs: `[Customer Check-In]` and `[Transactions (n)]`.
+   - Removed obsolete duplicate scanner and manual forms.
+   - Wrapped the `Live Service Queue & Transactions` table in `{entryMode === "transactions" && ( ... )}` so that the table is **never displayed underneath Customer Check-In**.
+
+3. **Mobile Map Experience (`client/app/customer/page.tsx` & `LaundryMap.tsx`)**:
+   - Hidden the top map navigation bar on mobile screens (`hidden lg:flex`), removing `< Return to Home`, shop counts, and icons on mobile devices.
+   - Main map container set to `h-[100dvh] relative` on mobile.
+   - `LaundryMap.tsx`: Updated canvas to `absolute inset-0 w-full h-full min-h-[440px]` to ensure Leaflet accurately detects pixel dimensions on all mobile devices.
+   - Centering logic: Automatically centers directly on registered shop coordinates (e.g. Tawewe at `6.948, 126.228`) at zoom 15 instead of zooming out across the whole country.
+
+4. **Production Build & Verification**:
+   - Ran `cd client && pnpm run build`.
+   - All 13 routes compiled with **0 errors**.

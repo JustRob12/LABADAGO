@@ -111,15 +111,14 @@ function DashboardContent() {
             <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
                 <div
-                  className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
-                    isAdmin
-                      ? "border-indigo-200 bg-indigo-50 text-indigo-600"
-                      : isStaff
+                  className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${isAdmin
+                    ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                    : isStaff
                       ? "border-teal-200 bg-teal-50 text-teal-600"
                       : isOwner
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                      : "border-blue-200 bg-blue-50 text-blue-600"
-                  }`}
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                        : "border-blue-200 bg-blue-50 text-blue-600"
+                    }`}
                 >
                   {isAdmin ? (
                     <ShieldCheck size={20} />
@@ -138,41 +137,40 @@ function DashboardContent() {
                       {isAdmin
                         ? "Platform Super Admin"
                         : isStaff
-                        ? "Branch Staff Counter"
-                        : isOwner
-                        ? "Laundry Shop Owner"
-                        : "Customer"}
+                          ? "Branch Staff Counter"
+                          : isOwner
+                            ? "Laundry Shop Owner"
+                            : "Customer"}
                     </h3>
                     <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                        isAdmin
-                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                          : isStaff
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${isAdmin
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                        : isStaff
                           ? "bg-teal-50 text-teal-700 border-teal-200"
                           : isOwner
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
-                      }`}
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                        }`}
                     >
                       {isAdmin
                         ? "Role 0 (Admin)"
                         : isStaff
-                        ? "Role 3 (Staff)"
-                        : isOwner
-                        ? "Role 1 (Owner)"
-                        : "Role 2 (Customer)"}
+                          ? "Role 3 (Staff)"
+                          : isOwner
+                            ? "Role 1 (Owner)"
+                            : "Role 2 (Customer)"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {isAdmin
                       ? "Platform administrator view: review partner applications, manage shops, inspect shop owners & customers, and view platform map."
                       : isStaff
-                      ? user?.assigned_shop_name
-                        ? `Assigned Branch: ${user.assigned_shop_name} • Counter Scanning & Dispatch (Role locked by owner)`
-                        : "Counter QR Scanning & Laundry Handover (Role locked by owner)"
-                      : isOwner
-                      ? "You have access to shop management, counter QR scanner, and business analytics."
-                      : "You have access to shop map, queue tracking, walk-in QR passes, and order tracker."}
+                        ? user?.assigned_shop_name
+                          ? `Assigned Branch: ${user.assigned_shop_name} • Counter Scanning & Dispatch (Role locked by owner)`
+                          : "Counter QR Scanning & Laundry Handover (Role locked by owner)"
+                        : isOwner
+                          ? "You have access to shop management, counter QR scanner, and business analytics."
+                          : "You have access to shop map, queue tracking, walk-in QR passes, and order tracker."}
                   </p>
                 </div>
               </div>
