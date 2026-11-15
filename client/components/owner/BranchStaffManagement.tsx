@@ -113,7 +113,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   const [newGender, setNewGender] = useState("Female");
   const [newProfilePicture, setNewProfilePicture] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [newRole, setNewRole] = useState("Counter Staff");
+  const [newRole, setNewRole] = useState("Staff");
   const [newStatus, setNewStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
   const [newAssignedShopId, setNewAssignedShopId] = useState(selectedShopId || (shops[0]?.id || ""));
   const [isRegistering, setIsRegistering] = useState(false);
@@ -121,7 +121,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   // Modal 2: Edit Staff
   const [editingStaff, setEditingStaff] = useState<BranchStaffMember | null>(null);
   const [editFullName, setEditFullName] = useState("");
-  const [editRole, setEditRole] = useState("Counter Staff");
+  const [editRole, setEditRole] = useState("Staff");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
   const [editPhone, setEditPhone] = useState("");
   const [editBirthdate, setEditBirthdate] = useState("");
@@ -272,7 +272,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
         setNewBirthdate("");
         setNewGender("Female");
         setNewProfilePicture("");
-        setNewRole("Counter Staff");
+        setNewRole("Staff");
         setNewStatus("Active");
 
         await loadStaffData();
@@ -290,7 +290,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   const handleOpenEdit = (staff: BranchStaffMember) => {
     setEditingStaff(staff);
     setEditFullName(staff.full_name);
-    setEditRole(staff.role_title || "Counter Staff");
+    setEditRole(staff.role_title || "Staff");
     setEditStatus(staff.status || "Active");
     setEditPhone(staff.phone_number);
     setEditBirthdate(staff.birthdate || "");
@@ -1021,9 +1021,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                     onChange={(e) => setNewRole(e.target.value)}
                     className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    <option value="Counter Staff">Counter Staff (Counter Scanner &amp; Check-In)</option>
-                    <option value="Manager">Manager (Supervisory &amp; Reports)</option>
-                    <option value="Administrator">Administrator (Branch Admin)</option>
+                    <option value="Staff">Staff</option>
                   </select>
                 </div>
 
@@ -1204,9 +1202,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                     onChange={(e) => setEditRole(e.target.value)}
                     className="w-full text-xs h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
                   >
-                    <option value="Counter Staff">Counter Staff</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Administrator">Administrator</option>
+                    <option value="Staff">Staff</option>
                   </select>
                 </div>
 
@@ -1285,7 +1281,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">System Role:</span>
-                <span className="font-bold text-slate-800">{viewingStaff.role_title || "Counter Staff"}</span>
+                <span className="font-bold text-slate-800">{viewingStaff.role_title || "Staff"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Status:</span>

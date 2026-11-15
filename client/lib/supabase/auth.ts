@@ -1797,7 +1797,7 @@ export async function registerStaffMember(
       const staffInsertPayload: any = {
         shop_id: params.shopId,
         user_id: authUserId,
-        role_title: params.roleTitle || "Counter Staff",
+        role_title: params.roleTitle || "Staff",
         assigned_by: user?.id || null,
       };
 
@@ -1814,7 +1814,7 @@ export async function registerStaffMember(
           {
             shop_id: params.shopId,
             user_id: authUserId,
-            role_title: params.roleTitle || "Counter Staff",
+            role_title: params.roleTitle || "Staff",
             assigned_by: user?.id || null,
           },
         ]);

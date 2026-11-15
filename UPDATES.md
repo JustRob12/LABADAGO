@@ -1184,3 +1184,24 @@ Ensure that when the administrator approves a partner application:
 4. **Build Verification**:
    - Ran `cd client && pnpm run build`.
    - Compiled all 13 routes with **0 errors**.
+
+---
+
+### Update 39: Limit Staff Registration System Role to Staff Only
+
+**Objective**:
+1. Limit the System Role selection when adding and editing branch staff to **`Staff` only**.
+2. Remove unused roles (`"Manager"`, `"Administrator"`, `"Counter Staff"`) so the role title defaults and locks cleanly to `"Staff"`.
+
+#### Changes:
+1. **`client/components/owner/BranchStaffManagement.tsx`**:
+   - Initialized `newRole` state to `"Staff"`.
+   - Initialized `editRole` state to `"Staff"`.
+   - In the Register New Staff Member modal, updated the **System Role** `<select>` to only contain `<option value="Staff">Staff</option>`.
+   - In the Edit Staff Member modal, updated the **Role Title** `<select>` to only contain `<option value="Staff">Staff</option>`.
+   - In the View Staff Member modal, updated the fallback role display to `"Staff"`.
+2. **`client/lib/supabase/auth.ts`**:
+   - Updated `registerStaffMember` default `role_title` fallback from `"Counter Staff"` to `"Staff"`.
+3. **Build Verification**:
+   - Ran `cd client && pnpm run build`.
+   - Verified all 13 routes compiled with **0 errors**.
