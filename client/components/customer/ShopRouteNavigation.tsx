@@ -33,11 +33,15 @@ interface ShopRouteNavigationProps {
 }
 
 const withCartoKey = (baseUrl: string) => {
+  // CARTO basemaps (voyager, light, dark) are served directly from basemaps.cartocdn.com.
+  // Querying with platform API keys (e.g. cb1_...) bypasses the CDN cache and serves 103-byte blank tiles.
+  // The clean public URL serves the full high-resolution map tiles reliably.
   const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
   if (!key || key.startsWith("cb1_") || key.includes("your-carto") || key.length < 10) {
     return baseUrl;
   }
-  return `${baseUrl}?key=${key}`;
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${sep}key=${key}`;
 };
 
 export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
@@ -49,7 +53,8 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const routeLayerGroupRef = useRef<any>(null);
+  const markerLayerGroupRef = useRef<any>(null);
+  const routePolylineGroupRef = useRef<any>(null);
   const leafletModuleRef = useRef<any>(null);
 
   // Travel Mode: Drive, Walk, Bike (Matches Image 3)
@@ -116,15 +121,28 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
 
       mapInstanceRef.current = map;
 
-      // Add CARTO Voyager tile basemap
-      L.tileLayer(withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"), {
+      // Add CARTO Voyager tile basemap with automatic OSM fallback
+      const tileLayer = L.tileLayer(withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"), {
         subdomains: "abcd",
         maxZoom: 20,
       }).addTo(map);
 
-      // Layer group for routes and markers
-      const routeGroup = L.layerGroup().addTo(map);
-      routeLayerGroupRef.current = routeGroup;
+      tileLayer.on("tileerror", (e: any) => {
+        if (e.tile && !e.tile.dataset.fallbackRetried) {
+          e.tile.dataset.fallbackRetried = "1";
+          const src = e.tile.src || "";
+          const match = src.match(/\/(\d+)\/(\d+)\/(\d+)/);
+          if (match) {
+            e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+          }
+        }
+      });
+
+      // Layer groups for markers and route polylines
+      const markerGroup = L.layerGroup().addTo(map);
+      const polylineGroup = L.layerGroup().addTo(map);
+      markerLayerGroupRef.current = markerGroup;
+      routePolylineGroupRef.current = polylineGroup;
 
       // 4. Render Origin (User Location) Marker (Pulsing Blue Ring - Matches Image 3)
       const userIcon = L.divIcon({
@@ -140,7 +158,7 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
       });
 
       L.marker(effectiveUserLocation, { icon: userIcon, zIndexOffset: 1000 })
-        .addTo(routeGroup)
+        .addTo(markerGroup)
         .bindTooltip("Your Current Location", {
           permanent: false,
           direction: "top",
@@ -167,10 +185,19 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
         iconAnchor: [16, 32],
       });
 
-      L.marker([shop.latitude, shop.longitude], { icon: shopIcon, zIndexOffset: 900 }).addTo(routeGroup);
+      L.marker([shop.latitude, shop.longitude], { icon: shopIcon, zIndexOffset: 900 }).addTo(markerGroup);
+
+      // Invalidate size to ensure container dimensions are calculated
+      setTimeout(() => {
+        if (!isCancelled && mapInstanceRef.current === map) {
+          try {
+            map.invalidateSize();
+          } catch (_) {}
+        }
+      }, 150);
 
       // 6. Fetch / Generate OSRM Street Route
-      drawRoutePolyline(L, map, routeGroup, effectiveUserLocation, [shop.latitude, shop.longitude]);
+      drawRoutePolyline(L, map, polylineGroup, effectiveUserLocation, [shop.latitude, shop.longitude]);
     }
 
     initMap();
@@ -186,6 +213,15 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
     };
   }, [shop, effectiveUserLocation]);
 
+  // Re-draw route when travelMode changes
+  useEffect(() => {
+    const L = leafletModuleRef.current;
+    const map = mapInstanceRef.current;
+    const polylineGroup = routePolylineGroupRef.current;
+    if (!L || !map || !polylineGroup) return;
+    drawRoutePolyline(L, map, polylineGroup, effectiveUserLocation, [shop.latitude, shop.longitude]);
+  }, [travelMode]);
+
   // Re-draw route track & midpoint badge
   const drawRoutePolyline = async (
     L: any,
@@ -198,6 +234,16 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
     const [shopLat, shopLng] = shopCoords;
 
     const renderTrack = (latLngs: [number, number][], dist: number, mins: number) => {
+      // Robust guards: Ensure map and container are still valid and attached
+      if (!mapInstanceRef.current || mapInstanceRef.current !== map) return;
+      if (!mapContainerRef.current || !mapContainerRef.current.isConnected) return;
+      if (!group || !map._container || !map._mapPane) return;
+      if (!latLngs || latLngs.length < 2) return;
+
+      try {
+        group.clearLayers();
+      } catch (_) {}
+
       // 1. Road shadow casing
       L.polyline(latLngs, {
         color: "#1E3A8A",
@@ -243,8 +289,21 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
 
       L.marker(midPoint, { icon: badgeIcon, interactive: false }).addTo(group);
 
-      // Fit map bounds comfortably around the route
-      map.fitBounds(roadLine.getBounds(), { padding: [50, 50], maxZoom: 16 });
+      // Fit map bounds safely around the route
+      try {
+        const bounds = roadLine.getBounds();
+        if (
+          bounds &&
+          typeof bounds.isValid === "function" &&
+          bounds.isValid() &&
+          mapInstanceRef.current === map &&
+          map._mapPane
+        ) {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        }
+      } catch (err) {
+        console.warn("fitBounds skipped safely:", err);
+      }
     };
 
     // Try OSRM driving/walking service
@@ -281,7 +340,9 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
 
   const handleRecenter = () => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView(effectiveUserLocation, 16, { animate: true });
+      try {
+        mapInstanceRef.current.setView(effectiveUserLocation, 16, { animate: true });
+      } catch (_) {}
     }
   };
 
@@ -362,8 +423,8 @@ export const ShopRouteNavigation: React.FC<ShopRouteNavigationProps> = ({
       </div>
 
       {/* 3. Interactive Leaflet Map (Fills background, underneath cards) */}
-      <div className="relative flex-1 w-full h-full z-0">
-        <div ref={mapContainerRef} className="w-full h-full" />
+      <div className="relative flex-1 w-full h-full min-h-[380px] z-0">
+        <div ref={mapContainerRef} className="w-full h-full min-h-[380px]" />
 
         {/* Locate Me Crosshair Button (Matches Image 3 circular map button) */}
         <button

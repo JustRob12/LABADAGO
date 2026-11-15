@@ -1339,6 +1339,44 @@ Ensure that when the administrator approves a partner application:
 3. **Build & Type Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
 
+---
+
+### Update 44: Fix Map Display & Route Navigation `_leaflet_pos` Exception
+
+**Objective**:
+1. Fix runtime crash `TypeError: Cannot set properties of undefined (setting '_leaflet_pos')` when opening `/customer?shopId=...&view=route`.
+2. Fix blank / missing map tiles across `ShopRouteNavigation.tsx` and `LaundryMap.tsx`.
+
+#### Root Causes Identified:
+1. **CARTO Query Parameter Incompatibility**:
+   - CARTO's public basemap CDN (`basemaps.cartocdn.com`) serves high-resolution raster tiles freely without requiring query parameters.
+   - Appending `?key=cb1_430d_1_0464d8b330e7d05226c320d8` (a CARTO platform key) caused the CDN edge cache to reject the query and serve 103-byte blank PNG placeholder tiles instead of actual map imagery.
+2. **Leaflet `_leaflet_pos` Race Condition During Asynchronous Route Calculation**:
+   - While `initMap` was asynchronously fetching road coordinates from OSRM, fast React re-renders or unmounts detached the map container.
+   - Calling `map.fitBounds(roadLine.getBounds())` after unmount or before container dimension calculation invoked `DomUtil.setPosition(undefined, ...)`.
+   - Leaflet's unpatched `DomUtil.setPosition` attempted `el._leaflet_pos = point` on `undefined`, triggering an unhandled rejection error that prevented the map from rendering.
+
+#### Changes:
+1. **`client/lib/utils/leafletPatch.ts`**:
+   - Enhanced `patchLeafletPos(L)` to safeguard both `DomUtil.getPosition` and `DomUtil.setPosition`, preventing `Cannot set properties of undefined (setting '_leaflet_pos')` across all maps in the application.
+2. **`client/components/customer/ShopRouteNavigation.tsx`**:
+   - Fixed CARTO Voyager tile URL to use the clean public CDN endpoint without the breaking `?key=cb1_...` parameter.
+   - Added automatic tile error fallback: if any tile fails to load, it automatically swaps the source to OpenStreetMap (`tile.openstreetmap.org`).
+   - Separated marker layer group (`markerLayerGroupRef`) from route polyline layer group (`routePolylineGroupRef`).
+   - Added strict connection & validity guards before calling `map.fitBounds`:
+     - Checks `mapInstanceRef.current === map` and `mapContainerRef.current.isConnected`.
+     - Validates `bounds.isValid()`.
+     - Wrapped inside a safe `try/catch`.
+   - Added `min-h-[380px]` on the map container to ensure dimensions are non-zero during flexbox layout rendering.
+   - Added dynamic re-calculation effect when `travelMode` changes (`drive`, `walk`, `bike`).
+3. **`client/components/customer/LaundryMap.tsx`**:
+   - Updated `withCartoKey` so `cb1_...` platform keys are not appended to public CARTO raster URLs, allowing full high-resolution map tiles to load properly.
+4. **`client/app/customer/page.tsx`**:
+   - Added graceful fallback and loading state for `activeTab === "route"` while shop data resolves from the query string.
+5. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build.
+
+
 
 
 

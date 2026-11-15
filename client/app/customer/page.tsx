@@ -380,29 +380,36 @@ export function CustomerContent() {
             }
           />
         </main>
-      ) : activeTab === "route" && selectedShop ? (
-        /* ========================================================================= */
-        /* VIEW 3: ROUTE & NAVIGATION (Matches Image 3 - Route to Shop)              */
-        /* ========================================================================= */
-        <main className="flex-1 w-full">
-          <ShopRouteNavigation
-            shop={selectedShop}
-            userLocation={userLocation}
-            onBack={() => {
-              setActiveTab("services");
-              router.push(`/customer?shopId=${selectedShop.id}&view=services`, { scroll: false });
-            }}
-            onViewDetails={() => {
-              setActiveTab("services");
-              router.push(`/customer?shopId=${selectedShop.id}&view=services`, { scroll: false });
-            }}
-            distanceKm={
-              userLocation
-                ? calculateDistanceKm(userLocation[0], userLocation[1], selectedShop.latitude, selectedShop.longitude)
-                : selectedShop.distance_km
-            }
-          />
-        </main>
+      ) : activeTab === "route" ? (
+        selectedShop ? (
+          /* ========================================================================= */
+          /* VIEW 3: ROUTE & NAVIGATION (Matches Image 3 - Route to Shop)              */
+          /* ========================================================================= */
+          <main className="flex-1 w-full">
+            <ShopRouteNavigation
+              shop={selectedShop}
+              userLocation={userLocation}
+              onBack={() => {
+                setActiveTab("services");
+                router.push(`/customer?shopId=${selectedShop.id}&view=services`, { scroll: false });
+              }}
+              onViewDetails={() => {
+                setActiveTab("services");
+                router.push(`/customer?shopId=${selectedShop.id}&view=services`, { scroll: false });
+              }}
+              distanceKm={
+                userLocation
+                  ? calculateDistanceKm(userLocation[0], userLocation[1], selectedShop.latitude, selectedShop.longitude)
+                  : selectedShop.distance_km
+              }
+            />
+          </main>
+        ) : (
+          <div className="flex-1 min-h-[400px] flex flex-col items-center justify-center gap-3">
+            <Loader2 className="animate-spin text-blue-600" size={32} />
+            <p className="text-xs text-slate-500 font-medium">Loading shop route...</p>
+          </div>
+        )
       ) : (
         /* ========================================================================= */
         /* TABS: QR WALK-IN PASS GENERATOR & ORDER TRACKER                           */

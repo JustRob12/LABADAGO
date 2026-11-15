@@ -55,14 +55,17 @@ export function calculateDistanceKm(
   return parseFloat((R * c).toFixed(2));
 }
 
-// CARTO Basemap Styles & User API Key
-const CARTO_API_KEY =
-  process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
-
+// CARTO Basemap Styles & Public CDN Endpoints
 const withCartoKey = (baseUrl: string) => {
-  if (!CARTO_API_KEY || CARTO_API_KEY.includes("your-carto")) return baseUrl;
+  // CARTO basemaps (voyager, light/positron, dark) are served directly from basemaps.cartocdn.com.
+  // Querying with platform API keys (e.g. cb1_...) bypasses the CDN cache and returns 103-byte blank tiles.
+  // The clean public URL serves the full high-resolution map tiles reliably.
+  const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+  if (!key || key.startsWith("cb1_") || key.includes("your-carto") || key.length < 10) {
+    return baseUrl;
+  }
   const sep = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${sep}key=${CARTO_API_KEY}`;
+  return `${baseUrl}${sep}key=${key}`;
 };
 
 const CARTO_BASEMAPS = {
