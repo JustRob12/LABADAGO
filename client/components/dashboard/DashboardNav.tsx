@@ -30,6 +30,7 @@ import {
   Clock,
   Shirt,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 
 interface DashboardNavProps {
@@ -151,7 +152,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           href: "/staff",
           label: "Counter Scanner",
           icon: ScanLine,
-          active: pathname === "/staff",
+          active: pathname === "/staff" && currentTab !== "messages",
+        },
+        {
+          id: "staff-messages",
+          href: "/staff?tab=messages",
+          label: "Customer Inquiries",
+          icon: MessageSquare,
+          active: pathname === "/staff" && currentTab === "messages",
         },
         {
           id: "staff-profile",
@@ -180,6 +188,13 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             label: "QR Intake & Orders",
             icon: ScanLine,
             active: pathname === "/owner" && currentTab === "scanner",
+          },
+          {
+            id: "owner-messages",
+            href: "/owner?tab=messages",
+            label: "Customer Messages",
+            icon: MessageSquare,
+            active: pathname === "/owner" && currentTab === "messages",
           },
           {
             id: "owner-staff",
@@ -238,6 +253,13 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         label: "Live Order Tracker",
         icon: Package,
         active: pathname === "/customer" && currentTab === "orders",
+      },
+      {
+        id: "cust-messages",
+        href: "/customer?tab=messages",
+        label: "Messages & Inquiries",
+        icon: MessageSquare,
+        active: pathname === "/customer" && currentTab === "messages",
       },
       {
         id: "cust-hub",
@@ -518,16 +540,31 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           <>
             <Link
               href="/staff"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${pathname === "/staff" ? "text-teal-700 font-bold bg-teal-50" : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${
+                pathname === "/staff" && currentTab !== "messages"
+                  ? "text-teal-700 font-bold bg-teal-50"
+                  : "text-slate-500"
+              }`}
             >
               <ScanLine size={16} />
               <span>Scanner</span>
             </Link>
             <Link
+              href="/staff?tab=messages"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${
+                pathname === "/staff" && currentTab === "messages"
+                  ? "text-teal-700 font-bold bg-teal-50"
+                  : "text-slate-500"
+              }`}
+            >
+              <MessageSquare size={16} />
+              <span>Messages</span>
+            </Link>
+            <Link
               href="/dashboard"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${pathname === "/dashboard" ? "text-teal-700 font-bold bg-teal-50" : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-3 rounded-xl transition-colors ${
+                pathname === "/dashboard" ? "text-teal-700 font-bold bg-teal-50" : "text-slate-500"
+              }`}
             >
               <UserIcon size={16} />
               <span>Profile</span>
@@ -537,50 +574,66 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           <>
             <Link
               href="/owner"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/owner" && (!currentTab || currentTab === "analytics")
-                ? "text-blue-600 font-bold bg-blue-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/owner" && (!currentTab || currentTab === "analytics")
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
             >
               <LayoutDashboard size={16} />
               <span>Dashboard</span>
             </Link>
             <Link
               href="/owner?tab=scanner"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/owner" && currentTab === "scanner"
-                ? "text-blue-600 font-bold bg-blue-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/owner" && currentTab === "scanner"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
             >
               <ScanLine size={16} />
               <span>Intake</span>
             </Link>
             <Link
+              href="/owner?tab=messages"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/owner" && currentTab === "messages"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
+            >
+              <MessageSquare size={16} />
+              <span>Messages</span>
+            </Link>
+            <Link
               href="/owner?tab=staff"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/owner" && currentTab === "staff"
-                ? "text-teal-600 font-bold bg-teal-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/owner" && currentTab === "staff"
+                  ? "text-teal-600 font-bold bg-teal-50"
+                  : "text-slate-500"
+              }`}
             >
               <Users size={16} />
               <span>Staff</span>
             </Link>
             <Link
               href="/owner?tab=setup"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${pathname === "/owner" && currentTab === "setup"
-                ? "text-slate-900 font-bold bg-slate-100"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/owner" && currentTab === "setup"
+                  ? "text-slate-900 font-bold bg-slate-100"
+                  : "text-slate-500"
+              }`}
             >
               <Settings size={16} />
               <span>Setup</span>
             </Link>
             <Link
               href="/dashboard"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${pathname === "/dashboard"
-                ? "text-blue-600 font-bold bg-blue-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/dashboard"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
             >
               <UserIcon size={16} />
               <span>Profile</span>
@@ -590,43 +643,58 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           <>
             <Link
               href="/customer"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/customer" && (!currentTab || currentTab === "home")
-                ? "text-blue-600 font-bold bg-blue-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && (!currentTab || currentTab === "home")
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
             >
               <Store size={16} />
               <span>Shops</span>
             </Link>
             <Link
               href="/customer?tab=map"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/customer" && currentTab === "map"
-                ? "text-blue-600 font-bold bg-blue-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && currentTab === "map"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
             >
               <MapPin size={16} />
               <span>Map</span>
             </Link>
             <Link
               href="/customer?tab=qr"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/customer" && currentTab === "qr"
-                ? "text-emerald-600 font-bold bg-emerald-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && currentTab === "qr"
+                  ? "text-emerald-600 font-bold bg-emerald-50"
+                  : "text-slate-500"
+              }`}
             >
               <QrCode size={16} />
               <span>Pass</span>
             </Link>
             <Link
               href="/customer?tab=orders"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/customer" && currentTab === "orders"
-                ? "text-purple-600 font-bold bg-purple-50"
-                : "text-slate-500"
-                }`}
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && currentTab === "orders"
+                  ? "text-purple-600 font-bold bg-purple-50"
+                  : "text-slate-500"
+              }`}
             >
               <Package size={16} />
               <span>Orders</span>
+            </Link>
+            <Link
+              href="/customer?tab=messages"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${
+                pathname === "/customer" && currentTab === "messages"
+                  ? "text-blue-600 font-bold bg-blue-50"
+                  : "text-slate-500"
+              }`}
+            >
+              <MessageSquare size={16} />
+              <span>Messages</span>
             </Link>
           </>
         )}

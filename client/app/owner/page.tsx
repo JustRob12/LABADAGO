@@ -9,6 +9,7 @@ import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashbo
 import { WalkInIntake } from "@/components/owner/WalkInIntake";
 import { ShopSetupForm } from "@/components/owner/ShopSetupForm";
 import { BranchStaffManagement } from "@/components/owner/BranchStaffManagement";
+import { ShopMessenger } from "@/components/messaging/ShopMessenger";
 import { Loader2 } from "lucide-react";
 
 function OwnerContent() {
@@ -16,13 +17,17 @@ function OwnerContent() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") || "analytics";
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "scanner" | "setup" | "staff">(
+  const [activeTab, setActiveTab] = useState<
+    "analytics" | "scanner" | "setup" | "staff" | "messages"
+  >(
     initialTab === "scanner"
       ? "scanner"
       : initialTab === "setup"
       ? "setup"
       : initialTab === "staff"
       ? "staff"
+      : initialTab === "messages"
+      ? "messages"
       : "analytics"
   );
 
@@ -46,12 +51,16 @@ function OwnerContent() {
       setActiveTab("setup");
     } else if (tabParam === "staff") {
       setActiveTab("staff");
+    } else if (tabParam === "messages") {
+      setActiveTab("messages");
     } else {
       setActiveTab("analytics");
     }
   }, [searchParams, shops.length, isLoading]);
 
-  const handleTabChange = (tab: "analytics" | "scanner" | "setup" | "staff") => {
+  const handleTabChange = (
+    tab: "analytics" | "scanner" | "setup" | "staff" | "messages"
+  ) => {
     // If owner has no shops yet, lock to setup
     if (shops.length === 0 && tab !== "setup") {
       setActiveTab("setup");
@@ -141,14 +150,18 @@ function OwnerContent() {
                 ? "QR Intake & Counter Orders"
                 : activeTab === "setup"
                 ? "Laundry Shop Configuration"
-                : "Branch Staff Management"}
+                : activeTab === "staff"
+                ? "Branch Staff Management"
+                : "Customer Inquiries & Messages"}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {activeTab === "scanner"
                 ? "Scan customer passes or manual check-in, set load weight, and update order status."
                 : activeTab === "setup"
                 ? "Manage your shop coordinates, machine capacities, pricing, and operating schedule."
-                : "Register and manage staff accounts, roles, and branch permissions."}
+                : activeTab === "staff"
+                ? "Register and manage staff accounts, roles, and branch permissions."
+                : "Read incoming customer inquiries, reply live, and answer questions across all your registered branches."}
             </p>
           </div>
         )}
@@ -216,6 +229,15 @@ function OwnerContent() {
                 shops={shops}
                 currentShop={shop}
                 ownerId={user?.id}
+              />
+            )}
+
+            {/* Tab 5: Customer Messages & Inquiries (Messenger Design) */}
+            {activeTab === "messages" && user && (
+              <ShopMessenger
+                mode="owner"
+                currentUser={user}
+                shops={shops}
               />
             )}
           </>

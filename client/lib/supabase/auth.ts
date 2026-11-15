@@ -13,6 +13,8 @@ import {
   BranchStaffMember,
   ShopReview,
   PartnerApplication,
+  ShopMessage,
+  ShopConversation,
 } from "@/types/auth";
 
 // Default pre-seeded registered shops (Ensures customer map, services, and fast pass work seamlessly)
@@ -2615,3 +2617,405 @@ export async function getPlatformUsers(): Promise<UserProfile[]> {
 
   return Array.from(userMap.values());
 }
+
+// ==============================================================================
+// Shop Messages & Real-Time Messenger System
+// ==============================================================================
+
+const LOCAL_MESSAGES_STORAGE_KEY = "labadago_shop_messages_store";
+
+function getLocalMessagesStore(): ShopMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_MESSAGES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalMessagesStore(messages: ShopMessage[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LOCAL_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+  } catch {
+    // Ignore storage quota
+  }
+}
+
+/**
+ * Send an inquiry or reply message between Customer and Laundry Shop (Owner/Staff).
+ */
+export async function sendShopMessage(params: {
+  shopId: string;
+  shopName?: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "customer" | "owner" | "staff";
+  message: string;
+}): Promise<{ success: boolean; data?: ShopMessage; error?: string }> {
+  const {
+    shopId,
+    shopName,
+    customerId,
+    customerName,
+    customerPhone,
+    senderId,
+    senderName,
+    senderRole,
+    message,
+  } = params;
+
+  if (!message.trim()) {
+    return { success: false, error: "Message cannot be empty." };
+  }
+
+  const newId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}`;
+  const nowIso = new Date().toISOString();
+
+  const newMsg: ShopMessage = {
+    id: newId,
+    shop_id: shopId,
+    shop_name: shopName || "Laundry Shop",
+    customer_id: customerId,
+    customer_name: customerName,
+    customer_phone: customerPhone,
+    sender_id: senderId,
+    sender_name: senderName,
+    sender_role: senderRole,
+    message: message.trim(),
+    is_read: false,
+    created_at: nowIso,
+  };
+
+  // 1. Optimistically store in local storage
+  const localList = getLocalMessagesStore();
+  localList.push(newMsg);
+  saveLocalMessagesStore(localList);
+
+  // 2. Insert into Supabase table
+  try {
+    const { data, error } = await supabase
+      .from("shop_messages")
+      .insert({
+        id: newMsg.id,
+        shop_id: newMsg.shop_id,
+        customer_id: newMsg.customer_id,
+        customer_name: newMsg.customer_name,
+        customer_phone: newMsg.customer_phone || null,
+        sender_id: newMsg.sender_id,
+        sender_name: newMsg.sender_name,
+        sender_role: newMsg.sender_role,
+        message: newMsg.message,
+        is_read: false,
+        created_at: newMsg.created_at,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      newMsg.id = data.id;
+      return { success: true, data: newMsg };
+    } else if (error) {
+      console.warn("Supabase shop_messages notice (local store used):", error.message);
+    }
+  } catch (err) {
+    console.warn("Failed to insert message to Supabase, fallback to local:", err);
+  }
+
+  return { success: true, data: newMsg };
+}
+
+/**
+ * Fetch all messages for a specific conversation thread between a Shop and a Customer.
+ */
+export async function getShopMessages(
+  shopId: string,
+  customerId: string
+): Promise<ShopMessage[]> {
+  const messageMap = new Map<string, ShopMessage>();
+
+  // 1. Query Supabase
+  try {
+    const { data, error } = await supabase
+      .from("shop_messages")
+      .select(
+        "id, shop_id, customer_id, customer_name, customer_phone, sender_id, sender_name, sender_role, message, is_read, created_at, laundry_shops(name)"
+      )
+      .eq("shop_id", shopId)
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      data.forEach((row: any) => {
+        messageMap.set(row.id, {
+          id: row.id,
+          shop_id: row.shop_id,
+          shop_name: row.laundry_shops?.name || "Laundry Shop",
+          customer_id: row.customer_id,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          sender_id: row.sender_id,
+          sender_name: row.sender_name,
+          sender_role: row.sender_role,
+          message: row.message,
+          is_read: Boolean(row.is_read),
+          created_at: row.created_at,
+        });
+      });
+    }
+  } catch (err) {
+    console.warn("Notice querying shop_messages from Supabase:", err);
+  }
+
+  // 2. Merge local storage for optimistic offline support
+  const localList = getLocalMessagesStore();
+  localList
+    .filter((m) => m.shop_id === shopId && m.customer_id === customerId)
+    .forEach((m) => {
+      if (!messageMap.has(m.id)) {
+        messageMap.set(m.id, m);
+      }
+    });
+
+  return Array.from(messageMap.values()).sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+}
+
+/**
+ * Fetch all active conversation threads for a Laundry Shop (used by Owner and Branch Staff).
+ */
+export async function getShopConversations(
+  shopId?: string,
+  ownerId?: string
+): Promise<ShopConversation[]> {
+  const allMessages: ShopMessage[] = [];
+
+  try {
+    let query = supabase
+      .from("shop_messages")
+      .select(
+        "id, shop_id, customer_id, customer_name, customer_phone, sender_id, sender_name, sender_role, message, is_read, created_at, laundry_shops(name, owner_id)"
+      )
+      .order("created_at", { ascending: false });
+
+    if (shopId) {
+      query = query.eq("shop_id", shopId);
+    }
+
+    const { data, error } = await query;
+    if (!error && data) {
+      data
+        .filter((row: any) => {
+          if (ownerId && row.laundry_shops?.owner_id !== ownerId) return false;
+          return true;
+        })
+        .forEach((row: any) => {
+          allMessages.push({
+            id: row.id,
+            shop_id: row.shop_id,
+            shop_name: row.laundry_shops?.name || "Laundry Shop",
+            customer_id: row.customer_id,
+            customer_name: row.customer_name,
+            customer_phone: row.customer_phone,
+            sender_id: row.sender_id,
+            sender_name: row.sender_name,
+            sender_role: row.sender_role,
+            message: row.message,
+            is_read: Boolean(row.is_read),
+            created_at: row.created_at,
+          });
+        });
+    }
+  } catch (err) {
+    console.warn("Notice loading conversations from Supabase:", err);
+  }
+
+  // Merge local storage
+  const localList = getLocalMessagesStore();
+  localList.forEach((m) => {
+    if (shopId && m.shop_id !== shopId) return;
+    if (!allMessages.some((existing) => existing.id === m.id)) {
+      allMessages.push(m);
+    }
+  });
+
+  // Group by (shop_id + customer_id)
+  const threadMap = new Map<string, ShopConversation>();
+
+  allMessages.forEach((msg) => {
+    const key = `${msg.shop_id}:::${msg.customer_id}`;
+    const existing = threadMap.get(key);
+
+    const isUnread = !msg.is_read && msg.sender_role === "customer";
+
+    if (!existing) {
+      threadMap.set(key, {
+        shop_id: msg.shop_id,
+        shop_name: msg.shop_name || "Laundry Shop",
+        customer_id: msg.customer_id,
+        customer_name: msg.customer_name,
+        customer_phone: msg.customer_phone,
+        last_message: msg.message,
+        last_message_at: msg.created_at,
+        last_sender_name: msg.sender_name,
+        last_sender_role: msg.sender_role,
+        unread_count: isUnread ? 1 : 0,
+      });
+    } else {
+      // If this message is newer than existing record, update snippet
+      if (new Date(msg.created_at).getTime() > new Date(existing.last_message_at).getTime()) {
+        existing.last_message = msg.message;
+        existing.last_message_at = msg.created_at;
+        existing.last_sender_name = msg.sender_name;
+        existing.last_sender_role = msg.sender_role;
+      }
+      if (isUnread) {
+        existing.unread_count += 1;
+      }
+    }
+  });
+
+  return Array.from(threadMap.values()).sort(
+    (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+  );
+}
+
+/**
+ * Fetch all conversation threads for a Customer across all laundry shops they messaged.
+ */
+export async function getCustomerConversations(
+  customerId: string
+): Promise<ShopConversation[]> {
+  const allMessages: ShopMessage[] = [];
+
+  try {
+    const { data, error } = await supabase
+      .from("shop_messages")
+      .select(
+        "id, shop_id, customer_id, customer_name, customer_phone, sender_id, sender_name, sender_role, message, is_read, created_at, laundry_shops(name)"
+      )
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      data.forEach((row: any) => {
+        allMessages.push({
+          id: row.id,
+          shop_id: row.shop_id,
+          shop_name: row.laundry_shops?.name || "Laundry Shop",
+          customer_id: row.customer_id,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          sender_id: row.sender_id,
+          sender_name: row.sender_name,
+          sender_role: row.sender_role,
+          message: row.message,
+          is_read: Boolean(row.is_read),
+          created_at: row.created_at,
+        });
+      });
+    }
+  } catch (err) {
+    console.warn("Notice loading customer conversations from Supabase:", err);
+  }
+
+  // Merge local storage
+  const localList = getLocalMessagesStore();
+  localList
+    .filter((m) => m.customer_id === customerId)
+    .forEach((m) => {
+      if (!allMessages.some((existing) => existing.id === m.id)) {
+        allMessages.push(m);
+      }
+    });
+
+  // Group by shop_id
+  const threadMap = new Map<string, ShopConversation>();
+
+  allMessages.forEach((msg) => {
+    const key = msg.shop_id;
+    const existing = threadMap.get(key);
+    const isUnread = !msg.is_read && msg.sender_role !== "customer";
+
+    if (!existing) {
+      threadMap.set(key, {
+        shop_id: msg.shop_id,
+        shop_name: msg.shop_name || "Laundry Shop",
+        customer_id: msg.customer_id,
+        customer_name: msg.customer_name,
+        customer_phone: msg.customer_phone,
+        last_message: msg.message,
+        last_message_at: msg.created_at,
+        last_sender_name: msg.sender_name,
+        last_sender_role: msg.sender_role,
+        unread_count: isUnread ? 1 : 0,
+      });
+    } else {
+      if (new Date(msg.created_at).getTime() > new Date(existing.last_message_at).getTime()) {
+        existing.last_message = msg.message;
+        existing.last_message_at = msg.created_at;
+        existing.last_sender_name = msg.sender_name;
+        existing.last_sender_role = msg.sender_role;
+      }
+      if (isUnread) {
+        existing.unread_count += 1;
+      }
+    }
+  });
+
+  return Array.from(threadMap.values()).sort(
+    (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+  );
+}
+
+/**
+ * Mark all incoming messages in a thread as read.
+ */
+export async function markShopMessagesAsRead(
+  shopId: string,
+  customerId: string,
+  readerRole: "customer" | "owner" | "staff"
+): Promise<void> {
+  // Update local store
+  const localList = getLocalMessagesStore();
+  let changed = false;
+  localList.forEach((m) => {
+    if (m.shop_id === shopId && m.customer_id === customerId) {
+      if (readerRole === "customer" && m.sender_role !== "customer" && !m.is_read) {
+        m.is_read = true;
+        changed = true;
+      } else if (readerRole !== "customer" && m.sender_role === "customer" && !m.is_read) {
+        m.is_read = true;
+        changed = true;
+      }
+    }
+  });
+  if (changed) {
+    saveLocalMessagesStore(localList);
+  }
+
+  // Update Supabase
+  try {
+    let updateQuery = supabase
+      .from("shop_messages")
+      .update({ is_read: true })
+      .eq("shop_id", shopId)
+      .eq("customer_id", customerId);
+
+    if (readerRole === "customer") {
+      updateQuery = updateQuery.neq("sender_role", "customer");
+    } else {
+      updateQuery = updateQuery.eq("sender_role", "customer");
+    }
+
+    await updateQuery;
+  } catch (err) {
+    console.warn("Failed to mark messages read in Supabase:", err);
+  }
+}
+

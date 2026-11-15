@@ -18,6 +18,7 @@ import { ShopServicesView } from "@/components/customer/ShopServicesView";
 import { ShopRouteNavigation } from "@/components/customer/ShopRouteNavigation";
 import { WalkInQRGenerator } from "@/components/customer/WalkInQRGenerator";
 import { CustomerOrderTracker } from "@/components/customer/CustomerOrderTracker";
+import { ShopMessenger } from "@/components/messaging/ShopMessenger";
 import { Button } from "@/components/ui/Button";
 import {
   MapPin,
@@ -26,9 +27,10 @@ import {
   Loader2,
   Store,
   ChevronLeft,
+  MessageSquare,
 } from "lucide-react";
 
-type CustomerViewTab = "home" | "map" | "services" | "route" | "qr" | "orders";
+type CustomerViewTab = "home" | "map" | "services" | "route" | "qr" | "orders" | "messages";
 
 export function CustomerContent() {
   const router = useRouter();
@@ -41,6 +43,7 @@ export function CustomerContent() {
     if (tabParam === "map") return "map";
     if (tabParam === "qr") return "qr";
     if (tabParam === "orders") return "orders";
+    if (tabParam === "messages") return "messages";
     if (viewParam === "route") return "route";
     if (viewParam === "services") return "services";
     return "home";
@@ -70,6 +73,8 @@ export function CustomerContent() {
       setActiveTab("qr");
     } else if (tabParam === "orders") {
       setActiveTab("orders");
+    } else if (tabParam === "messages") {
+      setActiveTab("messages");
     } else if (viewParam === "route") {
       setActiveTab("route");
     } else if (viewParam === "services" || (shopIdParam && !tabParam)) {
@@ -359,9 +364,15 @@ export function CustomerContent() {
         <main className="flex-1 w-full">
           <ShopServicesView
             shop={selectedShop}
+            currentUser={user}
             onBack={handleReturnToHome}
             onViewRoute={handleViewRoute}
             onPrepareQR={handlePrepareQR}
+            onOpenChat={(shop) => {
+              setSelectedShop(shop);
+              setActiveTab("messages");
+              router.push(`/customer?tab=messages&shopId=${shop.id}`, { scroll: false });
+            }}
             distanceKm={
               userLocation
                 ? calculateDistanceKm(userLocation[0], userLocation[1], selectedShop.latitude, selectedShop.longitude)
@@ -411,12 +422,18 @@ export function CustomerContent() {
                 </button>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-                {activeTab === "qr" ? "Walk-In Fast Pass QR" : "My Laundry Orders"}
+                {activeTab === "qr"
+                  ? "Walk-In Fast Pass QR"
+                  : activeTab === "orders"
+                  ? "My Laundry Orders"
+                  : "Shop Inquiries & Messages"}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
                 {activeTab === "qr"
                   ? "Generate your fast pass QR code to drop off your clothes at the counter."
-                  : "Track the live status, wash stage, and receipts of your laundry."}
+                  : activeTab === "orders"
+                  ? "Track the live status, wash stage, and receipts of your laundry."
+                  : "Chat directly with laundry counters, check queue availability, and receive order updates."}
               </p>
             </div>
           </div>
@@ -441,6 +458,35 @@ export function CustomerContent() {
               onRefresh={refreshTransactions}
               onReturnToMap={handleReturnToHome}
             />
+          )}
+
+          {/* Tab: Shop Messages (Messenger Design) */}
+          {activeTab === "messages" && (
+            user ? (
+              <ShopMessenger
+                mode="customer"
+                currentUser={user}
+                shops={shops}
+                initialShopId={selectedShop?.id || searchParams.get("shopId") || undefined}
+              />
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 text-center space-y-4 max-w-md mx-auto shadow-2xs">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <MessageSquare size={26} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Sign in to View Messages</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Please sign in to your customer account to message laundry shops and view replies.
+                  </p>
+                </div>
+                <Link href="/login?redirect=/customer?tab=messages" className="block">
+                  <Button variant="primary" size="md" className="w-full text-xs">
+                    Sign In to Message
+                  </Button>
+                </Link>
+              </div>
+            )
           )}
         </main>
       )}

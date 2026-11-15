@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { LaundryShop, ShopService } from "@/types/auth";
+import { useRouter } from "next/navigation";
+import { LaundryShop, ShopService, UserProfile } from "@/types/auth";
 import { formatTo12Hour } from "@/components/owner/ShopSetupForm";
-import { getShopServices } from "@/lib/supabase/auth";
+import { getShopServices, sendShopMessage, getCachedUserProfile } from "@/lib/supabase/auth";
 import {
   ArrowLeft,
   Heart,
@@ -27,9 +28,11 @@ import {
 
 interface ShopServicesViewProps {
   shop: LaundryShop;
+  currentUser?: UserProfile | null;
   onBack: () => void;
   onViewRoute: (shop: LaundryShop) => void;
   onPrepareQR: (shop: LaundryShop) => void;
+  onOpenChat?: (shop: LaundryShop) => void;
   distanceKm?: number;
 }
 
@@ -80,11 +83,14 @@ const DEFAULT_SERVICES_LIST: Array<{
 
 export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
   shop,
+  currentUser,
   onBack,
   onViewRoute,
   onPrepareQR,
+  onOpenChat,
   distanceKm,
 }) => {
+  const router = useRouter();
   const [isFavorited, setIsFavorited] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -98,7 +104,58 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
 
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageSent, setMessageSent] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [customMsg, setCustomMsg] = useState("");
+
+  const handleSendInquiry = async () => {
+    if (!customMsg.trim() || isSendingMessage) return;
+
+    const activeUser =
+      currentUser || (typeof window !== "undefined" ? getCachedUserProfile() : null);
+
+    if (!activeUser) {
+      router.push(
+        "/login?redirect=" +
+          encodeURIComponent(
+            typeof window !== "undefined"
+              ? window.location.pathname + window.location.search
+              : "/customer"
+          ) +
+          "&message=" +
+          encodeURIComponent("Please sign in to message this laundry shop.")
+      );
+      return;
+    }
+
+    setIsSendingMessage(true);
+    setSendError(null);
+
+    try {
+      const res = await sendShopMessage({
+        shopId: shop.id,
+        shopName: shop.name,
+        customerId: activeUser.id,
+        customerName: activeUser.full_name,
+        customerPhone: activeUser.phone_number,
+        senderId: activeUser.id,
+        senderName: activeUser.full_name,
+        senderRole: "customer",
+        message: customMsg,
+      });
+
+      if (res.success) {
+        setMessageSent(true);
+        setCustomMsg("");
+      } else {
+        setSendError(res.error || "Failed to send inquiry.");
+      }
+    } catch (err: any) {
+      setSendError(err?.message || "Failed to deliver inquiry.");
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
 
   // Live database services
   const [dbServices, setDbServices] = useState<ShopService[]>(shop.services || []);
@@ -458,15 +515,37 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
             </div>
 
             {messageSent ? (
-              <div className="py-6 text-center space-y-2">
+              <div className="py-6 text-center space-y-3">
                 <CheckCircle size={36} className="text-emerald-500 mx-auto" />
-                <h5 className="text-sm font-bold text-slate-900">Inquiry Delivered!</h5>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  {shop.name} staff has been notified. You can also call directly below.
-                </p>
+                <div>
+                  <h5 className="text-sm font-bold text-slate-900">Inquiry Delivered!</h5>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto mt-0.5">
+                    {shop.name} staff has received your inquiry and can reply to you directly in Messages.
+                  </p>
+                </div>
+                {onOpenChat && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMessageModal(false);
+                      setMessageSent(false);
+                      onOpenChat(shop);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <MessageSquare size={14} />
+                    <span>Open Messenger Chat</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
+                {sendError && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                    {sendError}
+                  </div>
+                )}
+
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
                     Quick Inquiries:
@@ -501,14 +580,16 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setMessageSent(true);
-                  }}
-                  disabled={!customMsg.trim()}
+                  onClick={handleSendInquiry}
+                  disabled={!customMsg.trim() || isSendingMessage}
                   className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                 >
-                  <Send size={14} />
-                  <span>Send Message</span>
+                  {isSendingMessage ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
+                  <span>{isSendingMessage ? "Delivering..." : "Send Message"}</span>
                 </button>
               </div>
             )}

@@ -65,14 +65,17 @@ import {
   UserPlus,
   Info,
   Calendar,
+  MessageSquare,
 } from "lucide-react";
 import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 import { PaymentInputSection } from "@/components/payment/PaymentInputSection";
+import { ShopMessenger } from "@/components/messaging/ShopMessenger";
 
 interface StaffScannerViewProps {
   staffUser: UserProfile;
   assignedShop: LaundryShop | null;
+  initialSidebarTab?: string;
   onSignOut?: () => void;
 }
 
@@ -136,6 +139,7 @@ const MACHINE_PRESETS = [
 export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   staffUser,
   assignedShop,
+  initialSidebarTab,
   onSignOut,
 }) => {
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
@@ -146,9 +150,15 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
   // Modern Sidebar Navigation State (Matches Screenshot)
   const [currentSidebarTab, setCurrentSidebarTab] = useState<
-    "checkin" | "queue" | "processing" | "transactions" | "dashboard" | "customers" | "services" | "reports" | "notifications" | "settings"
-  >("checkin");
+    "checkin" | "queue" | "processing" | "transactions" | "dashboard" | "customers" | "services" | "reports" | "notifications" | "settings" | "messages"
+  >(initialSidebarTab === "messages" ? "messages" : "checkin");
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+
+  useEffect(() => {
+    if (initialSidebarTab === "messages") {
+      setCurrentSidebarTab("messages");
+    }
+  }, [initialSidebarTab]);
 
   // Staff entry mode toggle (Scan vs Manual Walk-in Entry)
   const [entryMode, setEntryMode] = useState<"scan" | "manual">("scan");
@@ -669,6 +679,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             {[
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
               { id: "checkin", label: "Customer Check-In", icon: UserCheck },
+              { id: "messages", label: "Customer Inquiries", icon: MessageSquare },
               { id: "transactions", label: "Transactions", icon: FileText },
               { id: "queue", label: "Queue", icon: ListOrdered },
               { id: "processing", label: "Laundry Processing", icon: Shirt },
@@ -785,6 +796,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 {[
                   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                   { id: "checkin", label: "Customer Check-In", icon: UserCheck },
+                  { id: "messages", label: "Customer Inquiries", icon: MessageSquare },
                   { id: "transactions", label: "Transactions", icon: FileText },
                   { id: "queue", label: "Queue", icon: ListOrdered },
                   { id: "processing", label: "Laundry Processing", icon: Shirt },
@@ -857,6 +869,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
               <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-tight">
                 {currentSidebarTab === "checkin"
                   ? "Customer Check-In"
+                  : currentSidebarTab === "messages"
+                  ? "Customer Inquiries & Messages"
                   : currentSidebarTab === "queue"
                   ? "Queue Management"
                   : currentSidebarTab === "processing"
@@ -878,6 +892,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
                 {currentSidebarTab === "checkin"
                   ? "Receive and create laundry transactions"
+                  : currentSidebarTab === "messages"
+                  ? "Reply directly to customer questions about queues, turnaround, and services"
                   : currentSidebarTab === "queue"
                   ? "Track active drop-offs, washing cycles, and ready pickups"
                   : currentSidebarTab === "processing"
@@ -984,6 +1000,17 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 }}
                 onViewQueue={() => setCurrentSidebarTab("queue")}
                 todayTransactionsCount={transactions.length}
+              />
+            </div>
+          )}
+
+          {/* TAB: CUSTOMER INQUIRIES & MESSAGES (Messenger Design) */}
+          {currentSidebarTab === "messages" && (
+            <div className="max-w-6xl mx-auto">
+              <ShopMessenger
+                mode="staff"
+                currentUser={staffUser}
+                assignedShop={assignedShop}
               />
             </div>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getCurrentUserProfile,
   getStaffAssignedShop,
@@ -14,8 +14,10 @@ import { Loader2, ShieldAlert, Store, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 
-export default function StaffPage() {
+function StaffPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") || "checkin";
   const [user, setUser] = useState<UserProfile | null>(null);
   const [assignedShop, setAssignedShop] = useState<LaundryShop | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +117,23 @@ export default function StaffPage() {
     <StaffScannerView
       staffUser={user}
       assignedShop={assignedShop}
+      initialSidebarTab={tabParam}
       onSignOut={handleSignOut}
     />
   );
 }
+
+export default function StaffPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <Loader2 className="animate-spin text-teal-400" size={32} />
+        </div>
+      }
+    >
+      <StaffPageContent />
+    </Suspense>
+  );
+}
+

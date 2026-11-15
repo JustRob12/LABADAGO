@@ -1230,3 +1230,52 @@ Ensure that when the administrator approves a partner application:
    - Ran `cd client && pnpm run build`.
    - Verified all 13 routes compiled successfully with **0 errors**.
 
+---
+
+### Update 41: Shop Inquiries & Real-Time Messenger System Across Owner, Staff, and Customer Portals
+
+**Objective**:
+1. Connect the "Contact Shop" modal (quick inquiries: queue status, blanket/comforter care, turnaround times) to a real database table `public.shop_messages`.
+2. Build a full-featured, responsive **Messenger design** (`ShopMessenger.tsx`) with a 2-column layout (conversation threads sidebar on the left, active chat stream on the right).
+3. Enable live two-way replies between **Customers** and **Laundry Shop Owners / Branch Staff**.
+4. Integrate the Messages view across:
+   - **Owner Portal** (`/owner?tab=messages` and sidebar/mobile navigation).
+   - **Staff Portal** (`/staff?tab=messages`, sidebar navigation, and mobile bottom bar).
+   - **Customer Portal** (`/customer?tab=messages`, sidebar/mobile bar, and direct transition from the "Contact" modal).
+
+#### Changes:
+1. **Database Schema & SQL Migration**:
+   - Created migration file [`client/supabase/migrations/20261115_shop_messages.sql`](file:///Volumes/Rob%20Buids/Website%20Projects/LABADAGO/client/supabase/migrations/20261115_shop_messages.sql).
+   - Added `public.shop_messages` table with `id`, `shop_id`, `customer_id`, `customer_name`, `customer_phone`, `sender_id`, `sender_name`, `sender_role`, `message`, `is_read`, and `created_at`.
+   - Appended schema and RLS policies to [`client/supabase/schema.sql`](file:///Volumes/Rob%20Buids/Website%20Projects/LABADAGO/client/supabase/schema.sql).
+2. **TypeScript Types (`client/types/auth.ts`)**:
+   - Added `ShopMessage` and `ShopConversation` interfaces.
+3. **Supabase Services (`client/lib/supabase/auth.ts`)**:
+   - Implemented `sendShopMessage` with optimistic persistence and database insert.
+   - Implemented `getShopMessages` for loading thread message history.
+   - Implemented `getShopConversations` (for owners and staff) with unread counting and branch filtering.
+   - Implemented `getCustomerConversations` (for customers) with shop name associations.
+   - Implemented `markShopMessagesAsRead` for clearing unread badges.
+4. **Messenger Component (`client/components/messaging/ShopMessenger.tsx`)**:
+   - Built modern Messenger UI:
+     - Searchable conversation list with unread counter badges, relative timestamps, and shop badges.
+     - Live message stream with right-aligned (outgoing) and left-aligned (incoming) bubbles, timestamps, and read indicators.
+     - Quick preset buttons (for staff: machine readiness, turnaround time, comforter policy, pickup alerts; for customer: queue inquiries, blanket washing, turnaround times).
+     - Live auto-polling every 3.5 seconds for instant multi-device messaging.
+5. **Shop Services Inquiries Modal (`client/components/customer/ShopServicesView.tsx`)**:
+   - Connected "Send Message" to `sendShopMessage`.
+   - Added "Open Messenger Chat" direct navigation button on success.
+6. **Owner Portal (`client/app/owner/page.tsx`)**:
+   - Added `messages` tab support and integrated `ShopMessenger` for owners with branch filters.
+7. **Staff Portal (`client/app/staff/page.tsx` & `client/components/staff/StaffScannerView.tsx`)**:
+   - Added `messages` tab support to staff sidebar and mobile drawer.
+   - Integrated `ShopMessenger` in staff mode bound to the staff member's assigned shop.
+8. **Customer Portal (`client/app/customer/page.tsx`)**:
+   - Added `messages` tab support and integrated `ShopMessenger` in customer mode.
+9. **Dashboard Navigation (`client/components/dashboard/DashboardNav.tsx`)**:
+   - Added "Messages" / "Customer Inquiries" link across Owner, Staff, and Customer sidebars and mobile bottom navigation bars.
+10. **Build Verification**:
+    - Ran `cd client && pnpm run build`.
+    - Verified all 13 routes compiled successfully with **0 errors**.
+
+

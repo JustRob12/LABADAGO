@@ -254,3 +254,36 @@ export interface PartnerApplication {
   reviewed_at?: string;
   reviewed_by?: string;
 }
+
+// -----------------------------------------------------------------------------
+// Shop Messenger & Customer Inquiry Types
+// -----------------------------------------------------------------------------
+
+export interface ShopMessage {
+  id: string;
+  shop_id: string;
+  shop_name?: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone?: string;
+  sender_id: string;
+  sender_name: string;
+  sender_role: "customer" | "owner" | "staff";
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface ShopConversation {
+  shop_id: string;
+  shop_name: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone?: string;
+  last_message: string;
+  last_message_at: string;
+  last_sender_name: string;
+  last_sender_role: "customer" | "owner" | "staff";
+  unread_count: number;
+}
+
