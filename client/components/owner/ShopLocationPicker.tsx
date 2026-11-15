@@ -19,10 +19,9 @@ const PRESET_LOCATIONS = [
   { name: "Cebu IT Park, Cebu", lat: 10.3298, lng: 123.9056 },
 ];
 
-const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "";
-const CARTO_VOYAGER_URL = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${CARTO_KEY ? `?api_key=${CARTO_KEY}` : ""}`;
-const CARTO_ATTRIBUTION =
-  '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
+const ESRI_STREETS_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const MAP_ATTRIBUTION =
+  '&copy; <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a>, TomTom, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
 export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
   latitude,
@@ -69,11 +68,21 @@ export const ShopLocationPicker: React.FC<ShopLocationPickerProps> = ({
           zoomControl: true,
         });
 
-        L.tileLayer(CARTO_VOYAGER_URL, {
-          attribution: CARTO_ATTRIBUTION,
-          subdomains: "abcd",
-          maxZoom: 20,
+        const tileLayer = L.tileLayer(ESRI_STREETS_URL, {
+          attribution: MAP_ATTRIBUTION,
+          maxZoom: 19,
         }).addTo(map);
+
+        tileLayer.on("tileerror", (e: any) => {
+          if (e.tile && !e.tile.dataset.fallbackRetried) {
+            e.tile.dataset.fallbackRetried = "1";
+            const src = e.tile.src || "";
+            const match = src.match(/\/(\d+)\/(\d+)\/(\d+)/);
+            if (match) {
+              e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
+            }
+          }
+        });
 
         mapInstanceRef.current = map;
 

@@ -1689,3 +1689,150 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
    - **`ShopLocationPicker.tsx`**: Updated `CARTO_VOYAGER_URL` to append `?api_key=${CARTO_KEY}`.
 3. **Build & Route Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+
+---
+
+### Update 50: React SSR Hydration Mismatch Resolution Across Navigation and Core Portals
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **Hydration Mismatch on Dashboard Navigation User Card**:
+   - Next.js Turbopack reported: `Hydration failed because the server rendered HTML didn't match the client`.
+   - On the server, `activeUser` evaluated to `null` because `typeof window !== 'undefined'` was false, causing SSR to render `<div className="space-y-1.5 p-1"><a ...>Sign In</a>...</div>`.
+   - On the client during the initial hydration pass, `typeof window !== 'undefined'` was true, synchronously reading from `localStorage` (`getCachedUserProfile()`) and rendering the logged-in user profile badge (`<div className="bg-slate-50 ...">...</div>`), which conflicted with the server HTML.
+2. **State Initializer Client/Server Branching in Portal Pages**:
+   - `customer/page.tsx`, `owner/page.tsx`, `admin/page.tsx`, `partner/page.tsx`, and `dashboard/page.tsx` all had `useState(() => typeof window !== 'undefined' ? getCachedUserProfile() : null)`.
+   - In `CustomerHomeView.tsx` and `ShopServicesView.tsx`, `favorites` and `isFavorited` states read `localStorage` during initial state construction, causing heart icons to mismatch between server and client.
+
+#### Changes Implemented:
+1. **`client/components/dashboard/DashboardNav.tsx`**:
+   - Added `mounted` and `cachedUser` state hooks.
+   - Defer reading `getCachedUserProfile()` to `useEffect`, ensuring the initial client hydration pass exactly matches the server-rendered DOM.
+   - Guarded fallback profile access: `const activeUser = user || (mounted ? cachedUser : null)`.
+   - Added `suppressHydrationWarning` on the desktop bottom profile container and the mobile top header avatar container.
+2. **Core Portal Pages (`customer`, `owner`, `admin`, `partner`, `dashboard`)**:
+   - Updated `useState<UserProfile | null>(null)` so initial state is consistent across SSR and hydration.
+   - Synced cached profiles inside `useEffect(() => { const cached = getCachedUserProfile(); if (cached) setUser(cached); }, [])` immediately after hydration.
+3. **Favorites & Storage Synchronization**:
+   - In `CustomerHomeView.tsx`: Initialized `favoriteShopIds` to `[]` and loaded persisted IDs in `useEffect`.
+   - In `ShopServicesView.tsx`: Initialized `isFavorited` to `false` and loaded persisted state in `useEffect`.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+
+---
+
+### Update 51: Restored Leaflet Map Engine Across Customer and Owner Portals
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request for Leaflet Engine**:
+   - The user requested returning to the Leaflet map engine on both customer and owner maps.
+2. **Hardening Against Leaflet DOM / Animation Race Conditions (`_leaflet_pos`)**:
+   - Leaflet previously threw `TypeError: Cannot set properties of undefined (setting '_leaflet_pos')` when `map.fitBounds` or `getBoundsZoom` ran before map container dimensions were established or when bounds had zero area.
+
+#### Changes Implemented:
+1. **Engine Hardening (`client/lib/utils/leafletPatch.ts`)**:
+   - Expanded `patchLeafletPos(L)` to guard:
+     - `L.DomUtil.getPosition` and `L.DomUtil.setPosition` against undefined DOM elements.
+     - `L.Map.prototype.getBoundsZoom`: Prevents `-Infinity` / `Infinity` when map container width/height is 0.
+     - `L.Map.prototype.fitBounds`: Safely handles identical coordinates, zero-sized containers, and guards with `{ animate: false }`.
+     - `L.Map.prototype.setView`: Guards against non-finite or NaN zoom parameters.
+2. **Customer Discovery Map (`client/components/customer/LaundryMap.tsx`)**:
+   - Restored Leaflet map engine with free CARTO Voyager, CARTO Positron, OSM Standard, and CARTO Dark Matter basemap presets.
+   - Vector teardrop pins for laundry shops with live queue status dots, washing machine icons, and price pills.
+   - Pulsing blue GPS puck for user location.
+   - Search radius circle via `L.circle`.
+   - Real-road street route polyline from OSRM driving service with road casing, animated direction dash, and midpoint ETA pill.
+   - Controls: Basemap style switcher, Zoom +/- buttons, Recenter GPS, and Fullscreen toggle.
+   - Selected shop bottom sheet drawer with walk-in QR and directions.
+3. **Customer Turn-by-Turn Route Navigation (`client/components/customer/ShopRouteNavigation.tsx`)**:
+   - Restored Leaflet map engine for customer route navigation.
+   - User pulse puck, shop red pin with name label, and turn-by-turn road polyline with midpoint ETA badge.
+   - Travel mode selector (Drive, Walk, Bike) updating OSRM road geometry dynamically.
+   - Safe `fitBounds` with validity checks and size invalidation.
+4. **Owner Branch Location Picker (`client/components/owner/ShopLocationPicker.tsx`)**:
+   - Restored Leaflet map engine for owner branch location selection.
+   - Draggable emerald shop pin with `L.divIcon`.
+   - Map click listener to place pin directly on shop entrance.
+   - Device GPS detection button and quick major hub preset chips.
+5. **CSS & Asset Cleanup**:
+   - Imported `leaflet/dist/leaflet.css` in `client/app/globals.css`.
+   - Removed unused `client/lib/map/maplibreStyles.ts`.
+6. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+### Update 52: Removed Static Sample Data from Admin Portal & Guaranteed Pure Database Source of Truth
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "please on the admin page remove the statics sample data please display only whats on the database".
+2. **Static Sample Users**: `client/lib/supabase/auth.ts` previously defined and injected `DEFAULT_PLATFORM_USERS` (Maria Elena Santos, Juan Carlo Reyes, Ricardo Lim, Beatrice Gomez, Daniel Padilla, Angela Mercado, Mark Kenneth Tan, Sofia Rodriguez, Christian Bautista) into `getPlatformUsers()` and `localProfilesStore`, causing fake accounts to populate the Admin "Shop Owners" and "Customers" tabs.
+3. **Static Sample Partner Application**: `getPartnerApplications()` previously seeded a fallback partner application ("Roberto Dela Cruz" / "Spin & Glow Laundry Hub") whenever `partner_applications` returned 0 rows.
+4. **Static Sample Laundry Shops**: `getLaundryShops()` previously fell back to `DEFAULT_REGISTERED_SHOPS` ("CleanWave Laundry", "AquaPure Clean Express", "Fresh Spin Laundry", "Bubble Care") whenever the database returned 0 rows.
+
+#### Changes Implemented:
+1. **Purged Static Platform Users (`client/lib/supabase/auth.ts`)**:
+   - Replaced `DEFAULT_PLATFORM_USERS` with an empty array `[]`.
+   - Replaced `localProfilesStore` initialization with an empty array `[]`.
+   - Updated `getPlatformUsers()` to strictly query `supabase.from("profiles").select("*, laundry_shops(name)")` and populate only real user profiles found in the database.
+2. **Purged Static Partner Applications (`client/lib/supabase/auth.ts`)**:
+   - Removed the `app-seed-001` / "Roberto Dela Cruz" fallback seed from `getPartnerApplications()`.
+   - `localPartnerApplicationsStore` now initializes to an empty array `[]`.
+   - If the `partner_applications` table is empty or has no pending applications, the Admin portal cleanly displays the empty state with zero fake applications.
+3. **Purged Static Registered Shops (`client/lib/supabase/auth.ts`)**:
+   - Replaced `DEFAULT_REGISTERED_SHOPS` with an empty array `[]`.
+   - Replaced `localShopsStore` initialization with an empty array `[]`.
+   - Updated `getLaundryShops()` so that when Supabase returns data (even if empty `[]`), it strictly returns real database records and never falls back to mock shops.
+4. **Admin Portal Display Integrity (`client/app/admin/page.tsx`)**:
+   - Overview counter cards (Pending Review, Approved Partners, Rejected, Registered Shops), tab headers, directory lists, and the platform map now strictly reflect live database rows.
+   - Clean, informative empty states render for Applications, Shops, Owners, and Customers when database tables contain 0 rows.
+5. **Staff Reports & Completed Order Sync (`client/components/staff/StaffScannerView.tsx`)**:
+   - Reports and Financial Audit tab defaults to "All Records" scope, guaranteeing all completed database transactions are immediately visible upon navigation.
+   - Preserved timezone-tolerant filtering for "Today (Live)", "Yesterday", "Last 7 Days", and "This Month".
+6. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and all 13 routes prerendered cleanly.
+
+### Update 53: Configured New CARTO Basemaps API Key & Query Propagation
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "cb1_430d_2_4a9911a9432faebae4c6d96f i have new api key on carto basemaps please fix it".
+2. **Missing Dynamic Key Propagation in Map Components**: Previously, CARTO tile URL constants in Leaflet map components did not dynamically append the API key parameter from `process.env.NEXT_PUBLIC_CARTO_API_KEY`.
+
+#### Changes Implemented:
+1. **Environment Key Update (`client/.env.local`)**:
+   - Updated `NEXT_PUBLIC_CARTO_API_KEY` and `CARTO_API_KEY` to the new key: `cb1_430d_2_4a9911a9432faebae4c6d96f`.
+2. **Dynamic API Key Propagation across Map Components**:
+   - **`LaundryMap.tsx`**: Updated `CARTO_BASEMAPS` (Voyager, Positron, Dark Matter) to dynamically append `?api_key=${CARTO_KEY}` when `NEXT_PUBLIC_CARTO_API_KEY` is present.
+   - **`ShopRouteNavigation.tsx`**: Updated `CARTO_VOYAGER_URL` to append `?api_key=${CARTO_KEY}`.
+   - **`ShopLocationPicker.tsx`**: Updated `CARTO_VOYAGER_URL` to append `?api_key=${CARTO_KEY}`.
+3. **Build & Route Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+### Update 54: Replaced Watermarked CARTO Basemaps with Free, High-Definition ESRI Modern Streets & OpenStreetMap
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "why is this please fix this or use other map if needed" accompanied by screenshot showing diagonal "API KEY REQUIRED carto.com/basemaps/apikey" watermarks covering the entire map workspace.
+2. **CARTO Raster Tile Watermark**: CARTO began returning an HTTP 200 image with watermarks across `basemaps.cartocdn.com` raster endpoints, obscuring the road networks and map features.
+
+#### Changes Implemented:
+1. **High-Definition, Zero-Watermark Basemap Engine**:
+   - Replaced CARTO basemap URLs across all Leaflet map views with **ESRI World Street Map** (Modern Streets) and **OpenStreetMap (Standard)**, which require **zero API keys**, have **no rate-limit watermarks**, and provide crisp, global street network coverage.
+2. **`LaundryMap.tsx`**:
+   - Updated `MAP_BASEMAPS` presets to:
+     - **Modern Streets** (ESRI World Street Map) — Default
+     - **OpenStreetMap** (Standard OSM)
+     - **Topographic** (ESRI World Topo)
+     - **Satellite Imagery** (ESRI World Imagery)
+   - Updated basemap layer switcher dropdown to cycle seamlessly through the new basemap presets.
+   - Retained automatic tile error fallback to OpenStreetMap.
+3. **`ShopRouteNavigation.tsx`**:
+   - Replaced CARTO Voyager URL with `ESRI_STREETS_URL`.
+   - Turn-by-turn road polyline now displays atop clear street geometry with zero watermarks.
+4. **`ShopLocationPicker.tsx`**:
+   - Replaced CARTO Voyager URL with `ESRI_STREETS_URL` for owner branch location picking.
+5. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation.

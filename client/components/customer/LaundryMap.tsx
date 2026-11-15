@@ -52,31 +52,41 @@ export function calculateDistanceKm(
   return parseFloat((R * c).toFixed(2));
 }
 
-const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "";
-const CARTO_KEY_PARAM = CARTO_KEY ? `?api_key=${CARTO_KEY}` : "";
-
-// CARTO Basemap Styles & Free Public CDN Endpoints
-const CARTO_BASEMAPS = {
-  voyager: {
-    name: "CARTO Voyager",
-    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
-  },
-  positron: {
-    name: "CARTO Light (Positron)",
-    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
+// High-Definition Basemap Styles (100% Free, Zero API Key Required, No Watermarks)
+const MAP_BASEMAPS = {
+  streets: {
+    name: "Modern Streets",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    subdomains: "",
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a>, DeLorme, TomTom, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>',
   },
   osm: {
-    name: "OpenStreetMap (Standard)",
+    name: "OpenStreetMap",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: "abc",
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
   },
-  dark: {
-    name: "CARTO Dark Matter",
-    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
+  topo: {
+    name: "Topographic",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    subdomains: "",
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a>, DeLorme, TomTom',
+  },
+  satellite: {
+    name: "Satellite Imagery",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    subdomains: "",
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a>, DigitalGlobe, GeoEye, Earthstar Geographics',
   },
 };
-
-const CARTO_ATTRIBUTION =
-  '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
 export const LaundryMap: React.FC<LaundryMapProps> = ({
   shops,
@@ -104,7 +114,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   const lastRadiusRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [basemapStyle, setBasemapStyle] = useState<"voyager" | "positron" | "osm" | "dark">("voyager");
+  const [basemapStyle, setBasemapStyle] = useState<"streets" | "osm" | "topo" | "satellite">("streets");
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [liveLocation, setLiveLocation] = useState<[number, number] | null>(
     initialUserLocation || [14.65, 121.05]
@@ -260,10 +270,11 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           zoomControl: false,
         });
 
-        const tileLayer = L.tileLayer(CARTO_BASEMAPS[basemapStyle].url, {
-          attribution: CARTO_ATTRIBUTION,
-          subdomains: "abcd",
-          maxZoom: 20,
+        const currentStyle = MAP_BASEMAPS[basemapStyle] || MAP_BASEMAPS.streets;
+        const tileLayer = L.tileLayer(currentStyle.url, {
+          attribution: currentStyle.attribution,
+          subdomains: currentStyle.subdomains || "abc",
+          maxZoom: currentStyle.maxZoom || 19,
         }).addTo(map);
 
         tileLayer.on("tileerror", (e: any) => {
@@ -347,10 +358,11 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
     try {
       mapInstanceRef.current.removeLayer(tileLayerRef.current);
-      const newLayer = L.tileLayer(CARTO_BASEMAPS[basemapStyle].url, {
-        attribution: CARTO_ATTRIBUTION,
-        subdomains: "abcd",
-        maxZoom: 20,
+      const currentStyle = MAP_BASEMAPS[basemapStyle] || MAP_BASEMAPS.streets;
+      const newLayer = L.tileLayer(currentStyle.url, {
+        attribution: currentStyle.attribution,
+        subdomains: currentStyle.subdomains || "abc",
+        maxZoom: currentStyle.maxZoom || 19,
       }).addTo(mapInstanceRef.current);
       newLayer.on("tileerror", (e: any) => {
         if (e.tile && !e.tile.dataset.fallbackRetried) {
@@ -778,12 +790,12 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
             title="Change Basemap Style"
           >
             <Layers size={15} />
-            <span className="hidden sm:inline">{CARTO_BASEMAPS[basemapStyle].name}</span>
+            <span className="hidden sm:inline">{MAP_BASEMAPS[basemapStyle].name}</span>
           </button>
 
           {showLayerMenu && (
             <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl border border-slate-200 shadow-xl p-1.5 space-y-1 z-30 animate-in fade-in zoom-in-95 duration-150">
-              {(Object.keys(CARTO_BASEMAPS) as (keyof typeof CARTO_BASEMAPS)[]).map((key) => {
+              {(Object.keys(MAP_BASEMAPS) as (keyof typeof MAP_BASEMAPS)[]).map((key) => {
                 const isSelected = basemapStyle === key;
                 return (
                   <button
@@ -799,7 +811,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
                         : "text-slate-700 hover:bg-slate-50"
                     }`}
                   >
-                    <span>{CARTO_BASEMAPS[key].name}</span>
+                    <span>{MAP_BASEMAPS[key].name}</span>
                     {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
                   </button>
                 );
