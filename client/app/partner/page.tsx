@@ -21,9 +21,15 @@ import Link from "next/link";
 
 function PartnerPageContent() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    typeof window !== "undefined" ? getCachedUserProfile() : null
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  // Sync cached profile on mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    const cached = getCachedUserProfile();
+    if (cached) {
+      setUser(cached);
+    }
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

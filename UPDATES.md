@@ -1568,3 +1568,33 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
      - Stabilized `loadConversations` and `loadMessagesForSelected` dependencies with primitive IDs.
 4. **Build Verification**:
    - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+
+---
+
+### Update 50: React SSR Hydration Mismatch Resolution Across Navigation and Core Portals
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **Hydration Mismatch on Dashboard Navigation User Card**:
+   - Next.js Turbopack reported: `Hydration failed because the server rendered HTML didn't match the client`.
+   - On the server, `activeUser` evaluated to `null` because `typeof window !== 'undefined'` was false, causing SSR to render `<div className="space-y-1.5 p-1"><a ...>Sign In</a>...</div>`.
+   - On the client during the initial hydration pass, `typeof window !== 'undefined'` was true, synchronously reading from `localStorage` (`getCachedUserProfile()`) and rendering the logged-in user profile badge (`<div className="bg-slate-50 ...">...</div>`), which conflicted with the server HTML.
+2. **State Initializer Client/Server Branching in Portal Pages**:
+   - `customer/page.tsx`, `owner/page.tsx`, `admin/page.tsx`, `partner/page.tsx`, and `dashboard/page.tsx` all had `useState(() => typeof window !== 'undefined' ? getCachedUserProfile() : null)`.
+   - In `CustomerHomeView.tsx` and `ShopServicesView.tsx`, `favorites` and `isFavorited` states read `localStorage` during initial state construction, causing heart icons to mismatch between server and client.
+
+#### Changes Implemented:
+1. **`client/components/dashboard/DashboardNav.tsx`**:
+   - Added `mounted` and `cachedUser` state hooks.
+   - Defer reading `getCachedUserProfile()` to `useEffect`, ensuring the initial client hydration pass exactly matches the server-rendered DOM.
+   - Guarded fallback profile access: `const activeUser = user || (mounted ? cachedUser : null)`.
+   - Added `suppressHydrationWarning` on the desktop bottom profile container and the mobile top header avatar container.
+2. **Core Portal Pages (`customer`, `owner`, `admin`, `partner`, `dashboard`)**:
+   - Updated `useState<UserProfile | null>(null)` so initial state is consistent across SSR and hydration.
+   - Synced cached profiles inside `useEffect(() => { const cached = getCachedUserProfile(); if (cached) setUser(cached); }, [])` immediately after hydration.
+3. **Favorites & Storage Synchronization**:
+   - In `CustomerHomeView.tsx`: Initialized `favoriteShopIds` to `[]` and loaded persisted IDs in `useEffect`.
+   - In `ShopServicesView.tsx`: Initialized `isFavorited` to `false` and loaded persisted state in `useEffect`.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.

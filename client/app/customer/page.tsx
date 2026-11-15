@@ -49,9 +49,15 @@ export function CustomerContent() {
     return "home";
   });
 
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    typeof window !== "undefined" ? getCachedUserProfile() : null
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  // Sync cached profile on mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    const cached = getCachedUserProfile();
+    if (cached) {
+      setUser(cached);
+    }
+  }, []);
   const [shops, setShops] = useState<LaundryShop[]>([]);
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
   const [selectedShop, setSelectedShop] = useState<LaundryShop | null>(null);

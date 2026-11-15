@@ -65,9 +65,21 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
   // Mobile drawer state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [cachedUser, setCachedUser] = useState<UserProfile | null>(null);
 
-  // Synchronously read cached profile to prevent initial render flicker
-  const activeUser = user || (typeof window !== "undefined" ? getCachedUserProfile() : null);
+  // Read cached profile after mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    const cached = getCachedUserProfile();
+    if (cached) {
+      setCachedUser(cached);
+    }
+  }, []);
+
+  // During SSR and initial client hydration pass, use user prop safely.
+  // After mount, safely fallback to localStorage cached profile if user prop is missing.
+  const activeUser = user || (mounted ? cachedUser : null);
 
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -393,7 +405,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
       </div>
 
       {/* Bottom: Profile & Actions */}
-      <div className="p-3 border-t border-slate-100 space-y-2 shrink-0 bg-white">
+      <div className="p-3 border-t border-slate-100 space-y-2 shrink-0 bg-white" suppressHydrationWarning>
         {/* User Card */}
         {activeUser ? (
           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center gap-2.5">
@@ -489,20 +501,22 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           </div>
 
           {/* Right: Quick User Avatar or Sign In */}
-          {activeUser ? (
-            <Link href="/dashboard" className="flex items-center gap-1.5">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-                {activeUser.full_name ? activeUser.full_name.charAt(0).toUpperCase() : <UserIcon size={14} />}
-              </div>
-            </Link>
-          ) : (
-            <Link
-              href={`/login?redirect=${encodeURIComponent(pathname || "/customer")}`}
-              className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold text-slate-700"
-            >
-              Sign In
-            </Link>
-          )}
+          <div suppressHydrationWarning>
+            {activeUser ? (
+              <Link href="/dashboard" className="flex items-center gap-1.5">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs">
+                  {activeUser.full_name ? activeUser.full_name.charAt(0).toUpperCase() : <UserIcon size={14} />}
+                </div>
+              </Link>
+            ) : (
+              <Link
+                href={`/login?redirect=${encodeURIComponent(pathname || "/customer")}`}
+                className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold text-slate-700"
+              >
+                Sign In
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

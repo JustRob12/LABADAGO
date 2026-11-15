@@ -34,15 +34,20 @@ import {
 
 function DashboardContent() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    typeof window !== "undefined" ? getCachedUserProfile() : null
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [shops, setShops] = useState<LaundryShop[]>([]);
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
   const [adminApps, setAdminApps] = useState<PartnerApplication[]>([]);
-  const [isLoading, setIsLoading] = useState(() =>
-    typeof window !== "undefined" ? !getCachedUserProfile() : true
-  );
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Sync cached profile on mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    const cached = getCachedUserProfile();
+    if (cached) {
+      setUser(cached);
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadUser() {

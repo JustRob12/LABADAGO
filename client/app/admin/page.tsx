@@ -48,9 +48,15 @@ function AdminPageContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    typeof window !== "undefined" ? getCachedUserProfile() : null
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  // Sync cached profile on mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    const cached = getCachedUserProfile();
+    if (cached) {
+      setUser(cached);
+    }
+  }, []);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
   // Applications, Shops & Platform Users data

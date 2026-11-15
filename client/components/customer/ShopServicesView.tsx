@@ -91,16 +91,18 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
   distanceKm,
 }) => {
   const router = useRouter();
-  const [isFavorited, setIsFavorited] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
+  const [isFavorited, setIsFavorited] = useState<boolean>(false);
+
+  // Load favorite state after mount to prevent SSR hydration mismatch
+  useEffect(() => {
     try {
       const stored = localStorage.getItem("labadago_favorite_shops");
       const list = stored ? JSON.parse(stored) : [];
-      return list.includes(shop.id);
+      setIsFavorited(list.includes(shop.id));
     } catch {
-      return false;
+      // ignore
     }
-  });
+  }, [shop.id]);
 
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageSent, setMessageSent] = useState(false);

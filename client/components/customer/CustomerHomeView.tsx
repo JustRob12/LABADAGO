@@ -63,15 +63,19 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
-  const [favoriteShopIds, setFavoriteShopIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
+  const [favoriteShopIds, setFavoriteShopIds] = useState<string[]>([]);
+
+  // Load favorites from localStorage after mount to prevent SSR hydration mismatch
+  useEffect(() => {
     try {
       const stored = localStorage.getItem("labadago_favorite_shops");
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        setFavoriteShopIds(JSON.parse(stored));
+      }
     } catch {
-      return [];
+      // ignore
     }
-  });
+  }, []);
 
   // Persist favorites
   const toggleFavorite = (shopId: string, e: React.MouseEvent) => {
