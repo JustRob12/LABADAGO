@@ -7,6 +7,8 @@ import {
   getShopServices,
   getTransactionByTrackingNumber,
   updateTransactionStatus,
+  getRegisteredCustomers,
+  RegisteredCustomerSummary,
 } from "@/lib/supabase/auth";
 import { QRCameraScanner } from "@/components/owner/QRCameraScanner";
 import {
@@ -100,6 +102,23 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
   // Submission State for Quick Manual Entry
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successTx, setSuccessTx] = useState<LaundryTransaction | null>(null);
+
+  // Existing Registered Customers Autocomplete / Quick Select
+  const [existingCustomers, setExistingCustomers] = useState<RegisteredCustomerSummary[]>([]);
+  const [customerSearchFilter, setCustomerSearchFilter] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  useEffect(() => {
+    async function loadCustomers() {
+      try {
+        const list = await getRegisteredCustomers(assignedShop?.id);
+        setExistingCustomers(list);
+      } catch (err) {
+        console.warn("Could not load customers list:", err);
+      }
+    }
+    loadCustomers();
+  }, [assignedShop?.id]);
 
   // Fetch shop services directly from the database (shop_services table)
   useEffect(() => {
@@ -696,11 +715,101 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 tracking-tight">Customer Information</h3>
-                    <p className="text-xs text-slate-500">Enter customer details for this walk-in order.</p>
+                    <p className="text-xs text-slate-500">Select an existing registered customer or enter details manually.</p>
                   </div>
                 </div>
 
                 <div className="space-y-3 pt-1">
+                  {/* Quick Customer Picker / Autocomplete */}
+                  {existingCustomers.length > 0 && (
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-slate-700">
+                          Quick Select Existing Customer
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {existingCustomers.length} registered profiles
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={customerSearchFilter}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          onChange={(e) => {
+                            setCustomerSearchFilter(e.target.value);
+                            setShowCustomerDropdown(true);
+                          }}
+                          placeholder="Type customer name or phone to auto-fill..."
+                          className="w-full text-xs pl-8 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium text-slate-900 transition-all"
+                        />
+                        {customerSearchFilter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerSearchFilter("");
+                              setShowCustomerDropdown(false);
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
+                      {showCustomerDropdown && (
+                        <div className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-lg divide-y divide-slate-100">
+                          {existingCustomers
+                            .filter((c) => {
+                              if (!customerSearchFilter.trim()) return true;
+                              const q = customerSearchFilter.toLowerCase();
+                              return (
+                                c.full_name.toLowerCase().includes(q) ||
+                                c.phone_number.includes(q) ||
+                                (c.email && c.email.toLowerCase().includes(q))
+                              );
+                            })
+                            .slice(0, 8)
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setCustFullName(c.full_name);
+                                  setCustContactNumber(c.phone_number || "");
+                                  setCustEmail(c.email || "");
+                                  setShowCustomerDropdown(false);
+                                  setCustomerSearchFilter("");
+                                }}
+                                className="w-full p-2.5 text-left hover:bg-blue-50/70 transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                    {(c.full_name || "C").charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-xs text-slate-900 leading-tight">
+                                      {c.full_name}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500">
+                                      {c.phone_number} {c.email ? `• ${c.email}` : ""}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 shrink-0">
+                                  Auto-Fill
+                                </span>
+                              </button>
+                            ))}
+                          <div className="p-2 text-center bg-slate-50 text-[10px] text-slate-400">
+                            Or type customer details below for new walk-ins
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-1">
                       Full Name <span className="text-red-500">*</span>

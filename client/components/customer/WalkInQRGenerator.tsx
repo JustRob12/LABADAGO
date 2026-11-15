@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { LaundryShop, ShopService, UserProfile, WalkInQRPayload, LaundryTransaction } from "@/types/auth";
-import { createWalkInTransaction, updateTransactionStatus, deleteTransaction } from "@/lib/supabase/auth";
+import { createWalkInTransaction, updateTransactionStatus, deleteTransaction, updateUserProfile } from "@/lib/supabase/auth";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -72,6 +72,21 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
   const [specialNotes, setSpecialNotes] = useState<string>("");
   const [guestName, setGuestName] = useState<string>("");
   const [guestPhone, setGuestPhone] = useState<string>("");
+
+  // Customer Name & Phone confirmation fields (pre-filled with registered profile or editable)
+  const [profileNameInput, setProfileNameInput] = useState<string>(
+    user?.full_name && user.full_name.trim().toLowerCase() !== "costumer" ? user.full_name : ""
+  );
+  const [profilePhoneInput, setProfilePhoneInput] = useState<string>(user?.phone_number || "");
+
+  useEffect(() => {
+    if (user?.full_name && user.full_name.trim().toLowerCase() !== "costumer") {
+      setProfileNameInput(user.full_name);
+    }
+    if (user?.phone_number) {
+      setProfilePhoneInput(user.phone_number);
+    }
+  }, [user]);
 
   const [generatedQRUrl, setGeneratedQRUrl] = useState<string | null>(null);
   const [generatedPayload, setGeneratedPayload] = useState<WalkInQRPayload | null>(null);
@@ -192,12 +207,25 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     const trackingNumber = `LBD-${Math.floor(10000 + Math.random() * 90000)}`;
     const approxWeight = loadsNum * loadCapacity;
 
-    const resolvedCustomerName = user?.full_name || guestName.trim() || "Walk-In Customer (Guest)";
-    const resolvedCustomerPhone = user?.phone_number || guestPhone.trim() || "";
+    const isUserLoggedIn = user && user.id && user.id !== "guest-customer";
+    const resolvedCustomerName = isUserLoggedIn
+      ? (profileNameInput.trim() || user.full_name || "Valued Customer")
+      : (guestName.trim() || "Walk-In Customer (Guest)");
+    const resolvedCustomerPhone = isUserLoggedIn
+      ? (profilePhoneInput.trim() || user.phone_number || "")
+      : (guestPhone.trim() || "");
+
+    // If logged in and customer updated their name, save to profile
+    if (isUserLoggedIn && profileNameInput.trim() && profileNameInput.trim() !== user.full_name) {
+      updateUserProfile(user.id, {
+        full_name: profileNameInput.trim(),
+        phone_number: profilePhoneInput.trim() || undefined,
+      }).catch(console.warn);
+    }
 
     const payload: WalkInQRPayload = {
       trackingNumber,
-      customerId: user?.id && user.id !== "guest-customer" ? user.id : "guest-customer",
+      customerId: isUserLoggedIn ? user.id : "guest-customer",
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
       shopId: activeShop?.id || selectedShopId,
@@ -376,19 +404,43 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
 
               {/* Customer Profile vs Guest Details Input */}
               {user && user.id !== "guest-customer" ? (
-                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <User size={14} className="text-blue-600 shrink-0" />
+                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <User size={14} className="text-blue-600 shrink-0" />
+                      <span className="text-xs font-bold text-slate-900">Customer Drop-Off Info</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Logged In Profile
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <span className="font-semibold text-slate-900">{user.full_name || "Valued Customer"}</span>
-                      {user.phone_number && (
-                        <span className="text-slate-400 ml-1.5">• {user.phone_number}</span>
-                      )}
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={profileNameInput}
+                        onChange={(e) => setProfileNameInput(e.target.value)}
+                        placeholder="Enter your real full name..."
+                        className="w-full text-xs p-2.5 rounded-xl bg-white border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Mobile Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={profilePhoneInput}
+                        onChange={(e) => setProfilePhoneInput(e.target.value)}
+                        placeholder="09XX XXX XXXX"
+                        className="w-full text-xs p-2.5 rounded-xl bg-white border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900 font-medium"
+                      />
                     </div>
                   </div>
-                  <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                    Registered Profile
-                  </span>
                 </div>
               ) : (
                 <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/60 space-y-3">

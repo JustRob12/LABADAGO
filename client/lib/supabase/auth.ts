@@ -15,6 +15,7 @@ import {
   PartnerApplication,
   ShopMessage,
   ShopConversation,
+  Gender,
 } from "@/types/auth";
 
 // Default pre-seeded registered shops (Ensures customer map, services, and fast pass work seamlessly)
@@ -1167,6 +1168,66 @@ export async function createManualWalkInTransaction(data: {
   return { success: true, transaction: newTx };
 }
 
+/**
+ * Helper to enrich transactions with up-to-date customer profile full name and phone number
+ */
+async function enrichTransactionsWithProfiles(
+  transactions: LaundryTransaction[]
+): Promise<LaundryTransaction[]> {
+  if (!transactions || transactions.length === 0) return transactions;
+
+  const customerIds = Array.from(
+    new Set(transactions.map((t) => t.customer_id).filter((id): id is string => Boolean(id)))
+  );
+
+  if (customerIds.length === 0) return transactions;
+
+  try {
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone_number, email")
+      .in("id", customerIds);
+
+    if (!error && profiles && profiles.length > 0) {
+      const profileMap = new Map<string, { full_name: string; phone_number: string; email: string }>();
+      profiles.forEach((p) => {
+        if (p.id) profileMap.set(p.id, p);
+      });
+
+      return transactions.map((tx) => {
+        if (tx.customer_id && profileMap.has(tx.customer_id)) {
+          const prof = profileMap.get(tx.customer_id)!;
+          const isGenericName =
+            !tx.customer_name ||
+            tx.customer_name.trim().toLowerCase() === "costumer" ||
+            tx.customer_name.trim().toLowerCase() === "customer" ||
+            tx.customer_name.trim().toLowerCase() === "walk-in customer" ||
+            tx.customer_name.trim().toLowerCase() === "walk-in customer (guest)" ||
+            tx.customer_name.trim().toLowerCase() === "guest";
+
+          const resolvedName =
+            prof.full_name && prof.full_name.trim().toLowerCase() !== "costumer"
+              ? prof.full_name
+              : isGenericName && prof.email
+              ? prof.full_name || prof.email.split("@")[0]
+              : prof.full_name || tx.customer_name;
+
+          return {
+            ...tx,
+            customer_name: resolvedName,
+            customer_phone: prof.phone_number || tx.customer_phone,
+          };
+        }
+        return tx;
+      });
+    }
+  } catch (err) {
+    console.warn("Notice enriching transactions with profiles:", err);
+  }
+
+  return transactions;
+}
+
 export async function getLaundryTransactions(
   customerId?: string,
   shopId?: string,
@@ -1191,7 +1252,7 @@ export async function getLaundryTransactions(
 
     const { data, error } = await query;
     if (!error && data) {
-      return data;
+      return await enrichTransactionsWithProfiles(data);
     }
   } catch {
     // fallback
@@ -1216,7 +1277,16 @@ export async function getTransactionsByTrackingNumbers(
   trackingNumbers: string[]
 ): Promise<LaundryTransaction[]> {
   if (!trackingNumbers || trackingNumbers.length === 0) return [];
-  const cleanList = trackingNumbers.map((t) => t.trim().toUpperCase());
+  const cleanList: string[] = [];
+  trackingNumbers.forEach((t) => {
+    const tr = t.trim().toUpperCase();
+    cleanList.push(tr);
+    if (/^LBD\d+$/i.test(tr)) {
+      cleanList.push(tr.slice(0, 3) + "-" + tr.slice(3));
+    } else if (/^LBD-\d+$/i.test(tr)) {
+      cleanList.push(tr.replace("-", ""));
+    }
+  });
 
   try {
     const { data, error } = await supabase
@@ -1226,7 +1296,7 @@ export async function getTransactionsByTrackingNumbers(
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      return data;
+      return await enrichTransactionsWithProfiles(data);
     }
   } catch {
     // fallback
@@ -1240,26 +1310,75 @@ export async function getTransactionsByTrackingNumbers(
 /**
  * Look up a transaction by tracking number across the database,
  * retrieving its associated shop name and details to verify shop affiliation.
+ * Supports hyphenated (LBD-XXXXX), non-hyphenated (LBDXXXXX), and prefixed (#LBD-XXXXX) formats.
  */
 export async function getTransactionByTrackingNumber(
   trackingNumber: string
 ): Promise<{ transaction: LaundryTransaction | null; error?: string }> {
-  const cleanQuery = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!cleanQuery) return { transaction: null };
+  const trimmed = trackingNumber.trim();
+  if (!trimmed) return { transaction: null };
+
+  const rawClean = trimmed.replace(/^#/, "");
+  let withHyphen = rawClean;
+  if (/^LBD\d+$/i.test(rawClean)) {
+    withHyphen = rawClean.slice(0, 3).toUpperCase() + "-" + rawClean.slice(3);
+  }
+  const withoutHyphen = rawClean.replace(/[^A-Za-z0-9]/g, "");
 
   try {
     const { data, error } = await supabase
       .from("transactions")
       .select("*, laundry_shops(name, address)")
-      .ilike("tracking_number", cleanQuery)
+      .or(`tracking_number.ilike.${withHyphen},tracking_number.ilike.${withoutHyphen},tracking_number.ilike.${rawClean}`)
       .maybeSingle();
 
     if (!error && data) {
       const shopInfo = data.laundry_shops as { name?: string; address?: string } | null;
       const resolvedShopName = shopInfo?.name || data.shop_name || "Another Laundry Shop";
+
+      let customerName = data.customer_name;
+      let customerPhone = data.customer_phone;
+
+      // Enrich with customer profile if customer_id exists
+      if (data.customer_id) {
+        try {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name, phone_number, email")
+            .eq("id", data.customer_id)
+            .maybeSingle();
+
+          if (prof) {
+            const isGenericName =
+              !customerName ||
+              customerName.trim().toLowerCase() === "costumer" ||
+              customerName.trim().toLowerCase() === "customer" ||
+              customerName.trim().toLowerCase() === "walk-in customer" ||
+              customerName.trim().toLowerCase() === "walk-in customer (guest)" ||
+              customerName.trim().toLowerCase() === "guest";
+
+            if (prof.full_name && prof.full_name.trim().toLowerCase() !== "costumer") {
+              customerName = prof.full_name;
+            } else if (isGenericName && prof.email) {
+              customerName = prof.full_name || prof.email.split("@")[0];
+            } else if (prof.full_name) {
+              customerName = prof.full_name;
+            }
+
+            if (prof.phone_number && (!customerPhone || customerPhone === "09123456789")) {
+              customerPhone = prof.phone_number;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       return {
         transaction: {
           ...data,
+          customer_name: customerName,
+          customer_phone: customerPhone,
           shop_name: resolvedShopName,
         },
       };
@@ -1269,9 +1388,10 @@ export async function getTransactionByTrackingNumber(
   }
 
   // Fallback search in localTransactionsStore
-  const localFound = localTransactionsStore.find(
-    (t) => t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanQuery
-  );
+  const localFound = localTransactionsStore.find((t) => {
+    const tClean = t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return tClean === withoutHyphen.toUpperCase() || t.tracking_number.toUpperCase() === withHyphen.toUpperCase();
+  });
 
   if (localFound) {
     return { transaction: localFound };
@@ -2688,6 +2808,173 @@ export async function getPlatformUsers(): Promise<UserProfile[]> {
   });
 
   return Array.from(userMap.values());
+}
+
+/**
+ * Summary of a registered customer for the Staff Customer Directory and Check-in autocomplete
+ */
+export interface RegisteredCustomerSummary {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_number: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  total_orders: number;
+  total_spent: number;
+  last_order_date?: string | null;
+  last_tracking_number?: string | null;
+  last_service_name?: string | null;
+  last_status?: string | null;
+  created_at: string;
+}
+
+/**
+ * Fetch registered customers from profiles table (role = 2 / Costumer),
+ * enriched with their order metrics and transaction history.
+ */
+export async function getRegisteredCustomers(
+  shopId?: string
+): Promise<RegisteredCustomerSummary[]> {
+  try {
+    // 1. Fetch profiles where role = 2 (Costumer)
+    const { data: profiles, error: profError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone_number, date_of_birth, gender, created_at, role")
+      .eq("role", 2)
+      .order("created_at", { ascending: false });
+
+    // 2. Fetch transactions for aggregation
+    let txQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
+    if (shopId) {
+      txQuery = txQuery.eq("shop_id", shopId);
+    }
+    const { data: transactions } = await txQuery;
+
+    const customerMap = new Map<string, RegisteredCustomerSummary>();
+
+    // Seed from profiles
+    if (!profError && profiles && profiles.length > 0) {
+      profiles.forEach((p) => {
+        customerMap.set(p.id, {
+          id: p.id,
+          full_name: p.full_name || "Customer",
+          email: p.email || null,
+          phone_number: p.phone_number || "",
+          date_of_birth: p.date_of_birth || null,
+          gender: p.gender || null,
+          total_orders: 0,
+          total_spent: 0,
+          last_order_date: null,
+          last_tracking_number: null,
+          last_service_name: null,
+          last_status: null,
+          created_at: p.created_at,
+        });
+      });
+    }
+
+    // Merge transactions to calculate totals and discover walk-in customers
+    const txList = transactions || localTransactionsStore;
+    txList.forEach((tx) => {
+      const cId = tx.customer_id;
+      const phone = tx.customer_phone;
+      const name = tx.customer_name;
+      const amount = Number(tx.total_amount) || 0;
+
+      let entry: RegisteredCustomerSummary | undefined;
+      if (cId && customerMap.has(cId)) {
+        entry = customerMap.get(cId)!;
+      } else {
+        // Search by phone or exact name
+        const matchKey = Array.from(customerMap.keys()).find((k) => {
+          const item = customerMap.get(k)!;
+          return (phone && item.phone_number === phone) || (name && item.full_name.toLowerCase() === name.toLowerCase());
+        });
+        if (matchKey) {
+          entry = customerMap.get(matchKey)!;
+        } else {
+          entry = {
+            id: cId || `walkin-${phone || name || Math.random().toString(36).substring(7)}`,
+            full_name: name || "Walk-In Customer",
+            email: null,
+            phone_number: phone || "",
+            total_orders: 0,
+            total_spent: 0,
+            created_at: tx.created_at,
+          };
+          customerMap.set(entry.id, entry);
+        }
+      }
+
+      entry.total_orders += 1;
+      entry.total_spent += amount;
+      if (!entry.last_order_date || new Date(tx.created_at) > new Date(entry.last_order_date)) {
+        entry.last_order_date = tx.created_at;
+        entry.last_tracking_number = tx.tracking_number;
+        entry.last_service_name = tx.service_name;
+        entry.last_status = tx.status;
+      }
+    });
+
+    return Array.from(customerMap.values()).sort((a, b) => {
+      if (b.total_orders !== a.total_orders) return b.total_orders - a.total_orders;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  } catch (err) {
+    console.error("Error fetching registered customers:", err);
+    return [];
+  }
+}
+
+/**
+ * Update user profile details (e.g. updating full name, phone number) in Supabase and cache
+ */
+export async function updateUserProfile(
+  userId: string,
+  updates: { full_name?: string; phone_number?: string; date_of_birth?: string; gender?: Gender }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (error) throw error;
+
+    // Also update Supabase auth metadata if full_name is changed
+    if (updates.full_name) {
+      await supabase.auth.updateUser({
+        data: { full_name: updates.full_name },
+      });
+    }
+
+    // Update in local profiles store
+    const idx = localProfilesStore.findIndex((p) => p.id === userId);
+    if (idx >= 0) {
+      localProfilesStore[idx] = { ...localProfilesStore[idx], ...updates };
+    }
+
+    // Also update cached profile in localStorage if current user
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("labadago_cached_profile");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.id === userId) {
+            localStorage.setItem("labadago_cached_profile", JSON.stringify({ ...parsed, ...updates }));
+          }
+        }
+      } catch {}
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to update profile" };
+  }
 }
 
 // ==============================================================================

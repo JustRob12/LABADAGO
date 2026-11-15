@@ -17,6 +17,8 @@ import {
   uploadPaymentProof,
   createManualWalkInTransaction,
   getUnreadMessagesCount,
+  getRegisteredCustomers,
+  RegisteredCustomerSummary,
 } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -71,6 +73,7 @@ import {
   Download,
   TrendingUp,
   Filter,
+  Mail,
 } from "lucide-react";
 import { PaymentRecordModal } from "@/components/payment/PaymentRecordModal";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
@@ -218,6 +221,28 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [manualPreviewUrl, setManualPreviewUrl] = useState<string | null>(null);
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+
+  // Customer Management Directory (Registered profiles + transaction metrics)
+  const [customerDirectory, setCustomerDirectory] = useState<RegisteredCustomerSummary[]>([]);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [customerFilterType, setCustomerFilterType] = useState<"all" | "active_today" | "registered">("all");
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+
+  const loadCustomerDirectory = async () => {
+    setIsLoadingCustomers(true);
+    try {
+      const list = await getRegisteredCustomers(assignedShop?.id);
+      setCustomerDirectory(list);
+    } catch (err) {
+      console.warn("Failed to load customer directory:", err);
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomerDirectory();
+  }, [assignedShop?.id, transactions.length]);
 
   // Available services list for assigned shop
   const staffShopServices = assignedShop?.services && assignedShop.services.length > 0
@@ -402,6 +427,28 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   );
   const totalScannedOrders = useMemo(() => transactions.filter((t) => t.status !== "Pending").length, [transactions]);
 
+  // Filtered customer list for Customer Directory tab
+  const filteredCustomers = useMemo(() => {
+    let list = customerDirectory;
+    if (customerFilterType === "active_today") {
+      const today = new Date().toDateString();
+      list = list.filter((c) => c.last_order_date && new Date(c.last_order_date).toDateString() === today);
+    } else if (customerFilterType === "registered") {
+      list = list.filter((c) => !c.id.startsWith("walkin-"));
+    }
+
+    if (customerSearchQuery.trim()) {
+      const q = customerSearchQuery.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.full_name.toLowerCase().includes(q) ||
+          c.phone_number.includes(q) ||
+          (c.email && c.email.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [customerDirectory, customerFilterType, customerSearchQuery]);
+
   // Reports & Financial Analytics State (Connected to Live Database — Strictly Completed Orders)
   const [reportRange, setReportRange] = useState<"all" | "today" | "yesterday" | "7days" | "month">("all");
   const [reportStatusFilter, setReportStatusFilter] = useState<"all" | "paid" | "unpaid" | "cash" | "gcash">("all");
@@ -567,13 +614,14 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     const cleanCode = trackingToSearch.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
     // 1. Check local transactions list
-    let matchedTx = transactions.find(
-      (t) => t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanCode
-    );
+    let matchedTx = transactions.find((t) => {
+      const tClean = t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      return tClean === cleanCode || t.tracking_number.toUpperCase() === trackingToSearch.toUpperCase();
+    });
 
-    // 2. Fallback to database lookup
+    // 2. Fallback to database lookup (supports LBD-XXXXX and LBDXXXXX)
     if (!matchedTx) {
-      const { transaction: dbTx } = await getTransactionByTrackingNumber(cleanCode);
+      const { transaction: dbTx } = await getTransactionByTrackingNumber(trackingToSearch);
       if (dbTx) {
         matchedTx = dbTx;
       }
@@ -1691,38 +1739,233 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             </div>
           )}
 
-          {/* TAB 6: CUSTOMERS TAB */}
+          {/* TAB 6: CUSTOMERS TAB (Customer Management Directory & Profiles) */}
           {currentSidebarTab === "customers" && (
-            <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
-                <h3 className="text-sm font-bold text-slate-900">Today&apos;s Active Customers</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Customers who transacted or checked in at this branch today
-                </p>
-
-                <div className="pt-4 divide-y divide-slate-100">
-                  {transactions.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400 text-xs">
-                      <Users size={36} className="mx-auto mb-2 text-slate-300" />
-                      <p className="font-semibold text-slate-600">No customer records yet today.</p>
+            <div className="max-w-6xl mx-auto space-y-4 animate-in fade-in duration-200">
+              {/* Header card with Search and Filter tabs */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900">Customer Directory &amp; Profiles</h3>
+                      <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full border border-blue-200">
+                        {customerDirectory.length} total
+                      </span>
                     </div>
-                  ) : (
-                    transactions.map((tx) => (
-                      <div key={tx.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-bold text-slate-900">{tx.customer_name}</div>
-                          <div className="text-xs text-slate-500">{tx.customer_phone}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs font-mono font-bold text-slate-700">
-                            {tx.tracking_number}
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      View registered customer accounts, contact numbers, order histories, and initiate counter check-in.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadCustomerDirectory}
+                    disabled={isLoadingCustomers}
+                    leftIcon={<RefreshCw size={13} className={isLoadingCustomers ? "animate-spin" : ""} />}
+                    className="text-xs self-start sm:self-auto font-semibold"
+                  >
+                    Refresh List
+                  </Button>
+                </div>
+
+                {/* Search Bar & Filter Pills */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                  <div className="relative flex-1 max-w-md">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={customerSearchQuery}
+                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                      placeholder="Search customer by name, phone, or email..."
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
+                    />
+                    {customerSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerFilterType("all")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        customerFilterType === "all"
+                          ? "bg-slate-900 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      All Customers ({customerDirectory.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerFilterType("active_today")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        customerFilterType === "active_today"
+                          ? "bg-blue-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Active Today (
+                      {
+                        customerDirectory.filter(
+                          (c) =>
+                            c.last_order_date &&
+                            new Date(c.last_order_date).toDateString() === new Date().toDateString()
+                        ).length
+                      }
+                      )
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerFilterType("registered")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        customerFilterType === "registered"
+                          ? "bg-emerald-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Registered Profiles ({customerDirectory.filter((c) => !c.id.startsWith("walkin-")).length})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customers Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {filteredCustomers.length === 0 ? (
+                  <div className="col-span-full bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 space-y-2">
+                    <Users size={36} className="mx-auto text-slate-300" />
+                    <p className="font-semibold text-slate-600 text-sm">No customers found</p>
+                    <p className="text-xs text-slate-400">
+                      {customerSearchQuery
+                        ? `No customer records matched "${customerSearchQuery}".`
+                        : "No customer records registered yet."}
+                    </p>
+                  </div>
+                ) : (
+                  filteredCustomers.map((cust) => {
+                    const isRegistered = !cust.id.startsWith("walkin-");
+                    const initial = (cust.full_name || "C").trim().charAt(0).toUpperCase();
+
+                    return (
+                      <div
+                        key={cust.id}
+                        className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all space-y-3 flex flex-col justify-between"
+                      >
+                        <div className="space-y-2.5">
+                          {/* Card Header: Avatar, Name & Badge */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
+                                  isRegistered
+                                    ? "bg-blue-600 text-white shadow-2xs"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {initial}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-sm leading-tight">
+                                  {cust.full_name}
+                                </h4>
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                                  {isRegistered ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-md">
+                                      Registered Member
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded-md">
+                                      Walk-In Customer
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-[11px] text-slate-400">{tx.service_name}</div>
+
+                          {/* Contact Details */}
+                          <div className="space-y-1 text-xs pt-1">
+                            {cust.phone_number ? (
+                              <a
+                                href={`tel:${cust.phone_number}`}
+                                className="flex items-center gap-1.5 text-slate-700 hover:text-blue-600 font-medium transition-colors"
+                              >
+                                <Phone size={12} className="text-slate-400 shrink-0" />
+                                <span>{cust.phone_number}</span>
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-slate-400">
+                                <Phone size={12} className="shrink-0" />
+                                <span>No phone recorded</span>
+                              </div>
+                            )}
+
+                            {cust.email && (
+                              <a
+                                href={`mailto:${cust.email}`}
+                                className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 truncate transition-colors"
+                              >
+                                <Mail size={12} className="text-slate-400 shrink-0" />
+                                <span className="truncate">{cust.email}</span>
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Orders Summary Stats */}
+                          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-[11px]">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-semibold">Total Orders</span>
+                              <span className="font-bold text-slate-900">
+                                {cust.total_orders} {cust.total_orders === 1 ? "order" : "orders"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-semibold">Total Spent</span>
+                              <span className="font-black text-emerald-600">
+                                ₱{cust.total_spent.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Latest Activity */}
+                          {cust.last_tracking_number && (
+                            <div className="text-[11px] text-slate-500 flex items-center justify-between pt-0.5">
+                              <span>Last: #{cust.last_tracking_number}</span>
+                              <span className="font-semibold text-slate-700">{cust.last_status || "Completed"}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action: Quick Check-in at counter */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualCustomerName(cust.full_name);
+                              setManualCustomerPhone(cust.phone_number || "");
+                              setCurrentSidebarTab("checkin");
+                              showToast(
+                                "success",
+                                `Loaded customer ${cust.full_name} for counter intake.`
+                              );
+                            }}
+                            className="w-full py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <UserCheck size={13} />
+                            <span>Quick Check-In</span>
+                          </button>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

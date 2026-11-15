@@ -1474,6 +1474,49 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
 4. **Build & Quality Assurance**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
 
+---
+
+### Update 48: Fixed Customer Name Resolution, QR Tracking Number Hyphen Lookup, and Enhanced Customer Directory
+**Commit Date:** November 16, 2026
+
+#### Root Causes Identified:
+1. **Tracking Number Hyphen Stripping on Database Lookup**:
+   - `getTransactionByTrackingNumber` sanitized query inputs by removing all non-alphanumeric characters: `cleanQuery = trackingNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")`.
+   - For an order with tracking code `LBD-26271`, the query searched for `tracking_number ilike 'LBD26271'`, failing to match the database value (`LBD-26271`).
+   - Consequently, scanning or searching for tracking codes in Staff Scanner and Customer Check-In returned `null`, preventing order fetching and customer detail display.
+2. **Missing Customer Profile Join & Name Enrichment**:
+   - PostgREST does not have an automatic relationship between `transactions.customer_id` and `public.profiles` because `customer_id` references `auth.users(id)`.
+   - `getLaundryTransactions` and `getTransactionByTrackingNumber` only selected raw columns from `transactions`, leaving customer names as placeholder strings or generic labels ("Costumer", "Walk-In Customer", etc.).
+3. **Incomplete Customer Directory on Counter Staff View**:
+   - The Staff "Customers" tab previously only mapped over today's transactions rather than retrieving the full directory of registered customers from `profiles`.
+4. **Un-editable Customer Name on Walk-In Fast Pass**:
+   - When generating a fast pass while logged in, the customer's full name was read-only; if their registered account had a typo or placeholder name (such as "Costumer"), they could not customize or correct it.
+
+#### Changes Implemented:
+1. **`client/lib/supabase/auth.ts`**:
+   - **Hyphen-Resilient Tracking Lookup**: Updated `getTransactionByTrackingNumber` to query all variations (`LBD-XXXXX`, `LBDXXXXX`, `#LBD-XXXXX`) using Postgres `.or(...)` filter.
+   - **Customer Profile Enrichment (`enrichTransactionsWithProfiles`)**: Added batch enrichment in `getLaundryTransactions`, `getTransactionsByTrackingNumbers`, and `getTransactionByTrackingNumber` to join with `profiles` by `customer_id`, pulling verified `full_name`, `phone_number`, and `email`.
+   - **Customer Directory API (`getRegisteredCustomers`)**: Created an aggregated query combining `profiles` (role = 2 / Costumer) and `transactions` to provide customer cards with total orders, total spend, and latest tracking info.
+   - **Profile Update API (`updateUserProfile`)**: Added helper to persist customer profile updates (e.g., correcting names and phone numbers) to Supabase and cache.
+2. **`client/components/staff/StaffScannerView.tsx`**:
+   - Fixed `handleProcessScan` to pass intact tracking codes without stripping hyphens.
+   - Replaced basic today-only table in Tab 6 ("Customers") with a full Customer Directory:
+     - Search bar (by name, phone, email).
+     - Filter tabs: All Customers, Active Today, Registered Profiles.
+     - Customer cards displaying full name, phone (with click-to-call), email, total orders, total spent, and last activity.
+     - "Quick Check-In" action button to instantly load customer details into counter intake.
+3. **`client/components/staff/CustomerCheckInView.tsx`**:
+   - Integrated `getRegisteredCustomers` for auto-fill in Quick Manual Entry: staff can select an existing customer to instantly populate Name, Phone, and Email.
+   - Fixed QR pass verification to fetch the full transaction and display verified customer details prominently.
+4. **`client/components/customer/WalkInQRGenerator.tsx`**:
+   - Added editable Full Name and Phone Number inputs for logged-in users, allowing customers to ensure their actual name is stored on orders and updated in their profile.
+5. **`client/components/customer/CustomerOrderTracker.tsx`**:
+   - Added customer name and contact phone badge directly on each order card header.
+6. **`client/components/owner/WalkInIntake.tsx`**:
+   - Updated lookup to retain hyphenated tracking codes when verifying shop affiliation.
+7. **Build & Quality Assurance**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
+
 
 
 

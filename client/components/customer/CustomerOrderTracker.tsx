@@ -34,6 +34,7 @@ import {
   ShoppingBag,
   Download,
   Trash2,
+  User,
 } from "lucide-react";
 import { PaymentProofModal } from "@/components/payment/PaymentProofModal";
 
@@ -304,10 +305,26 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                     {tx.tracking_number}
                   </span>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{tx.service_name}</h4>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Store size={11} className="text-slate-400" />
-                      {tx.shop_name || "LabadaGo Partner Shop"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-slate-900">{tx.service_name}</h4>
+                      {tx.customer_name && (
+                        <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <User size={11} className="text-blue-600" />
+                          <span>{tx.customer_name}</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Store size={11} className="text-slate-400" />
+                        {tx.shop_name || "LabadaGo Partner Shop"}
+                      </span>
+                      {tx.customer_phone && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-500 font-mono text-[10px]">{tx.customer_phone}</span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>

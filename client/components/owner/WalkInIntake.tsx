@@ -253,11 +253,11 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
     // 1. Try finding in current owner's transactions list
     const found = transactions.find((t) => {
       const cleanTxCode = t.tracking_number.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      return cleanTxCode === cleanQuery;
+      return cleanTxCode === cleanQuery || t.tracking_number.toUpperCase() === trackingNumToFind.toUpperCase();
     });
 
     // 2. Look up the transaction in the database to check its global shop affiliation
-    const { transaction: dbTx } = await getTransactionByTrackingNumber(cleanQuery);
+    const { transaction: dbTx } = await getTransactionByTrackingNumber(trackingNumToFind);
     const matchedTx = found || dbTx;
 
     // 3. Verify shop affiliation
