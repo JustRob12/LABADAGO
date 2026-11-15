@@ -536,3 +536,40 @@ The newly introduced `/admin` and `/partner` routes imported `getPartnerApplicat
    - Configured `eslint: { ignoreDuringBuilds: true }` to guarantee that stylistic linter warnings never abort automated CI/CD deployments on Vercel.
 3. **Clean Build Verification**:
    - Tested clean build from scratch with cache removed (`rm -rf .next && pnpm run build`). Successfully verified with **0 errors across all 13 routes**.
+
+
+---
+
+### Update 27: Desktop Sidebar Navigation Redesign & Responsive Mobile Slide-Out Drawer
+
+**Objective**:
+Transform the primary application navigation from a top horizontal header bar into a modern vertical **Left Sidebar Navigation** on desktop (`lg:` screens), matching the SaaS aesthetics of the reference designs, with a responsive mobile top bar, slide-out drawer, and bottom navigation.
+
+#### 1. Permanent Desktop Sidebar (`client/components/dashboard/DashboardNav.tsx`)
+- **Structure & Layout**:
+  - `w-64 h-screen sticky top-0 shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between overflow-y-auto z-40 select-none shadow-xs`.
+  - Top header features the official `BrandLogo` with dynamic portal indicator (e.g. `Platform Admin`, `Laundry Shop Owner`, `Customer`, `Branch Staff`).
+- **Role-Tailored Vertical Navigation Links**:
+  - Styled with modern rounded icon badges and active pill highlights (`bg-blue-600 text-white font-semibold shadow-xs`):
+    - **For Customer**: `Home & Shops`, `Laundry Map`, `Walk-In Fast Pass (QR)`, `Live Order Tracker`, `Partner with this website`, and `My Profile & Hub`.
+    - **For Shop Owner**: `Dashboard`, `QR Intake & Orders`, `Branch Staff`, `Shop Setup & Pricing`, and `Owner Hub & Profile`.
+    - **For Platform Admin**: `Platform Dashboard`, `Partner Applications`, `Platform Shops`, `Owner Portal`, `Customer View`, and `Admin Profile & Hub`.
+    - **For Branch Staff**: `Counter Scanner Station` and `Staff Profile & Hub`.
+- **Bottom Sidebar Identity & Actions**:
+  - Integrated User Profile Pill displaying the user's initials avatar, full name, and email.
+  - Interactive **Switch to Customer / Switch to Owner** mode button.
+  - One-click **Sign Out** button in soft red border with `LogOut` icon.
+
+#### 2. Mobile Header & Slide-Out Drawer (`< lg` Screens)
+- **Compact Top Mobile Bar**:
+  - Replaces the desktop sidebar with a clean 60px sticky top bar featuring a hamburger menu button (`Menu` icon), `BrandLogo`, and quick user profile avatar.
+- **Slide-Out Mobile Drawer**:
+  - Clicking the hamburger button triggers a slide-out navigation drawer with smooth backdrop blur overlay (`bg-slate-900/60`), giving mobile users access to all sidebar features and actions.
+- **Floating Bottom Nav**:
+  - Retains the bottom navigation bar on mobile for fast thumb-reachable switching between core tabs.
+
+#### 3. Full Page Container Layout Integration
+- Updated all core application pages (`/owner`, `/dashboard`, `/customer`, `/admin`, `/partner`):
+  - Changed container from `flex flex-col` to `flex flex-col lg:flex-row`.
+  - On desktop, the sidebar stays sticky to the left while the `<main>` content smoothly scrolls on the right with `flex-1 min-w-0`.
+- Successfully verified with clean production build (`rm -rf .next && pnpm run build`) with **0 errors across all 13 routes**.

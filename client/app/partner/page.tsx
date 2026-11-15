@@ -41,10 +41,10 @@ function PartnerPageContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col pb-20 select-none">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row pb-20 select-none">
       <DashboardNav user={user || undefined} />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 min-w-0 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Hero Section */}
         <div className="bg-linear-to-r from-blue-700 via-indigo-700 to-emerald-700 text-white rounded-3xl p-6 sm:p-8 shadow-md relative overflow-hidden">
           <div className="max-w-2xl relative z-10 space-y-3">

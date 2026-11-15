@@ -195,10 +195,10 @@ function AdminPageContent() {
   const isAdmin = user?.role === UserRole.ADMIN;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col pb-20 select-none">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row pb-20 select-none">
       <DashboardNav user={user || undefined} />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Toast Alert */}
         {toastMessage && (
           <div

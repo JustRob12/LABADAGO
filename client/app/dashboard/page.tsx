@@ -80,7 +80,7 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col">
+    <div className="min-h-screen bg-slate-50/50 flex flex-col lg:flex-row">
       <DashboardNav
         user={user}
         onRoleSwitched={(newRole) => {
@@ -88,7 +88,7 @@ function DashboardContent() {
         }}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8 space-y-6">
+      <main className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8 space-y-6">
         {isLoading ? (
           <div className="min-h-[400px] flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-blue-600" size={28} />

@@ -123,7 +123,7 @@ function OwnerContent() {
 
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col">
+    <div className="min-h-screen bg-slate-50/50 flex flex-col lg:flex-row">
       <DashboardNav
         user={user}
         hasShops={shops.length > 0}
@@ -132,7 +132,7 @@ function OwnerContent() {
         }}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8 space-y-6">
+      <main className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8 space-y-6">
         {/* Owner Portal Sub-Navigation Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {activeTab !== "analytics" ? (
