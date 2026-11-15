@@ -1375,6 +1375,33 @@ export async function updateTransactionStatus(
   return true;
 }
 
+/**
+ * Permanently delete a transaction by id or tracking number
+ */
+export async function deleteTransaction(txId: string): Promise<boolean> {
+  try {
+    const res = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", txId);
+
+    if (res.error || !res.count) {
+      await supabase
+        .from("transactions")
+        .delete()
+        .eq("tracking_number", txId);
+    }
+  } catch (err) {
+    console.warn("Error deleting transaction in Supabase:", err);
+  }
+
+  localTransactionsStore = localTransactionsStore.filter(
+    (tx) => tx.id !== txId && tx.tracking_number !== txId
+  );
+
+  return true;
+}
+
 export async function updateTransactionPayment(
   txId: string,
   paymentStatus: PaymentStatus,

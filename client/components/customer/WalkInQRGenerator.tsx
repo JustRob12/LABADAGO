@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { LaundryShop, ShopService, UserProfile, WalkInQRPayload, LaundryTransaction } from "@/types/auth";
-import { createWalkInTransaction, updateTransactionStatus } from "@/lib/supabase/auth";
+import { createWalkInTransaction, updateTransactionStatus, deleteTransaction } from "@/lib/supabase/auth";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -269,13 +269,13 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
     const targetId = txId || activeTx?.id || targetTracking;
     if (!targetTracking) return;
 
-    if (!window.confirm(`Are you sure you want to cancel fast pass #${targetTracking}?`)) {
+    if (!window.confirm(`Are you sure you want to cancel fast pass #${targetTracking}? This will permanently remove the order.`)) {
       return;
     }
 
     try {
       if (targetId) {
-        await updateTransactionStatus(targetId, "Cancelled");
+        await deleteTransaction(targetId);
       }
       if (typeof window !== "undefined") {
         try {
@@ -284,12 +284,14 @@ export const WalkInQRGenerator: React.FC<WalkInQRGeneratorProps> = ({
           );
           const next = stored.filter((t) => t !== targetTracking);
           localStorage.setItem("labadago_guest_tracking_numbers", JSON.stringify(next));
+          localStorage.setItem("labadago_last_tx_update", Date.now().toString());
+          window.dispatchEvent(new CustomEvent("labadago:transaction-updated"));
         } catch {
           // ignore
         }
       }
 
-      setSuccessMessage(`Fast pass #${targetTracking} has been cancelled.`);
+      setSuccessMessage(`Fast pass #${targetTracking} has been permanently cancelled and deleted.`);
       setShowQRModal(false);
       if (onTransactionCreated) {
         onTransactionCreated();

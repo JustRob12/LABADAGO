@@ -689,7 +689,15 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         setStaffPayFile(null);
         if (staffPayPreviewUrl) URL.revokeObjectURL(staffPayPreviewUrl);
         setStaffPayPreviewUrl(null);
+        setIsCameraActive(false);
         await loadShopOrders();
+        // Immediately navigate staff to Laundry Processing so they see the order in queue
+        setCurrentSidebarTab("processing");
+        setActiveTab("washing");
+        if (typeof window !== "undefined") {
+          localStorage.setItem("labadago_last_tx_update", Date.now().toString());
+          window.dispatchEvent(new CustomEvent("labadago:transaction-updated"));
+        }
       } else {
         showToast("error", "Failed to update order status. Please try again.");
       }
@@ -1199,8 +1207,13 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 onTransactionCreated={(tx) => {
                   playSound("success");
                   loadShopOrders();
+                  setCurrentSidebarTab("processing");
+                  setActiveTab("washing");
                 }}
-                onViewQueue={() => setCurrentSidebarTab("processing")}
+                onViewQueue={() => {
+                  setCurrentSidebarTab("processing");
+                  setActiveTab("washing");
+                }}
                 todayTransactionsCount={transactions.length}
               />
             </div>

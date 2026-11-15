@@ -139,25 +139,36 @@ export function CustomerContent() {
           setSelectedShop((prev) => (prev ? (finalShops.find((s) => s.id === prev.id) || prev) : finalShops[0]));
         }
 
-        // Fetch customer transactions (or guest saved orders)
-        if (profile) {
-          const txList = await getLaundryTransactions(profile.id).catch(() => []);
-          setTransactions(txList);
-        } else if (typeof window !== "undefined") {
+        // Fetch customer transactions (combining user account & guest tracking passes)
+        let userTxs: LaundryTransaction[] = [];
+        if (profile?.id) {
+          userTxs = await getLaundryTransactions(profile.id).catch(() => []);
+        }
+        let guestTxs: LaundryTransaction[] = [];
+        if (typeof window !== "undefined") {
           try {
             const guestTrackingNumbers: string[] = JSON.parse(
               localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
             );
             if (guestTrackingNumbers.length > 0) {
-              const txList = await getTransactionsByTrackingNumbers(guestTrackingNumbers).catch(() => []);
-              setTransactions(txList);
-            } else {
-              setTransactions([]);
+              guestTxs = await getTransactionsByTrackingNumbers(guestTrackingNumbers).catch(() => []);
             }
           } catch {
-            setTransactions([]);
+            // ignore
           }
         }
+        const combined = [...userTxs];
+        guestTxs.forEach((gtx) => {
+          const idx = combined.findIndex(
+            (t) => t.tracking_number === gtx.tracking_number || (t.id && gtx.id && t.id === gtx.id)
+          );
+          if (idx >= 0) {
+            combined[idx] = { ...combined[idx], ...gtx };
+          } else {
+            combined.push(gtx);
+          }
+        });
+        setTransactions(combined);
       } catch (err) {
         console.error("Failed to load customer data:", err);
       } finally {
@@ -168,37 +179,57 @@ export function CustomerContent() {
     loadData();
   }, [router, searchParams]);
 
-  // Listen for global rating updates from reviews
+  // Listen for global rating updates from reviews and transaction state changes
   useEffect(() => {
     const handleRatingUpdate = async () => {
       const refreshedShops = await getLaundryShops();
       setShops(refreshedShops);
     };
+    const handleTxUpdate = () => {
+      refreshTransactions();
+    };
+
     window.addEventListener("labadago:rating-updated", handleRatingUpdate);
+    window.addEventListener("labadago:transaction-updated", handleTxUpdate);
+    window.addEventListener("storage", handleTxUpdate);
+
     return () => {
       window.removeEventListener("labadago:rating-updated", handleRatingUpdate);
+      window.removeEventListener("labadago:transaction-updated", handleTxUpdate);
+      window.removeEventListener("storage", handleTxUpdate);
     };
-  }, []);
+  }, [user]);
 
   const refreshTransactions = async () => {
-    if (user) {
-      const txList = await getLaundryTransactions(user.id);
-      setTransactions(txList);
-    } else if (typeof window !== "undefined") {
+    let userTxs: LaundryTransaction[] = [];
+    if (user?.id) {
+      userTxs = await getLaundryTransactions(user.id).catch(() => []);
+    }
+    let guestTxs: LaundryTransaction[] = [];
+    if (typeof window !== "undefined") {
       try {
         const guestTrackingNumbers: string[] = JSON.parse(
           localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
         );
         if (guestTrackingNumbers.length > 0) {
-          const txList = await getTransactionsByTrackingNumbers(guestTrackingNumbers);
-          setTransactions(txList);
-        } else {
-          setTransactions([]);
+          guestTxs = await getTransactionsByTrackingNumbers(guestTrackingNumbers).catch(() => []);
         }
       } catch {
-        setTransactions([]);
+        // ignore
       }
     }
+    const combined = [...userTxs];
+    guestTxs.forEach((gtx) => {
+      const idx = combined.findIndex(
+        (t) => t.tracking_number === gtx.tracking_number || (t.id && gtx.id && t.id === gtx.id)
+      );
+      if (idx >= 0) {
+        combined[idx] = { ...combined[idx], ...gtx };
+      } else {
+        combined.push(gtx);
+      }
+    });
+    setTransactions(combined);
   };
 
   useEffect(() => {

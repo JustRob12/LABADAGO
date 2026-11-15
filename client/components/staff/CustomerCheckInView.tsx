@@ -364,6 +364,13 @@ export const CustomerCheckInView: React.FC<CustomerCheckInViewProps> = ({
       setScannedTransaction(updated);
       onTransactionCreated(updated);
       setScannerMessage(`✓ Confirmed! Order #${updated.tracking_number} for ${updated.customer_name} is now PROCESSING.`);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("labadago_last_tx_update", Date.now().toString());
+        window.dispatchEvent(new CustomEvent("labadago:transaction-updated"));
+      }
+      if (onViewQueue) {
+        setTimeout(() => onViewQueue(), 500);
+      }
     } catch (err) {
       console.error("Error confirming scanned intake:", err);
       alert("Failed to confirm check-in. Please try again.");

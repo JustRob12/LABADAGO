@@ -1411,6 +1411,33 @@ Ensure Reports & Financial Analytics displays and computes metrics **strictly fo
 3. **Build & Quality Assurance**:
    - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build across all 13 routes.
 
+---
+
+### Update 46: Real-Time Order Processing Sync, Identical Tracker QR Encoding & Permanent Order Deletion on Cancel
+
+**Objective**:
+1. When staff scans customer QR and presses confirm, immediately transition the order to `Washing` (Processing) and navigate staff to **Laundry Processing** (`processing` tab / `washing` sub-tab), while instantly updating the customer view to **Processing** in real-time.
+2. Fix QR code discrepancy between Walk-In Fast Pass generator and Live Order Tracker so both render the **100% identical QR code** (encoding the exact tracking number with high-correction Level H).
+3. Ensure that when a fast pass or order is cancelled, it is **permanently deleted** from the Supabase database and local storage.
+
+#### Changes Implemented:
+1. **Real-Time Staff Navigation to Laundry Processing**:
+   - In `StaffScannerView.tsx`: Enhanced `handleConfirmReceive` to immediately set `currentSidebarTab("processing")` and `setActiveTab("washing")`, reload shop orders, and fire `labadago:transaction-updated` and `localStorage` synchronization events.
+   - In `CustomerCheckInView.tsx`: Enhanced `handleConfirmScannedCheckIn` to automatically invoke `onViewQueue()` so the counter view automatically transitions to the live processing board upon scan confirmation.
+2. **Real-Time Customer Order Tracker Synchronization**:
+   - In `client/app/customer/page.tsx`:
+     - Refactored `refreshTransactions` and initial data loading to merge authenticated user transactions with guest tracking numbers stored in `localStorage`, preventing missing passes.
+     - Added event listeners for `labadago:transaction-updated` and cross-tab `storage` updates so customer order status changes to "Processing" instantaneously without requiring manual page reload.
+3. **Pixel-Perfect QR Consistency Across Views**:
+   - In `CustomerOrderTracker.tsx`: Changed `handleOpenQrModal` from encoding a heavy 400-char JSON string to encoding **`tx.tracking_number`** with exact matching parameters (`width: 360`, `margin: 2`, `errorCorrectionLevel: "H"`). The QR on the tracker is now identical to the Fast Pass generator.
+4. **Permanent Transaction Deletion on Cancel**:
+   - In `client/lib/supabase/auth.ts`: Added and exported `deleteTransaction(txId: string)` which issues `DELETE FROM transactions WHERE id = txId OR tracking_number = txId` and purges the record from in-memory and local storage.
+   - In `CustomerOrderTracker.tsx`: Replaced status tagging with `deleteTransaction(tx.id || tx.tracking_number)`.
+   - In `WalkInQRGenerator.tsx`: Replaced status tagging with `deleteTransaction(targetId)`.
+5. **Build & Quality Verification**:
+   - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and successful production build.
+
+
 
 
 
