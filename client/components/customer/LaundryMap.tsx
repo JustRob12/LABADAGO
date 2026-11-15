@@ -52,15 +52,18 @@ export function calculateDistanceKm(
   return parseFloat((R * c).toFixed(2));
 }
 
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "";
+const CARTO_KEY_PARAM = CARTO_KEY ? `?api_key=${CARTO_KEY}` : "";
+
 // CARTO Basemap Styles & Free Public CDN Endpoints
 const CARTO_BASEMAPS = {
   voyager: {
     name: "CARTO Voyager",
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
   },
   positron: {
     name: "CARTO Light (Positron)",
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
   },
   osm: {
     name: "OpenStreetMap (Standard)",
@@ -68,7 +71,7 @@ const CARTO_BASEMAPS = {
   },
   dark: {
     name: "CARTO Dark Matter",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
   },
 };
 

@@ -19,7 +19,8 @@ const PRESET_LOCATIONS = [
   { name: "Cebu IT Park, Cebu", lat: 10.3298, lng: 123.9056 },
 ];
 
-const CARTO_VOYAGER_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || "";
+const CARTO_VOYAGER_URL = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${CARTO_KEY ? `?api_key=${CARTO_KEY}` : ""}`;
 const CARTO_ATTRIBUTION =
   '&copy; <a href="https://carto.com/about-carto/" target="_blank" rel="noopener noreferrer">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 

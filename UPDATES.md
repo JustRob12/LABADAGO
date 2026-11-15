@@ -1672,3 +1672,20 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
    - Preserved timezone-tolerant filtering for "Today (Live)", "Yesterday", "Last 7 Days", and "This Month".
 6. **Build Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and all 13 routes prerendered cleanly.
+
+### Update 53: Configured New CARTO Basemaps API Key & Query Propagation
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "cb1_430d_2_4a9911a9432faebae4c6d96f i have new api key on carto basemaps please fix it".
+2. **Missing Dynamic Key Propagation in Map Components**: Previously, CARTO tile URL constants in Leaflet map components did not dynamically append the API key parameter from `process.env.NEXT_PUBLIC_CARTO_API_KEY`.
+
+#### Changes Implemented:
+1. **Environment Key Update (`client/.env.local`)**:
+   - Updated `NEXT_PUBLIC_CARTO_API_KEY` and `CARTO_API_KEY` to the new key: `cb1_430d_2_4a9911a9432faebae4c6d96f`.
+2. **Dynamic API Key Propagation across Map Components**:
+   - **`LaundryMap.tsx`**: Updated `CARTO_BASEMAPS` (Voyager, Positron, Dark Matter) to dynamically append `?api_key=${CARTO_KEY}` when `NEXT_PUBLIC_CARTO_API_KEY` is present.
+   - **`ShopRouteNavigation.tsx`**: Updated `CARTO_VOYAGER_URL` to append `?api_key=${CARTO_KEY}`.
+   - **`ShopLocationPicker.tsx`**: Updated `CARTO_VOYAGER_URL` to append `?api_key=${CARTO_KEY}`.
+3. **Build & Route Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
