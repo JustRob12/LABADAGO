@@ -599,6 +599,28 @@ Eliminate redundant second "Partner with this website" link in the main navigati
 
 ---
 
+### Update 28: Remove Duplicate "Partner With This Website" Nav Link and Position Under User Profile
+
+**Objective**:
+Eliminate redundant second "Partner with this website" link in the main navigation menu list, retaining it strictly as an action button directly beneath the user's name card in the bottom profile section.
+
+#### Changes:
+1. **Removed from Main Nav Links (`client/components/dashboard/DashboardNav.tsx`)**:
+   - Removed `cust-partner` item from the customer `navItems` list in the sidebar.
+   - The primary navigation links now cleanly include:
+     - `Home & Shops` (`/customer`)
+     - `Laundry Map` (`/customer?tab=map`)
+     - `Walk-In Fast Pass (QR)` (`/customer?tab=qr`)
+     - `Live Order Tracker` (`/customer?tab=orders`)
+     - `My Profile & Hub` (`/dashboard`)
+2. **Dedicated Position Under User Card**:
+   - Kept strictly below the user identity card at the bottom of the sidebar:
+     - Styled as an emerald pill action button: `<Handshake size={14} /> Partner with this website`.
+3. **Build & Deploy Verification**:
+   - Production build verified with zero errors across all 13 routes.
+
+---
+
 ### Update 29: Fix Mobile Map Rendering and Remove Top Navigation & Return to Dashboard on Mobile
 
 **Objective**:
@@ -625,3 +647,32 @@ Resolve mobile map blank white canvas issue, ensure registered shops are consist
 
 4. **Verification & Build**:
    - Successfully compiled all 13 routes with Next.js 16 (Turbopack) with 0 errors.
+
+---
+
+### Update 30: Streamline Admin Page to Partner Approvals, Platform Shops, and Interactive Map (Remove Static Data)
+
+**Objective**:
+Streamline the Admin page (`/admin`) exclusively for:
+1. Reviewing and accepting/approving (or declining) client partner applications.
+2. Displaying registered platform laundry shops.
+3. Interactive platform map showing all shop locations.
+Completely removed all static data, fake revenue charts, and the placeholder analytics dashboard.
+
+#### Changes:
+1. **Removed Static Analytics & Dashboard Component (`client/app/admin/page.tsx`)**:
+   - Completely removed `OwnerAnalyticsDashboard` and all placeholder metrics (`₱12,450`, static weekly trend lines, fake transaction lists, and mock charts).
+   - Filter counters now display 100% real dynamic data directly from database/stores: Real Pending Applications, Real Approved Partners, Real Rejected Applications, and Real Registered Shops.
+   - Clicking any top stat card directly filters the applications list or switches to the shops tab.
+
+2. **Core Admin Navigation Tabs**:
+   - **Partner Applications** (`/admin?tab=applications`): Full review workflow for incoming partnership requests submitted via `/partner`. Displays applicant details (Name, Contact, Email), proposed shop location, operating hours, washer/dryer capacity, kilo limits, and configured services with prices. Includes "Approve Partner & Shop" (upgrades user to Owner role and registers shop) and "Decline" with feedback modal.
+   - **Platform Shops** (`/admin?tab=shops`): Clean directory of all registered laundry shops with address, live queue status, machine counts, and priced service catalogs. Includes a direct "Locate on Map" action.
+   - **Platform Map** (`/admin?tab=map`): Embedded interactive `LaundryMap` with full Leaflet road mapping, live pins with queue indicators, and shop details modal.
+
+3. **Admin Sidebar & Mobile Bottom Navigation Updates (`client/components/dashboard/DashboardNav.tsx`)**:
+   - Updated desktop sidebar links for Admin to: `Partner Applications`, `Platform Shops`, `Platform Map`, `Owner Portal`, `Customer View`, and `Admin Profile & Hub`.
+   - Added dedicated admin mobile bottom navigation bar with one-tap switching: `Partners`, `Shops`, `Map`, and `Profile`.
+
+4. **Verification & Build**:
+   - Successfully verified with `pnpm run build` across all 13 routes with 0 errors.

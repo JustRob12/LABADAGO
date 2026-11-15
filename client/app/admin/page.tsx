@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getCurrentUserProfile,
   getCachedUserProfile,
@@ -13,7 +13,7 @@ import {
 import { UserProfile, UserRole, PartnerApplication, LaundryShop } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
+import { LaundryMap } from "@/components/customer/LaundryMap";
 import {
   ShieldCheck,
   Store,
@@ -24,15 +24,10 @@ import {
   Phone,
   Mail,
   User,
-  Calendar,
-  Layers,
-  Sparkles,
   ArrowRight,
   RefreshCw,
   Search,
-  Filter,
   Eye,
-  Check,
   X,
   AlertTriangle,
   Loader2,
@@ -40,28 +35,54 @@ import {
   Building2,
   FileText,
   BadgeAlert,
-  BarChart3,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { formatTo12Hour } from "@/components/partner/PartnerApplicationForm";
-import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
 
 function AdminPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
   const [user, setUser] = useState<UserProfile | null>(() =>
     typeof window !== "undefined" ? getCachedUserProfile() : null
   );
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
-  // Partner Applications state
+  // Applications & Shops data
   const [applications, setApplications] = useState<PartnerApplication[]>([]);
   const [activeShops, setActiveShops] = useState<LaundryShop[]>([]);
+  const [selectedShop, setSelectedShop] = useState<LaundryShop | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // Filters & Tabs
+  // Active Tab: "applications" | "shops" | "map"
+  const [currentTab, setCurrentTab] = useState<"applications" | "shops" | "map">(() => {
+    if (tabParam === "shops") return "shops";
+    if (tabParam === "map") return "map";
+    return "applications";
+  });
+
+  // Sync tab with URL query parameter
+  useEffect(() => {
+    if (tabParam === "shops") {
+      setCurrentTab("shops");
+    } else if (tabParam === "map") {
+      setCurrentTab("map");
+    } else if (tabParam === "applications") {
+      setCurrentTab("applications");
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: "applications" | "shops" | "map") => {
+    setCurrentTab(tab);
+    router.push(`/admin?tab=${tab}`, { scroll: false });
+  };
+
+  // Status Filter for Partner Applications
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentTab, setCurrentTab] = useState<"dashboard" | "applications" | "shops">("dashboard");
 
   // Rejection modal state
   const [rejectingAppId, setRejectingAppId] = useState<string | null>(null);
@@ -84,6 +105,9 @@ function AdminPageContent() {
       ]);
       setApplications(apps);
       setActiveShops(shops);
+      if (shops.length > 0 && !selectedShop) {
+        setSelectedShop(shops[0]);
+      }
     } catch (err) {
       console.error("Error loading admin data:", err);
     } finally {
@@ -106,7 +130,7 @@ function AdminPageContent() {
     loadData();
   }, []);
 
-  // Filtered applications
+  // Filtered applications based on status and search query
   const filteredApps = applications.filter((app) => {
     const matchesStatus = statusFilter === "all" ? true : app.status === statusFilter;
     const query = searchQuery.toLowerCase().trim();
@@ -119,6 +143,17 @@ function AdminPageContent() {
     return matchesStatus && matchesQuery;
   });
 
+  // Filtered shops based on search query
+  const filteredShops = activeShops.filter((shop) => {
+    const query = searchQuery.toLowerCase().trim();
+    return (
+      !query ||
+      shop.name.toLowerCase().includes(query) ||
+      shop.address.toLowerCase().includes(query) ||
+      shop.phone_number.includes(query)
+    );
+  });
+
   const pendingCount = applications.filter((a) => a.status === "pending").length;
   const approvedCount = applications.filter((a) => a.status === "approved").length;
   const rejectedCount = applications.filter((a) => a.status === "rejected").length;
@@ -127,7 +162,7 @@ function AdminPageContent() {
   const handleApprove = async (app: PartnerApplication) => {
     if (
       !window.confirm(
-        `Approve partnership for "${app.shop_name}"?\n\nThis will:\n1. Upgrade ${app.applicant_name} to a Laundry Shop Owner.\n2. Officially register and publish "${app.shop_name}" on LabadaGO.`
+        `Approve partnership for "${app.shop_name}"?\n\nThis will:\n1. Upgrade ${app.applicant_name} to a Laundry Shop Owner.\n2. Officially register and publish "${app.shop_name}" on the platform.`
       )
     ) {
       return;
@@ -146,7 +181,7 @@ function AdminPageContent() {
         setToastMessage({ type: "error", text: res.error || "Failed to approve application." });
       }
     } catch {
-      setToastMessage({ type: "error", text: "An error occurred while approving." });
+      setToastMessage({ type: "error", text: "An error occurred while approving application." });
     } finally {
       setIsProcessingAction(false);
     }
@@ -194,6 +229,11 @@ function AdminPageContent() {
 
   const isAdmin = user?.role === UserRole.ADMIN;
 
+  const handleSelectShopOnMap = (shop: LaundryShop) => {
+    setSelectedShop(shop);
+    handleTabChange("map");
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row pb-20 select-none">
       <DashboardNav user={user || undefined} />
@@ -238,10 +278,10 @@ function AdminPageContent() {
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                Partner Approvals &amp; Admin Portal
+                Partner Approvals &amp; Platform Portal
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                Review and approve client laundry shop partnership applications submitted through the website.
+                Review and approve client partner applications, verify registered shops, and view platform locations on the map.
               </p>
             </div>
 
@@ -251,7 +291,7 @@ function AdminPageContent() {
                 onClick={loadData}
                 disabled={isLoadingData}
                 className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Refresh applications"
+                title="Refresh applications and shops"
               >
                 <RefreshCw size={14} className={isLoadingData ? "animate-spin text-indigo-600" : ""} />
                 <span>Refresh</span>
@@ -271,64 +311,78 @@ function AdminPageContent() {
             </div>
           </div>
 
-          {/* Metric Stats Cards */}
+          {/* Dynamic Real Counter Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-            <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200">
+            <button
+              type="button"
+              onClick={() => {
+                handleTabChange("applications");
+                setStatusFilter("pending");
+              }}
+              className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 text-left hover:bg-amber-100/60 transition-colors cursor-pointer"
+            >
               <div className="flex items-center justify-between text-amber-700">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Pending Review</span>
                 <Clock size={16} />
               </div>
               <div className="text-2xl font-black text-amber-900 mt-1">{pendingCount}</div>
               <div className="text-[10px] text-amber-700/80 mt-0.5">Awaiting admin decision</div>
-            </div>
+            </button>
 
-            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200">
+            <button
+              type="button"
+              onClick={() => {
+                handleTabChange("applications");
+                setStatusFilter("approved");
+              }}
+              className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 text-left hover:bg-emerald-100/60 transition-colors cursor-pointer"
+            >
               <div className="flex items-center justify-between text-emerald-700">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Approved Partners</span>
                 <CheckCircle2 size={16} />
               </div>
               <div className="text-2xl font-black text-emerald-900 mt-1">{approvedCount}</div>
               <div className="text-[10px] text-emerald-700/80 mt-0.5">Live shop owners</div>
-            </div>
+            </button>
 
-            <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200">
+            <button
+              type="button"
+              onClick={() => {
+                handleTabChange("applications");
+                setStatusFilter("rejected");
+              }}
+              className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200 text-left hover:bg-rose-100/60 transition-colors cursor-pointer"
+            >
               <div className="flex items-center justify-between text-rose-700">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Rejected</span>
                 <XCircle size={16} />
               </div>
               <div className="text-2xl font-black text-rose-900 mt-1">{rejectedCount}</div>
               <div className="text-[10px] text-rose-700/80 mt-0.5">Declined requests</div>
-            </div>
+            </button>
 
-            <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200">
+            <button
+              type="button"
+              onClick={() => handleTabChange("shops")}
+              className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 text-left hover:bg-blue-100/60 transition-colors cursor-pointer"
+            >
               <div className="flex items-center justify-between text-blue-700">
-                <span className="text-[11px] font-bold uppercase tracking-wider">Total Active Shops</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider">Registered Shops</span>
                 <Store size={16} />
               </div>
               <div className="text-2xl font-black text-blue-900 mt-1">{activeShops.length}</div>
-              <div className="text-[10px] text-blue-700/80 mt-0.5">On map &amp; platform</div>
-            </div>
+              <div className="text-[10px] text-blue-700/80 mt-0.5">Active on map &amp; platform</div>
+            </button>
           </div>
         </div>
 
         {/* Tab Switcher & Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Main Tabs */}
+          {/* Main Clean Navigation Tabs */}
           <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-2xl shadow-2xs self-start sm:self-auto">
             <button
-              onClick={() => setCurrentTab("dashboard")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                currentTab === "dashboard"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <BarChart3 size={14} />
-              <span>Platform Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab("applications")}
+              type="button"
+              onClick={() => handleTabChange("applications")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === "applications"
                   ? "bg-indigo-600 text-white shadow-2xs"
@@ -340,7 +394,8 @@ function AdminPageContent() {
             </button>
 
             <button
-              onClick={() => setCurrentTab("shops")}
+              type="button"
+              onClick={() => handleTabChange("shops")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === "shops"
                   ? "bg-indigo-600 text-white shadow-2xs"
@@ -350,46 +405,50 @@ function AdminPageContent() {
               <Store size={14} />
               <span>Platform Shops ({activeShops.length})</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("map")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentTab === "map"
+                  ? "bg-indigo-600 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <MapPin size={14} />
+              <span>Platform Map ({activeShops.length})</span>
+            </button>
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-[240px] sm:w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shop, applicant, or address..."
-              className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 shadow-2xs"
-            />
-          </div>
+          {currentTab !== "map" && (
+            <div className="relative min-w-[240px] sm:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  currentTab === "applications"
+                    ? "Search shop, applicant, or address..."
+                    : "Search platform shops..."
+                }
+                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 shadow-2xs"
+              />
+            </div>
+          )}
         </div>
 
-        {/* TAB 0: SYSTEM / PLATFORM ANALYTICS DASHBOARD */}
-        {currentTab === "dashboard" && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-2xs">
-            <OwnerAnalyticsDashboard
-              user={user}
-              shops={activeShops}
-              shop={activeShops[0] || null}
-              onNavigateTab={(tab) => {
-                if (tab === "setup") {
-                  setCurrentTab("shops");
-                } else if (tab === "scanner" || tab === "staff") {
-                  window.location.href = `/owner?tab=${tab}`;
-                }
-              }}
-            />
-          </div>
-        )}
-
-        {/* TAB 1: PARTNER APPLICATIONS LIST */}
+        {/* ========================================================================= */}
+        {/* TAB 1: PARTNER APPLICATIONS (ACCEPTING ONLY PARTNERS)                     */}
+        {/* ========================================================================= */}
         {currentTab === "applications" && (
           <div className="space-y-4">
             {/* Status Filter Pills */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Filter:</span>
               <button
+                type="button"
                 onClick={() => setStatusFilter("pending")}
                 className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
                   statusFilter === "pending"
@@ -400,6 +459,7 @@ function AdminPageContent() {
                 Pending Review ({pendingCount})
               </button>
               <button
+                type="button"
                 onClick={() => setStatusFilter("all")}
                 className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
                   statusFilter === "all"
@@ -410,6 +470,7 @@ function AdminPageContent() {
                 All Applications ({applications.length})
               </button>
               <button
+                type="button"
                 onClick={() => setStatusFilter("approved")}
                 className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
                   statusFilter === "approved"
@@ -420,6 +481,7 @@ function AdminPageContent() {
                 Approved ({approvedCount})
               </button>
               <button
+                type="button"
                 onClick={() => setStatusFilter("rejected")}
                 className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${
                   statusFilter === "rejected"
@@ -446,7 +508,7 @@ function AdminPageContent() {
                     href="/partner"
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
                   >
-                    <span>View Client Partner Application Page</span>
+                    <span>View Partner Application Page</span>
                     <ArrowRight size={13} />
                   </Link>
                 </div>
@@ -516,7 +578,7 @@ function AdminPageContent() {
                             <User size={14} className="text-blue-600 shrink-0" />
                             <span className="font-bold text-slate-900">{app.applicant_name}</span>
                             <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-semibold">
-                              Customer
+                              Client
                             </span>
                           </div>
 
@@ -540,7 +602,7 @@ function AdminPageContent() {
                         </div>
                       </div>
 
-                      {/* Right: Shop Details & Services */}
+                      {/* Right: Proposed Shop Details & Services */}
                       <div className="md:col-span-7 space-y-3">
                         <div className="space-y-1">
                           <div className="text-xs text-slate-700 flex items-start gap-1.5">
@@ -642,13 +704,18 @@ function AdminPageContent() {
                         )}
 
                         {app.status === "approved" && (
-                          <Link
-                            href="/customer?tab=map"
-                            className="px-3.5 py-1.5 rounded-xl border border-emerald-300 text-emerald-800 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1.5"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const found = activeShops.find((s) => s.name === app.shop_name);
+                              if (found) setSelectedShop(found);
+                              handleTabChange("map");
+                            }}
+                            className="px-3.5 py-1.5 rounded-xl border border-emerald-300 text-emerald-800 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1.5 cursor-pointer"
                           >
                             <MapPin size={13} />
-                            <span>View on Laundry Map</span>
-                          </Link>
+                            <span>View on Platform Map</span>
+                          </button>
                         )}
 
                         {app.status === "rejected" && (
@@ -670,43 +737,195 @@ function AdminPageContent() {
           </div>
         )}
 
-        {/* TAB 2: ACTIVE PLATFORM SHOPS */}
+        {/* ========================================================================= */}
+        {/* TAB 2: PLATFORM SHOPS (DISPLAY THE SHOPS)                                 */}
+        {/* ========================================================================= */}
         {currentTab === "shops" && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">All Verified Platform Laundry Shops</h3>
-                <p className="text-xs text-slate-500">Currently active on the customer map and booking directory</p>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Store size={18} className="text-indigo-600" />
+                  <span>All Registered Platform Laundry Shops</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Live laundry shops currently registered and available for customer drop-offs and map routing
+                </p>
               </div>
-              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-xl">
-                {activeShops.length} active shops
-              </span>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl">
+                  {filteredShops.length} Registered Shops
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("map")}
+                  className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <MapPin size={13} />
+                  <span>View All on Map</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              {activeShops.map((shop) => (
-                <div
-                  key={shop.id}
-                  className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-all space-y-2"
+            {filteredShops.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                <Store size={40} className="mx-auto mb-2 text-slate-300" />
+                <p className="font-bold text-slate-700 text-sm">No laundry shops match your search.</p>
+                <p className="text-slate-500 mt-1">Try clearing your search query or refresh the shop directory.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredShops.map((shop) => (
+                  <div
+                    key={shop.id}
+                    className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all space-y-3 flex flex-col justify-between"
+                  >
+                    <div className="space-y-2.5">
+                      {/* Shop Name & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                            {shop.name}
+                          </h4>
+                          <p className="text-xs text-slate-600 flex items-start gap-1 mt-1">
+                            <MapPin size={13} className="text-indigo-600 shrink-0 mt-0.5" />
+                            <span>{shop.address}</span>
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
+                            shop.queue_status === "Low"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : shop.queue_status === "Moderate"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-red-50 text-red-700 border-red-200"
+                          }`}
+                        >
+                          {shop.queue_status || "Low"} Queue
+                        </span>
+                      </div>
+
+                      {/* Info Pills */}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-1">
+                        <span className="flex items-center gap-1 text-slate-700">
+                          <Phone size={12} className="text-slate-400" />
+                          <span>{shop.phone_number}</span>
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-700">
+                          <Clock size={12} className="text-slate-400" />
+                          <span>{shop.open_time} – {shop.close_time}</span>
+                        </span>
+                        <span className="text-amber-600 font-semibold flex items-center gap-1">
+                          <span>⭐</span>
+                          <span>{shop.rating ? Number(shop.rating).toFixed(1) : "5.0"} ({shop.total_reviews || 0})</span>
+                        </span>
+                      </div>
+
+                      {/* Machine Capacity */}
+                      <div className="p-2.5 bg-slate-50 rounded-xl text-xs text-slate-600 flex items-center justify-between">
+                        <span>
+                          <strong>{shop.washer_count || 6}</strong> Washers • <strong>{shop.dryer_count || 6}</strong> Dryers
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Max {shop.max_kilo_per_load || 8}kg / load
+                        </span>
+                      </div>
+
+                      {/* Services Preview */}
+                      {shop.services && shop.services.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Services Catalog ({shop.services.length})
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {shop.services.slice(0, 4).map((srv) => (
+                              <span
+                                key={srv.id}
+                                className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-medium text-slate-700"
+                              >
+                                {srv.service_name} • <strong className="text-emerald-700 font-mono">₱{srv.price}</strong>
+                              </span>
+                            ))}
+                            {shop.services.length > 4 && (
+                              <span className="text-[10px] text-slate-400 px-1 py-0.5">
+                                +{shop.services.length - 4} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {shop.latitude.toFixed(3)}, {shop.longitude.toFixed(3)}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectShopOnMap(shop)}
+                          className="px-3 py-1.5 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <MapPin size={12} />
+                          <span>Locate on Map</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: PLATFORM MAP (INTERACTIVE LEAFLET SHOPS MAP)                       */}
+        {/* ========================================================================= */}
+        {currentTab === "map" && (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col h-[700px] min-h-[500px]">
+            {/* Map Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white z-20 shrink-0">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                  <MapPin size={18} className="text-indigo-600" />
+                  <span>Platform Laundry Shops Map</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Live geographic distribution of all {activeShops.length} registered partner shops
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl">
+                  {activeShops.length} Registered Locations
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("shops")}
+                  className="px-3 py-1 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
                 >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-slate-900">{shop.name}</h4>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                      Live
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 line-clamp-1">{shop.address}</p>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                    <span>Hotline: {shop.phone_number}</span>
-                    <span>⭐ {shop.rating || 5.0}</span>
-                  </div>
-                </div>
-              ))}
+                  View as Directory
+                </button>
+              </div>
+            </div>
+
+            {/* Interactive Leaflet Map */}
+            <div className="flex-1 w-full relative min-h-0">
+              <LaundryMap
+                shops={activeShops}
+                selectedShop={selectedShop}
+                onSelectShop={setSelectedShop}
+              />
             </div>
           </div>
         )}
 
-        {/* REJECTION REASON MODAL */}
+        {/* ========================================================================= */}
+        {/* REJECTION REASON MODAL                                                    */}
+        {/* ========================================================================= */}
         {rejectingAppId && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
@@ -754,7 +973,9 @@ function AdminPageContent() {
           </div>
         )}
 
-        {/* FULL DETAILS INSPECT MODAL */}
+        {/* ========================================================================= */}
+        {/* FULL DETAILS INSPECT MODAL                                                */}
+        {/* ========================================================================= */}
         {inspectingApp && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in fade-in zoom-in-95">
