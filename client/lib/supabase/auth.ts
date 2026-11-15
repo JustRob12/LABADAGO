@@ -18,298 +18,17 @@ import {
   Gender,
 } from "@/types/auth";
 
-// Default pre-seeded registered shops (Ensures customer map, services, and fast pass work seamlessly)
-export const DEFAULT_REGISTERED_SHOPS: LaundryShop[] = [
-  {
-    id: "shop-001",
-    name: "CleanWave Laundry - Main Branch",
-    description: "Full-service laundry offering wash, dry, fold, express drop-offs, and blanket care.",
-    address: "123 Laundry St., Barangay San Isidro, Cityville 1234",
-    latitude: 14.5805,
-    longitude: 121.0360,
-    phone_number: "0917 123 4567",
-    open_time: "07:00",
-    close_time: "21:00",
-    queue_status: "Low",
-    is_open: true,
-    rating: 4.9,
-    total_reviews: 128,
-    washer_count: 12,
-    dryer_count: 12,
-    max_kilo_per_load: 8.0,
-    images: [
-      "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
-    ],
-    services: [
-      {
-        id: "srv-001",
-        shop_id: "shop-001",
-        service_name: "Wash & Fold (Regular)",
-        description: "Up to 8kg load, thoroughly washed, fresh scented, and neatly folded.",
-        price: 60,
-        unit: "kg",
-        kilos: 8,
-        estimated_minutes: 120,
-        is_available: true,
-      },
-      {
-        id: "srv-002",
-        shop_id: "shop-001",
-        service_name: "Blanket & Comforter Wash",
-        description: "Deep sanitized wash and high-heat drying for king/queen comforters.",
-        price: 250,
-        unit: "piece",
-        kilos: 1,
-        estimated_minutes: 180,
-        is_available: true,
-      },
-      {
-        id: "srv-003",
-        shop_id: "shop-001",
-        service_name: "Express Wash & Fold",
-        description: "Priority 3-hour turnaround for urgent laundry needs.",
-        price: 80,
-        unit: "kg",
-        kilos: 8,
-        estimated_minutes: 90,
-        is_available: true,
-      },
-      {
-        id: "srv-004",
-        shop_id: "shop-001",
-        service_name: "Dry Cleaning (Per Item)",
-        description: "Gentle professional chemical dry clean for delicate garments and suits.",
-        price: 120,
-        unit: "item",
-        estimated_minutes: 240,
-        is_available: true,
-      },
-    ],
-  },
-  {
-    id: "shop-002",
-    name: "Fresh Spin Laundry & Dry Clean",
-    description: "Premium garment care, self-service commercial washers, and same-day pressing.",
-    address: "45 Rizal Avenue, Downtown Commercial District, Cityville",
-    latitude: 14.5862,
-    longitude: 121.0425,
-    phone_number: "0918 234 5678",
-    open_time: "08:00",
-    close_time: "20:00",
-    queue_status: "Moderate",
-    is_open: true,
-    rating: 4.8,
-    total_reviews: 84,
-    washer_count: 8,
-    dryer_count: 8,
-    max_kilo_per_load: 8.0,
-    images: [
-      "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=800&q=80",
-    ],
-    services: [
-      {
-        id: "srv-005",
-        shop_id: "shop-002",
-        service_name: "Wash & Dry",
-        description: "Standard wash and dry cycle with fabric conditioner.",
-        price: 55,
-        unit: "kg",
-        kilos: 8,
-        estimated_minutes: 100,
-        is_available: true,
-      },
-      {
-        id: "srv-006",
-        shop_id: "shop-002",
-        service_name: "Wash, Dry & Iron",
-        description: "Complete laundry service with wrinkle-free steam pressing.",
-        price: 75,
-        unit: "kg",
-        kilos: 8,
-        estimated_minutes: 150,
-        is_available: true,
-      },
-      {
-        id: "srv-007",
-        shop_id: "shop-002",
-        service_name: "Heavy Duvet Wash",
-        description: "Specialized large-drum wash for thick winter blankets and duvets.",
-        price: 220,
-        unit: "piece",
-        kilos: 1,
-        estimated_minutes: 160,
-        is_available: true,
-      },
-    ],
-  },
-  {
-    id: "shop-003",
-    name: "Bubble Care Self-Service & Full Laundry",
-    description: "Modern touch-screen washers, fast drying cycles, and drop-off lockers.",
-    address: "88 University Belt Way, Near Tech Campus, Cityville",
-    latitude: 14.5745,
-    longitude: 121.0285,
-    phone_number: "0921 345 6789",
-    open_time: "06:00",
-    close_time: "22:00",
-    queue_status: "Low",
-    is_open: true,
-    rating: 4.7,
-    total_reviews: 64,
-    washer_count: 10,
-    dryer_count: 10,
-    max_kilo_per_load: 10.0,
-    images: [
-      "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1604335399105-a0c585fd81a1?auto=format&fit=crop&w=800&q=80",
-    ],
-    services: [
-      {
-        id: "srv-008",
-        shop_id: "shop-003",
-        service_name: "Self-Service Wash (10kg)",
-        description: "Use our heavy duty front-load washers with automatic detergent dispenser.",
-        price: 70,
-        unit: "load",
-        kilos: 10,
-        estimated_minutes: 45,
-        is_available: true,
-      },
-      {
-        id: "srv-009",
-        shop_id: "shop-003",
-        service_name: "Self-Service Dryer (10kg)",
-        description: "Quick dry cycle with adjustable temperature settings.",
-        price: 60,
-        unit: "load",
-        kilos: 10,
-        estimated_minutes: 40,
-        is_available: true,
-      },
-      {
-        id: "srv-010",
-        shop_id: "shop-003",
-        service_name: "Full Drop-off Service",
-        description: "Drop your clothes off and pick them up freshly cleaned and packed.",
-        price: 65,
-        unit: "kg",
-        kilos: 8,
-        estimated_minutes: 120,
-        is_available: true,
-      },
-    ],
-  },
-];
+// Registered shops fallback store (Strictly empty — live database is single source of truth)
+export const DEFAULT_REGISTERED_SHOPS: LaundryShop[] = [];
 
-const DEFAULT_PLATFORM_USERS: UserProfile[] = [
-  // Shop Owners (Role = 1)
-  {
-    id: "usr-owner-001",
-    email: "maria.santos@email.com",
-    full_name: "Maria Elena Santos",
-    date_of_birth: "1988-04-12",
-    phone_number: "0917 123 4567",
-    gender: "Female",
-    role: UserRole.OWNER,
-    assigned_shop_id: "shop-001",
-    assigned_shop_name: "AquaPure Clean Express",
-    created_at: "2026-01-15T08:30:00Z",
-  },
-  {
-    id: "usr-owner-002",
-    email: "juan.reyes@email.com",
-    full_name: "Juan Carlo Reyes",
-    date_of_birth: "1985-09-23",
-    phone_number: "0918 234 5678",
-    gender: "Male",
-    role: UserRole.OWNER,
-    assigned_shop_id: "shop-002",
-    assigned_shop_name: "Fresh Spin Laundry & Dry Clean",
-    created_at: "2026-02-10T10:15:00Z",
-  },
-  {
-    id: "usr-owner-003",
-    email: "ricardo.lim@email.com",
-    full_name: "Ricardo Lim",
-    date_of_birth: "1990-11-05",
-    phone_number: "0921 345 6789",
-    gender: "Male",
-    role: UserRole.OWNER,
-    assigned_shop_id: "shop-003",
-    assigned_shop_name: "Bubble Care Self-Service & Full Laundry",
-    created_at: "2026-03-01T14:20:00Z",
-  },
-  // Customers (Role = 2)
-  {
-    id: "usr-cust-001",
-    email: "beatrice.g@email.com",
-    full_name: "Beatrice Gomez",
-    date_of_birth: "1996-07-19",
-    phone_number: "0915 882 1234",
-    gender: "Female",
-    role: UserRole.COSTUMER,
-    created_at: "2026-02-20T09:00:00Z",
-  },
-  {
-    id: "usr-cust-002",
-    email: "daniel.padilla@email.com",
-    full_name: "Daniel Padilla",
-    date_of_birth: "1994-03-14",
-    phone_number: "0927 345 7890",
-    gender: "Male",
-    role: UserRole.COSTUMER,
-    created_at: "2026-03-05T11:45:00Z",
-  },
-  {
-    id: "usr-cust-003",
-    email: "angela.mercado@email.com",
-    full_name: "Angela Mercado",
-    date_of_birth: "1998-12-02",
-    phone_number: "0919 456 1234",
-    gender: "Female",
-    role: UserRole.COSTUMER,
-    created_at: "2026-03-12T16:10:00Z",
-  },
-  {
-    id: "usr-cust-004",
-    email: "mark.tan@email.com",
-    full_name: "Mark Kenneth Tan",
-    date_of_birth: "1992-06-28",
-    phone_number: "0922 890 1234",
-    gender: "Male",
-    role: UserRole.COSTUMER,
-    created_at: "2026-03-18T13:25:00Z",
-  },
-  {
-    id: "usr-cust-005",
-    email: "sofia.rodriguez@email.com",
-    full_name: "Sofia Rodriguez",
-    date_of_birth: "1999-01-30",
-    phone_number: "0930 123 4567",
-    gender: "Female",
-    role: UserRole.COSTUMER,
-    created_at: "2026-04-02T15:40:00Z",
-  },
-  {
-    id: "usr-cust-006",
-    email: "christian.baut@email.com",
-    full_name: "Christian Bautista",
-    date_of_birth: "1993-08-15",
-    phone_number: "0917 555 4321",
-    gender: "Male",
-    role: UserRole.COSTUMER,
-    created_at: "2026-04-10T10:05:00Z",
-  },
-];
+const DEFAULT_PLATFORM_USERS: UserProfile[] = [];
 
 // In-memory fallback stores for session
-let localShopsStore: LaundryShop[] = [...DEFAULT_REGISTERED_SHOPS];
+let localShopsStore: LaundryShop[] = [];
 let localTransactionsStore: LaundryTransaction[] = [];
 let localStaffStore: BranchStaffMember[] = [];
 let localReviewsStore: ShopReview[] = [];
-let localProfilesStore: UserProfile[] = [...DEFAULT_PLATFORM_USERS];
+let localProfilesStore: UserProfile[] = [];
 let localPartnerApplicationsStore: PartnerApplication[] = [];
 
 /**
@@ -717,7 +436,7 @@ export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> 
 
     const { data, error } = await query;
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data.map((shop) => ({
         ...shop,
         max_kilo_per_load: shop.max_kilo_per_load ? Number(shop.max_kilo_per_load) : 8.0,
@@ -743,10 +462,9 @@ export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> 
   }
 
   if (ownerId) {
-    const ownerShops = localShopsStore.filter((s) => s.owner_id === ownerId);
-    return ownerShops.length > 0 ? ownerShops : DEFAULT_REGISTERED_SHOPS.filter((s) => s.owner_id === ownerId);
+    return localShopsStore.filter((s) => s.owner_id === ownerId);
   }
-  return localShopsStore.length > 0 ? localShopsStore : DEFAULT_REGISTERED_SHOPS;
+  return localShopsStore;
 }
 
 export async function getShopServices(shopId: string): Promise<ShopService[]> {
@@ -2569,61 +2287,11 @@ export async function getPartnerApplications(): Promise<PartnerApplication[]> {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data as PartnerApplication[];
     }
   } catch (err) {
     console.warn("Could not query partner_applications from Supabase, checking local store:", err);
-  }
-
-  // Seed sample application if store is empty so admin UI is never blank
-  if (localPartnerApplicationsStore.length === 0) {
-    localPartnerApplicationsStore = [
-      {
-        id: "app-seed-001",
-        applicant_id: "user-seed-applicant-1",
-        applicant_name: "Roberto Dela Cruz",
-        applicant_email: "roberto.delacruz@gmail.com",
-        applicant_phone: "0917 888 1234",
-        shop_name: "Spin & Glow Laundry Hub",
-        shop_description: "Modern self-service and drop-off laundromat equipped with high-efficiency heavy-duty commercial washers.",
-        shop_address: "Central Boulevard, Mati City, Davao Oriental",
-        latitude: 6.9585,
-        longitude: 126.2185,
-        phone_number: "0917 888 1234",
-        open_time: "07:00",
-        close_time: "21:00",
-        washer_count: 8,
-        dryer_count: 8,
-        max_kilo_per_load: 8,
-        images: ["https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80"],
-        services: [
-          {
-            id: "srv-1",
-            shop_id: "app-seed-001",
-            service_name: "Wash, Dry & Fold",
-            price: 200,
-            unit: "load",
-            kilos: 8,
-            estimated_minutes: 120,
-            is_available: true,
-          },
-          {
-            id: "srv-2",
-            shop_id: "app-seed-001",
-            service_name: "Wash & Dry",
-            price: 160,
-            unit: "load",
-            kilos: 8,
-            estimated_minutes: 90,
-            is_available: true,
-          },
-        ],
-        status: "pending",
-        admin_notes: "Mayor's Permit and DTI registration submitted and verified.",
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-      },
-    ];
   }
 
   return localPartnerApplicationsStore;
@@ -2791,17 +2459,14 @@ export async function reviewPartnerApplication(
 export async function getPlatformUsers(): Promise<UserProfile[]> {
   const userMap = new Map<string, UserProfile>();
 
-  // 1. Seed defaults first
-  DEFAULT_PLATFORM_USERS.forEach((u) => userMap.set(u.id, u));
-
-  // 2. Query Supabase database profiles
+  // 1. Query Supabase database profiles (Strictly real platform database records)
   try {
     const { data, error } = await supabase
       .from("profiles")
       .select("*, laundry_shops(name)")
       .order("created_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       data.forEach((p: any) => {
         const assignedName =
           p.laundry_shops?.name ||
@@ -2828,14 +2493,15 @@ export async function getPlatformUsers(): Promise<UserProfile[]> {
     console.warn("Notice querying profiles from Supabase, checking local profiles store:", err);
   }
 
-  // 3. Merge in-memory local profiles store
+  // 2. Merge in-memory local profiles store (for accounts registered in active session before db sync)
   localProfilesStore.forEach((u) => {
-    // If shop name missing but assigned_shop_id exists, match with shop
-    if (u.assigned_shop_id && !u.assigned_shop_name) {
-      const matchShop = localShopsStore.find((s) => s.id === u.assigned_shop_id);
-      if (matchShop) u.assigned_shop_name = matchShop.name;
+    if (!userMap.has(u.id)) {
+      if (u.assigned_shop_id && !u.assigned_shop_name) {
+        const matchShop = localShopsStore.find((s) => s.id === u.assigned_shop_id);
+        if (matchShop) u.assigned_shop_name = matchShop.name;
+      }
+      userMap.set(u.id, u);
     }
-    userMap.set(u.id, u);
   });
 
   return Array.from(userMap.values());

@@ -1641,3 +1641,34 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
    - Removed unused `client/lib/map/maplibreStyles.ts`.
 6. **Build Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.
+
+### Update 52: Removed Static Sample Data from Admin Portal & Guaranteed Pure Database Source of Truth
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "please on the admin page remove the statics sample data please display only whats on the database".
+2. **Static Sample Users**: `client/lib/supabase/auth.ts` previously defined and injected `DEFAULT_PLATFORM_USERS` (Maria Elena Santos, Juan Carlo Reyes, Ricardo Lim, Beatrice Gomez, Daniel Padilla, Angela Mercado, Mark Kenneth Tan, Sofia Rodriguez, Christian Bautista) into `getPlatformUsers()` and `localProfilesStore`, causing fake accounts to populate the Admin "Shop Owners" and "Customers" tabs.
+3. **Static Sample Partner Application**: `getPartnerApplications()` previously seeded a fallback partner application ("Roberto Dela Cruz" / "Spin & Glow Laundry Hub") whenever `partner_applications` returned 0 rows.
+4. **Static Sample Laundry Shops**: `getLaundryShops()` previously fell back to `DEFAULT_REGISTERED_SHOPS` ("CleanWave Laundry", "AquaPure Clean Express", "Fresh Spin Laundry", "Bubble Care") whenever the database returned 0 rows.
+
+#### Changes Implemented:
+1. **Purged Static Platform Users (`client/lib/supabase/auth.ts`)**:
+   - Replaced `DEFAULT_PLATFORM_USERS` with an empty array `[]`.
+   - Replaced `localProfilesStore` initialization with an empty array `[]`.
+   - Updated `getPlatformUsers()` to strictly query `supabase.from("profiles").select("*, laundry_shops(name)")` and populate only real user profiles found in the database.
+2. **Purged Static Partner Applications (`client/lib/supabase/auth.ts`)**:
+   - Removed the `app-seed-001` / "Roberto Dela Cruz" fallback seed from `getPartnerApplications()`.
+   - `localPartnerApplicationsStore` now initializes to an empty array `[]`.
+   - If the `partner_applications` table is empty or has no pending applications, the Admin portal cleanly displays the empty state with zero fake applications.
+3. **Purged Static Registered Shops (`client/lib/supabase/auth.ts`)**:
+   - Replaced `DEFAULT_REGISTERED_SHOPS` with an empty array `[]`.
+   - Replaced `localShopsStore` initialization with an empty array `[]`.
+   - Updated `getLaundryShops()` so that when Supabase returns data (even if empty `[]`), it strictly returns real database records and never falls back to mock shops.
+4. **Admin Portal Display Integrity (`client/app/admin/page.tsx`)**:
+   - Overview counter cards (Pending Review, Approved Partners, Rejected, Registered Shops), tab headers, directory lists, and the platform map now strictly reflect live database rows.
+   - Clean, informative empty states render for Applications, Shops, Owners, and Customers when database tables contain 0 rows.
+5. **Staff Reports & Completed Order Sync (`client/components/staff/StaffScannerView.tsx`)**:
+   - Reports and Financial Audit tab defaults to "All Records" scope, guaranteeing all completed database transactions are immediately visible upon navigation.
+   - Preserved timezone-tolerant filtering for "Today (Live)", "Yesterday", "Last 7 Days", and "This Month".
+6. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and all 13 routes prerendered cleanly.
