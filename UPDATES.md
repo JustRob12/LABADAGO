@@ -1836,3 +1836,34 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
    - Replaced CARTO Voyager URL with `ESRI_STREETS_URL` for owner branch location picking.
 5. **Build Verification**:
    - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation.
+
+
+### Update 55: Removed Assigned Machine Number Fields, Presets, and Badges from Staff, Owner, and Customer Views
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **User Request**: "remove the Assigned machine number please because it is not needed any more in the page modal of staff and also for the owner please" accompanied by screenshot of the Staff "Order In Progress" modal showing "Assigned Machine Number (Optional)", machine presets ("Washer 1"–"4", "Dryer 1"–"3"), and "Save Machine Number Only" button.
+
+#### Changes Implemented:
+1. **Staff Scanner Modal & Views (`StaffScannerView.tsx`)**:
+   - **Progress Modal (Action Form 3)**:
+     - Removed the "Assigned Machine Number (Optional)" text field, preset chips, and "Save Machine Number Only" button.
+     - Redesigned into a clean status view displaying the current status badge, a "Close" button, and the primary "Laundry is Done! Advance to 'Ready to Pick Up'" action button.
+   - **Receive Modal (Action Form 1)**:
+     - Removed machine number input and quick preset chips.
+   - **Give Modal (Action Form 2)**:
+     - Removed "Washed in: {machine_number}" text.
+   - **Tables & Cards**:
+     - Removed machine badges from Processing and Ready queue cards.
+     - Removed the "Machine" column from the Transaction Audit Log table and adjusted table spans.
+     - Removed unused state variables (`machineNumber`, `manualMachineNumber`, `MACHINE_PRESETS`).
+2. **Owner Counter Views (`WalkInIntake.tsx`)**:
+   - Removed `machineNumber` and `manualMachineNumber` states.
+   - Removed machine assignment from intake handlers (`handleKeepAsReceived`, `handleConfirmIntake`).
+   - Cleaned up SMS notification and toast messages (removed `(Assigned to ...)`, `(Washer ...)`, `and is in ...`).
+   - Removed the machine badge from the live orders queue table.
+3. **Customer Order Tracker (`CustomerOrderTracker.tsx`)**:
+   - Removed `{tx.machine_number ? ` (${tx.machine_number})` : ""}` from the live processing alert banner.
+   - Removed the `Machine #{tx.machine_number}` badge from the order details cards.
+4. **Build Verification**:
+   - Executed `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.

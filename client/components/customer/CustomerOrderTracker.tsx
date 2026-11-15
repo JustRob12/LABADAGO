@@ -468,7 +468,7 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                   <div className="space-y-0.5">
                     <p className="font-semibold text-blue-900">Order in Progress: Processing</p>
                     <p className="text-blue-700 text-[11px] leading-relaxed">
-                      Your clothes are currently being processed at <strong>{tx.shop_name || "the shop"}</strong>{tx.machine_number ? ` (${tx.machine_number})` : ""}. Feel free to go shopping or relax — we&apos;ll notify you as soon as they are <strong>Ready to Pick Up</strong>!
+                      Your clothes are currently being processed at <strong>{tx.shop_name || "the shop"}</strong>. Feel free to go shopping or relax — we&apos;ll notify you as soon as they are <strong>Ready to Pick Up</strong>!
                     </p>
                   </div>
                 </div>
@@ -629,14 +629,6 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
                 <div className="flex flex-wrap items-center gap-3">
                   <span>Load: <strong className="text-slate-800">{Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}</strong></span>
-
-                  {/* Machine Number Badge if assigned by staff */}
-                  {tx.machine_number && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                      <Sparkles size={11} className="text-cyan-600" />
-                      Machine #{tx.machine_number}
-                    </span>
-                  )}
 
                   <div className="flex items-center gap-1.5">
                     <CreditCard size={13} className="text-slate-400" />

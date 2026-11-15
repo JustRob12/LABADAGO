@@ -77,7 +77,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   const [walkInFilter, setWalkInFilter] = useState<"pending" | "all">("pending");
   const [intakeSuccess, setIntakeSuccess] = useState<string | null>(null);
   const [smsNotification, setSmsNotification] = useState<string | null>(null);
-  const [machineNumber, setMachineNumber] = useState<string>("");
 
   // Shop mismatch modal state
   const [showMismatchModal, setShowMismatchModal] = useState(false);
@@ -120,7 +119,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
   const [manualCustomerPhone, setManualCustomerPhone] = useState("");
   const [manualService, setManualService] = useState("Wash, Dry & Fold");
   const [manualLoads, setManualLoads] = useState("1");
-  const [manualMachineNumber, setManualMachineNumber] = useState("");
   const [manualSpecialNotes, setManualSpecialNotes] = useState("");
   const [manualPaymentTiming, setManualPaymentTiming] = useState<"pay_first" | "pay_on_complete">("pay_on_complete");
   const [manualPaymentMethod, setManualPaymentMethod] = useState<"Cash" | "GCash">("Cash");
@@ -184,7 +182,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         payment_method: isPayFirst ? manualPaymentMethod : undefined,
         payment_proof_url: uploadedProofUrl,
         payment_reference_no: isPayFirst ? manualReferenceNo.trim() || undefined : undefined,
-        machine_number: manualMachineNumber.trim() || undefined,
         special_notes: manualSpecialNotes.trim() || undefined,
       });
 
@@ -199,7 +196,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         // Reset manual form
         setManualCustomerName("");
         setManualCustomerPhone("");
-        setManualMachineNumber("");
         setManualSpecialNotes("");
         setManualLoads("1");
         setManualPaymentTiming("pay_on_complete");
@@ -305,7 +301,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       }
 
       setScannedTx(matchedTx);
-      setMachineNumber(matchedTx.machine_number || "");
       setActualWeight(String(matchedTx.weight_kg || 5.0));
       setSelectedPaymentTiming(matchedTx.payment_status === "Paid" ? "pay_first" : "pay_on_complete");
       setScanInput(matchedTx.tracking_number);
@@ -383,7 +378,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         paymentStatus,
         calculatedTotal,
         paymentNote,
-        machineNumber.trim() || undefined,
+        undefined,
         undefined,
         undefined,
         isPayFirst ? intakePaymentMethod : undefined,
@@ -392,18 +387,14 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       );
 
       setIntakeSuccess(
-        `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as PROCESSING at scale weight ${validWeight}kg${
-          machineNumber ? ` (Assigned to ${machineNumber})` : ""
-        }. Payment: ${
+        `Clothes for ${scannedTx.customer_name} (${scannedTx.tracking_number}) confirmed as PROCESSING at scale weight ${validWeight}kg. Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
         }.`
       );
       setSmsNotification(
-        `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been received at ${validWeight}kg${
-          machineNumber ? ` (${machineNumber})` : ""
-        } and is now PROCESSING! Payment: ${
+        `SMS sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been received at ${validWeight}kg and is now PROCESSING! Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
@@ -412,7 +403,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
 
       setScannedTx(null);
       setScanInput("");
-      setMachineNumber("");
       setIntakePaymentMethod("Cash");
       setIntakeReferenceNo("");
       setIntakeFile(null);
@@ -457,7 +447,7 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
         paymentStatus,
         calculatedTotal,
         paymentNote,
-        machineNumber.trim() || undefined,
+        undefined,
         undefined,
         undefined,
         isPayFirst ? intakePaymentMethod : undefined,
@@ -466,18 +456,14 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
       );
 
       setIntakeSuccess(
-        `Walk-in load for ${scannedTx.customer_name} accepted! Weighed at ${validWeight}kg${
-          machineNumber ? ` in ${machineNumber}` : ""
-        }. Status updated to Processing. Payment: ${
+        `Walk-in load for ${scannedTx.customer_name} accepted! Weighed at ${validWeight}kg. Status updated to Processing. Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY ON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
         }.`
       );
       setSmsNotification(
-        `SMS Notification sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been weighed (${validWeight}kg)${
-          machineNumber ? ` and is in ${machineNumber}` : ""
-        } and is now PROCESSING! Payment: ${
+        `SMS Notification sent to ${scannedTx.customer_phone}: "LabadaGo: Your laundry (${scannedTx.tracking_number}) has been weighed (${validWeight}kg) and is now PROCESSING! Payment: ${
           isPayFirst
             ? `PAID via ${intakePaymentMethod} (₱${calculatedTotal.toFixed(2)})`
             : "PAY UPON PICKUP (₱" + calculatedTotal.toFixed(2) + ")"
@@ -486,7 +472,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
 
       setScannedTx(null);
       setScanInput("");
-      setMachineNumber("");
       setIntakePaymentMethod("Cash");
       setIntakeReferenceNo("");
       setIntakeFile(null);
@@ -681,12 +666,6 @@ export const WalkInIntake: React.FC<WalkInIntakeProps> = ({
                     </td>
                     <td className="py-3 px-3 font-medium text-slate-800">
                       <p>{tx.service_name}</p>
-                      {tx.machine_number && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-200 mt-0.5">
-                          <Shirt size={10} />
-                          {tx.machine_number}
-                        </span>
-                      )}
                     </td>
                     <td className="py-3 px-3 text-slate-600 font-medium">
                       {Math.max(1, Math.round(tx.weight_kg / 8))} {Math.max(1, Math.round(tx.weight_kg / 8)) === 1 ? "load" : "loads"}

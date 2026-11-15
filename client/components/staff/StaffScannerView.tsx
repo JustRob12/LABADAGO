@@ -134,16 +134,6 @@ function playSound(type: "scan" | "success" | "warning") {
   }
 }
 
-const MACHINE_PRESETS = [
-  "Washer 1",
-  "Washer 2",
-  "Washer 3",
-  "Washer 4",
-  "Dryer 1",
-  "Dryer 2",
-  "Dryer 3",
-];
-
 export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   staffUser,
   assignedShop,
@@ -213,7 +203,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   const [manualCustomerPhone, setManualCustomerPhone] = useState("");
   const [manualService, setManualService] = useState("Wash, Dry & Fold");
   const [manualLoads, setManualLoads] = useState("1");
-  const [manualMachineNumber, setManualMachineNumber] = useState("");
   const [manualSpecialNotes, setManualSpecialNotes] = useState("");
   const [manualPaymentTiming, setManualPaymentTiming] = useState<"pay_first" | "pay_on_complete">("pay_on_complete");
   const [manualPaymentMethod, setManualPaymentMethod] = useState<"Cash" | "GCash">("Cash");
@@ -299,7 +288,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         payment_method: isPayFirst ? manualPaymentMethod : undefined,
         payment_proof_url: uploadedProofUrl,
         payment_reference_no: isPayFirst ? manualReferenceNo.trim() || undefined : undefined,
-        machine_number: manualMachineNumber.trim() || undefined,
         special_notes: manualSpecialNotes.trim() || undefined,
         staff_id: staffUser.id,
       });
@@ -313,7 +301,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         // Reset
         setManualCustomerName("");
         setManualCustomerPhone("");
-        setManualMachineNumber("");
         setManualSpecialNotes("");
         setManualLoads("1");
         setManualPaymentTiming("pay_on_complete");
@@ -342,7 +329,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
   const [autoActionType, setAutoActionType] = useState<"receive" | "give" | "progress" | "completed" | null>(null);
 
   // Form states for Receive action
-  const [machineNumber, setMachineNumber] = useState<string>("");
   const [weightInput, setWeightInput] = useState<string>("5.0");
   const [specialNotesInput, setSpecialNotesInput] = useState<string>("");
   const [paymentChoice, setPaymentChoice] = useState<"unpaid" | "paid">("unpaid");
@@ -657,7 +643,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
 
   const prepareOrderActionModal = (tx: LaundryTransaction) => {
     setActiveScannedTx(tx);
-    setMachineNumber(tx.machine_number || "");
     setWeightInput(String(tx.weight_kg || 5.0));
     setSpecialNotesInput(tx.special_notes || "");
     setPaymentChoice(tx.payment_status === "Paid" ? "paid" : "unpaid");
@@ -675,7 +660,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       // AUTOMATIC: GIVE / DISPATCH LAUNDRY
       setAutoActionType("give");
     } else if (["Received", "Washing", "Drying", "Folding"].includes(tx.status)) {
-      // ORDER IN PROGRESS: Can change machine or mark ready
+      // ORDER IN PROGRESS: Mark ready
       setAutoActionType("progress");
     } else {
       // Completed or cancelled
@@ -717,7 +702,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         finalPaymentStatus,
         totalAmount,
         specialNotesInput.trim() || undefined,
-        machineNumber.trim() || undefined,
+        undefined,
         staffUser.id,
         staffUser.full_name,
         paymentChoice === "paid" ? staffPayMethod : undefined,
@@ -728,8 +713,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       if (success) {
         showToast(
           "success",
-          `Order #${activeScannedTx.tracking_number} received & tagged as Processing! ${machineNumber ? `Assigned to ${machineNumber}.` : ""
-          } ${paymentChoice === "paid" ? `(Paid via ${staffPayMethod})` : ""}`
+          `Order #${activeScannedTx.tracking_number} received & tagged as Processing! ${paymentChoice === "paid" ? `(Paid via ${staffPayMethod})` : ""}`
         );
         setActiveScannedTx(null);
         setAutoActionType(null);
@@ -810,7 +794,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     }
   };
 
-  // Update order in progress (e.g. mark Ready for Pickup or change machine)
+  // Update order in progress (e.g. mark Ready for Pickup)
   const handleUpdateProgress = async (newStatus?: OrderStatus) => {
     if (!activeScannedTx) return;
     setIsProcessing(true);
@@ -824,7 +808,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         undefined,
         undefined,
         specialNotesInput.trim() || undefined,
-        machineNumber.trim() || undefined,
+        undefined,
         staffUser.id,
         staffUser.full_name
       );
@@ -856,8 +840,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
       <div className="flex items-center gap-1.5 flex-wrap pt-1">
         <span
           className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 border ${isPaid
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-amber-50 text-amber-700 border-amber-200"
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+            : "bg-amber-50 text-amber-700 border-amber-200"
             }`}
         >
           {isPaid ? <CheckCircle2 size={10} /> : <DollarSign size={10} />}
@@ -950,8 +934,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     }
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-xs transition-all cursor-pointer ${isActive
-                      ? "bg-blue-600 text-white font-semibold shadow-xs"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "bg-blue-600 text-white font-semibold shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1070,8 +1054,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         setIsSidebarOpenMobile(false);
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer ${isActive
-                          ? "bg-blue-600 text-white font-semibold"
-                          : "text-slate-600 hover:bg-slate-100"
+                        ? "bg-blue-600 text-white font-semibold"
+                        : "text-slate-600 hover:bg-slate-100"
                         }`}
                     >
                       <div className="flex items-center gap-3">
@@ -1161,7 +1145,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                               : currentSidebarTab === "reports"
                                 ? "Daily turnover and completed laundry summaries"
                                 : currentSidebarTab === "notifications"
-                                  ? "Alerts, incoming fast passes, and machine updates"
+                                  ? "Alerts, incoming fast passes, and order updates"
                                   : "Counter preferences, audio alerts, and branch details"}
               </p>
             </div>
@@ -1216,10 +1200,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
         {toastMessage && (
           <div
             className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl shadow-xl border text-xs sm:text-sm font-semibold flex items-center gap-2 max-w-sm w-[90%] transition-all animate-bounce ${toastMessage.type === "success"
-                ? "bg-emerald-900/90 text-emerald-100 border-emerald-500 backdrop-blur-md"
-                : toastMessage.type === "error"
-                  ? "bg-rose-900/90 text-rose-100 border-rose-500 backdrop-blur-md"
-                  : "bg-blue-900/90 text-blue-100 border-blue-500 backdrop-blur-md"
+              ? "bg-emerald-900/90 text-emerald-100 border-emerald-500 backdrop-blur-md"
+              : toastMessage.type === "error"
+                ? "bg-rose-900/90 text-rose-100 border-rose-500 backdrop-blur-md"
+                : "bg-blue-900/90 text-blue-100 border-blue-500 backdrop-blur-md"
               }`}
           >
             {toastMessage.type === "success" ? (
@@ -1279,8 +1263,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 <button
                   onClick={() => setActiveTab("washing")}
                   className={`p-4 rounded-2xl border text-left transition-all bg-white cursor-pointer ${activeTab === "washing"
-                      ? "border-2 border-blue-600 shadow-xs"
-                      : "border-slate-200 hover:border-slate-300"
+                    ? "border-2 border-blue-600 shadow-xs"
+                    : "border-slate-200 hover:border-slate-300"
                     }`}
                 >
                   <div className="flex items-center justify-between">
@@ -1298,8 +1282,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 <button
                   onClick={() => setActiveTab("ready")}
                   className={`p-4 rounded-2xl border text-left transition-all bg-white cursor-pointer ${activeTab === "ready"
-                      ? "border-2 border-teal-600 shadow-xs"
-                      : "border-slate-200 hover:border-slate-300"
+                    ? "border-2 border-teal-600 shadow-xs"
+                    : "border-slate-200 hover:border-slate-300"
                     }`}
                 >
                   <div className="flex items-center justify-between">
@@ -1317,8 +1301,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 <button
                   onClick={() => setActiveTab("completed")}
                   className={`p-4 rounded-2xl border text-left transition-all bg-white cursor-pointer ${activeTab === "completed"
-                      ? "border-2 border-emerald-600 shadow-xs"
-                      : "border-slate-200 hover:border-slate-300"
+                    ? "border-2 border-emerald-600 shadow-xs"
+                    : "border-slate-200 hover:border-slate-300"
                     }`}
                 >
                   <div className="flex items-center justify-between">
@@ -1421,8 +1405,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   <button
                     onClick={() => setActiveTab("washing")}
                     className={`px-3 py-2 rounded-t-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${activeTab === "washing"
-                        ? "bg-white text-blue-600 border-t-2 border-blue-600 shadow-2xs"
-                        : "text-slate-500 hover:text-slate-800"
+                      ? "bg-white text-blue-600 border-t-2 border-blue-600 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-800"
                       }`}
                   >
                     <span>Processing</span>
@@ -1434,8 +1418,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   <button
                     onClick={() => setActiveTab("ready")}
                     className={`px-3 py-2 rounded-t-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${activeTab === "ready"
-                        ? "bg-white text-teal-600 border-t-2 border-teal-600 shadow-2xs"
-                        : "text-slate-500 hover:text-slate-800"
+                      ? "bg-white text-teal-600 border-t-2 border-teal-600 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-800"
                       }`}
                   >
                     <span>Ready for Pickup</span>
@@ -1447,8 +1431,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   <button
                     onClick={() => setActiveTab("completed")}
                     className={`px-3 py-2 rounded-t-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${activeTab === "completed"
-                        ? "bg-white text-emerald-600 border-t-2 border-emerald-600 shadow-2xs"
-                        : "text-slate-500 hover:text-slate-800"
+                      ? "bg-white text-emerald-600 border-t-2 border-emerald-600 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-800"
                       }`}
                   >
                     <span>Completed</span>
@@ -1490,16 +1474,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                                 <span className="text-[10px] uppercase font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
                                   Processing
                                 </span>
-                                {tx.machine_number ? (
-                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <Shirt size={10} className="text-blue-600" />
-                                    {tx.machine_number}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded-md">
-                                    No Machine
-                                  </span>
-                                )}
                               </div>
                               <div className="text-sm font-bold text-slate-900">
                                 {tx.customer_name}
@@ -1546,11 +1520,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                                 <span className="text-[10px] uppercase font-bold bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded-md">
                                   Ready to Pick Up
                                 </span>
-                                {tx.machine_number && (
-                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md">
-                                    {tx.machine_number}
-                                  </span>
-                                )}
                               </div>
                               <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                 {tx.customer_name}
@@ -1780,22 +1749,20 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setCustomerFilterType("all")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        customerFilterType === "all"
-                          ? "bg-slate-900 text-white shadow-2xs"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${customerFilterType === "all"
+                        ? "bg-slate-900 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
                     >
                       All Customers ({customerDirectory.length})
                     </button>
                     <button
                       type="button"
                       onClick={() => setCustomerFilterType("active_today")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        customerFilterType === "active_today"
-                          ? "bg-blue-600 text-white shadow-2xs"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${customerFilterType === "active_today"
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
                     >
                       Active Today (
                       {
@@ -1810,11 +1777,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setCustomerFilterType("registered")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        customerFilterType === "registered"
-                          ? "bg-emerald-600 text-white shadow-2xs"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${customerFilterType === "registered"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
                     >
                       Registered Profiles ({customerDirectory.filter((c) => !c.id.startsWith("walkin-")).length})
                     </button>
@@ -1849,11 +1815,10 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2.5">
                               <div
-                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-                                  isRegistered
-                                    ? "bg-blue-600 text-white shadow-2xs"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${isRegistered
+                                  ? "bg-blue-600 text-white shadow-2xs"
+                                  : "bg-slate-100 text-slate-600"
+                                  }`}
                               >
                                 {initial}
                               </div>
@@ -2060,8 +2025,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         type="button"
                         onClick={() => setReportRange(rng.id as any)}
                         className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 border ${reportRange === rng.id
-                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+                          ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
                           }`}
                       >
                         {rng.label}
@@ -2327,7 +2292,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <th className="py-3 px-4">Order #</th>
                         <th className="py-3 px-4">Customer</th>
                         <th className="py-3 px-4">Service &amp; Weight</th>
-                        <th className="py-3 px-4">Machine</th>
                         <th className="py-3 px-4">Amount &amp; Payment</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Completed Date</th>
@@ -2337,7 +2301,7 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     <tbody className="divide-y divide-slate-100">
                       {reportFilteredTransactions.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <td colSpan={7} className="py-12 text-center text-slate-400">
                             <FileText size={32} className="mx-auto mb-2 text-slate-300" />
                             <p className="font-semibold text-slate-600">No completed transactions found.</p>
                             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -2369,17 +2333,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                               </div>
                             </td>
 
-                            {/* Machine Number */}
-                            <td className="py-3 px-4">
-                              {tx.machine_number ? (
-                                <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[11px] border border-slate-200">
-                                  {tx.machine_number}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 text-[11px] italic">—</span>
-                              )}
-                            </td>
-
                             {/* Amount & Payment */}
                             <td className="py-3 px-4">
                               <div className="font-black text-slate-900">
@@ -2388,8 +2341,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span
                                   className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border ${(tx.payment_status || "").toLowerCase() === "paid"
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                      : "bg-amber-50 text-amber-700 border-amber-200"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
                                     }`}
                                 >
                                   {tx.payment_status}
@@ -2633,8 +2586,8 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                     </span>
                     <span
                       className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${activeScannedTx.payment_status === "Paid"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-amber-50 text-amber-700 border-amber-200"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}
                     >
                       {activeScannedTx.payment_status}
@@ -2682,51 +2635,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
               {/* ACTION FORM 1: RECEIVE (INTAKE) */}
               {autoActionType === "receive" && (
                 <div className="space-y-4 pt-1">
-                  {/* MACHINE NUMBER (OPTIONAL) */}
-                  <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <Shirt size={14} className="text-blue-600" />
-                        Machine Number <span className="text-slate-400 text-[11px] font-normal">(Optional)</span>
-                      </label>
-                      <span className="text-[11px] text-slate-400">Where is this load placed?</span>
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder="e.g. Washer 1, Dryer 2, or leave blank"
-                      value={machineNumber}
-                      onChange={(e) => setMachineNumber(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs sm:text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-2xs"
-                    />
-
-                    {/* Quick Preset Chips */}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {MACHINE_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setMachineNumber(preset)}
-                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all border cursor-pointer ${machineNumber === preset
-                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                            }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                      {machineNumber && (
-                        <button
-                          type="button"
-                          onClick={() => setMachineNumber("")}
-                          className="text-xs px-2 py-1 rounded-lg font-medium text-rose-600 border border-rose-200 bg-rose-50 hover:bg-rose-100 cursor-pointer"
-                        >
-                          Clear Machine
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Weight & Payment confirmation */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -2821,11 +2729,6 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                       Confirm that all clothes, folded items, and hangers are handed over to{" "}
                       <b className="text-slate-900">{activeScannedTx.customer_name}</b>.
                     </p>
-                    {activeScannedTx.machine_number && (
-                      <p className="text-xs text-emerald-700 font-semibold pt-1">
-                        Washed in: {activeScannedTx.machine_number}
-                      </p>
-                    )}
                   </div>
 
                   {/* Payment settlement check */}
@@ -2904,73 +2807,32 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 </div>
               )}
 
-              {/* ACTION FORM 3: PROGRESS UPDATE (Shown in Screenshot!) */}
+              {/* ACTION FORM 3: PROGRESS UPDATE */}
               {autoActionType === "progress" && (
                 <div className="space-y-4 pt-1">
-                  <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600">Current Status:</span>
-                      <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 capitalize">
-                        {activeScannedTx.status}
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                        Assigned Machine Number <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Washer 2 or Dryer 1"
-                        value={machineNumber}
-                        onChange={(e) => setMachineNumber(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs sm:text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs transition-all"
-                      />
-                      <div className="flex flex-wrap gap-1.5 mt-2.5">
-                        {MACHINE_PRESETS.map((p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => setMachineNumber(p)}
-                            className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all border cursor-pointer ${machineNumber === p
-                                ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                              }`}
-                          >
-                            {p}
-                          </button>
-                        ))}
-                        {machineNumber && (
-                          <button
-                            type="button"
-                            onClick={() => setMachineNumber("")}
-                            className="text-xs px-2 py-1 rounded-lg font-medium text-rose-600 border border-rose-200 bg-rose-50 hover:bg-rose-100 cursor-pointer"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                  <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">Current Status:</span>
+                    <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 capitalize">
+                      {activeScannedTx.status}
+                    </span>
                   </div>
 
-                  <div className="pt-2 flex flex-col gap-2.5">
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setActiveScannedTx(null)}
+                      className="flex-1 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs py-3 rounded-2xl order-2 sm:order-1 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      Close
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleUpdateProgress("Ready")}
                       disabled={isProcessing}
-                      className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-teal-700/20 transition-all active:scale-[0.99] cursor-pointer"
+                      className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-3 rounded-2xl flex items-center justify-center gap-1.5 shadow-md shadow-teal-700/20 order-1 sm:order-2 transition-all active:scale-[0.99] cursor-pointer"
                     >
                       <Sparkles size={16} />
                       Laundry is Done! Advance to &quot;Ready to Pick Up&quot;
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateProgress()}
-                      disabled={isProcessing}
-                      className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-sm py-3 rounded-2xl transition-all cursor-pointer shadow-2xs"
-                    >
-                      Save Machine Number Only
                     </button>
                   </div>
                 </div>
