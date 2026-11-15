@@ -1139,3 +1139,48 @@ Ensure that when the administrator approves a partner application:
 2. **Build Verification**:
    - Ran `cd client && pnpm run build`.
    - All 13 routes compiled with **0 errors**.
+
+---
+
+### Update 37: Owner Dashboard Real Database Metrics (Removed All Static/Mock Data)
+
+**Objective**:
+1. Remove all static/hardcoded data, mock analytics, fake chart arrays, and placeholder fallback records from the Owner Analytics Dashboard.
+2. Connect all metrics directly to real Supabase database records (`transactions`, `branch_staff`, and `profiles`).
+3. Display `0` or clean empty states when a shop has no recorded transactions yet instead of falling back to fake numbers (`45`, `38`, `₱12,450`, etc.).
+
+#### Changes:
+1. **`client/components/owner/OwnerAnalyticsDashboard.tsx`**:
+   - Removed all `> 0 ? count : fallback` patterns for total transactions, completed count, revenue, unique customers, and staff.
+   - Replaced static date string (`"May 31, 2026 (Sunday)"`) with live filter options: `Today (Live)`, `Yesterday`, `Last 7 Days`, `Last 14 Days`, `This Month`, and `All Time`.
+   - Built dynamic `trendData` line chart points grouped by day/week from actual transaction `created_at` timestamps.
+   - Built dynamic `serviceBreakdown` from real transaction `service_name` values.
+   - Operational overview counts (`Currently Processing`, `Ready for Pickup`, `Completed Today`, `Pending`) now calculated strictly from live `tx.status` values.
+   - Staff Overview table and counts now loaded from live `branch_staff` table via `getBranchStaff(shop.id)`.
+   - Recent Activity feed and Customer Records modal now derive directly from real database transactions.
+
+---
+
+### Update 38: Owner Profile Clean View (Display Profile Only of the Owner)
+
+**Objective**:
+1. On the Owner Profile page (`/dashboard`), display **only the profile of the owner**.
+2. Remove the duplicated `OwnerAnalyticsDashboard` component from `/dashboard` (which belongs solely on the Owner Portal `/owner`).
+3. Enhance `UserProfileCard` to cleanly display the owner's profile details and registered laundry branch.
+
+#### Changes:
+1. **`client/app/dashboard/page.tsx`**:
+   - Removed `OwnerAnalyticsDashboard` import and rendering when `isOwner` is true.
+   - Updated top header for owners to `"Owner Profile"` with `"Go to Owner Dashboard"` quick navigation button.
+   - Removed unnecessary transaction querying from the profile page for owners to accelerate page load times.
+   - Passed `shops={shops}` to `UserProfileCard` to provide registered branch details.
+2. **`client/components/dashboard/UserProfileCard.tsx`**:
+   - Added support for `shops?: LaundryShop[]` prop.
+   - Display full name, avatar initial, Role Level: Shop Owner (1), Member ID, Email, Phone Number, Date of Birth, and Gender.
+   - If the user is an owner with a registered shop, display an active branch card showing their shop name, address, and status.
+3. **`client/components/dashboard/DashboardNav.tsx`**:
+   - Renamed `"Owner Hub & Profile"` navigation label to `"Owner Profile"`.
+   - Added `"Profile"` tab to the mobile bottom navigation bar for owners.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`.
+   - Compiled all 13 routes with **0 errors**.
