@@ -7,14 +7,12 @@ import {
   getCurrentUserProfile,
   getCachedUserProfile,
   getLaundryShops,
-  getLaundryTransactions,
   getPlatformUsers,
   getPartnerApplications,
 } from "@/lib/supabase/auth";
-import { UserProfile, UserRole, LaundryShop, LaundryTransaction, PartnerApplication } from "@/types/auth";
+import { UserProfile, UserRole, LaundryShop, PartnerApplication } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { UserProfileCard } from "@/components/dashboard/UserProfileCard";
-import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
 import { Button } from "@/components/ui/Button";
 import {
   MapPin,
@@ -40,7 +38,6 @@ function DashboardContent() {
     typeof window !== "undefined" ? getCachedUserProfile() : null
   );
   const [shops, setShops] = useState<LaundryShop[]>([]);
-  const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
   const [adminApps, setAdminApps] = useState<PartnerApplication[]>([]);
   const [isLoading, setIsLoading] = useState(() =>
@@ -60,9 +57,6 @@ function DashboardContent() {
         if (profile.role === UserRole.OWNER) {
           const ownerShops = await getLaundryShops(profile.id);
           setShops(ownerShops);
-          const shopIds = ownerShops.map((s) => s.id);
-          const txList = await getLaundryTransactions(undefined, undefined, shopIds);
-          setTransactions(txList);
         } else if (profile.role === UserRole.ADMIN) {
           const [allShops, allUsers, allApps] = await Promise.all([
             getLaundryShops(),
@@ -133,14 +127,13 @@ function DashboardContent() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                      Active Portal:{" "}
-                      {isAdmin
-                        ? "Platform Super Admin"
-                        : isStaff
-                          ? "Branch Staff Counter"
-                          : isOwner
-                            ? "Laundry Shop Owner"
-                            : "Customer"}
+                      {isOwner
+                        ? "Owner Profile"
+                        : isAdmin
+                          ? "Active Portal: Platform Super Admin"
+                          : isStaff
+                            ? "Active Portal: Branch Staff Counter"
+                            : "Active Portal: Customer"}
                     </h3>
                     <span
                       className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${isAdmin
@@ -169,7 +162,7 @@ function DashboardContent() {
                           ? `Assigned Branch: ${user.assigned_shop_name} • Counter Scanning & Dispatch (Role locked by owner)`
                           : "Counter QR Scanning & Laundry Handover (Role locked by owner)"
                         : isOwner
-                          ? "You have access to shop management, counter QR scanner, and business analytics."
+                          ? "Your registered shop owner profile information and credentials."
                           : "You have access to shop map, queue tracking, walk-in QR passes, and order tracker."}
                   </p>
                 </div>
@@ -217,7 +210,7 @@ function DashboardContent() {
                       rightIcon={<ArrowRight size={14} />}
                       className="text-xs font-bold"
                     >
-                      Enter Owner Portal
+                      Go to Owner Dashboard
                     </Button>
                   </Link>
                 ) : (
@@ -373,18 +366,8 @@ function DashboardContent() {
                 </div>
               </div>
             ) : isOwner ? (
-              /* Genuine Owner Analytics Dashboard View */
-              <div className="space-y-6">
-                <OwnerAnalyticsDashboard
-                  transactions={transactions}
-                  shop={shops[0] || null}
-                  shops={shops}
-                  user={user}
-                  onNavigateTab={(tab) => {
-                    router.push(`/owner?tab=${tab}`);
-                  }}
-                />
-              </div>
+              /* Owner Profile: display profile only of the owner */
+              null
             ) : (
               /* Non-Owner Quick Access Action Modules Grid */
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -497,7 +480,7 @@ function DashboardContent() {
             )}
 
             {/* Profile Information Card */}
-            {user && <UserProfileCard user={user} />}
+            {user && <UserProfileCard user={user} shops={shops} />}
           </>
         )}
       </main>

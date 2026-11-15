@@ -201,7 +201,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         {
           id: "owner-hub",
           href: "/dashboard",
-          label: "Owner Hub & Profile",
+          label: "Owner Profile",
           icon: UserIcon,
           active: pathname === "/dashboard",
         }
@@ -567,13 +567,23 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             </Link>
             <Link
               href="/owner?tab=setup"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${pathname === "/owner" && currentTab === "setup"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${pathname === "/owner" && currentTab === "setup"
                 ? "text-slate-900 font-bold bg-slate-100"
                 : "text-slate-500"
                 }`}
             >
               <Settings size={16} />
               <span>Setup</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2 rounded-xl transition-colors ${pathname === "/dashboard"
+                ? "text-blue-600 font-bold bg-blue-50"
+                : "text-slate-500"
+                }`}
+            >
+              <UserIcon size={16} />
+              <span>Profile</span>
             </Link>
           </>
         ) : (

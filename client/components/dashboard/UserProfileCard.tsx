@@ -1,5 +1,5 @@
 import React from "react";
-import { UserProfile, UserRole } from "@/types/auth";
+import { UserProfile, UserRole, LaundryShop } from "@/types/auth";
 import { RoleBadge } from "@/components/ui/Badge";
 import {
   User,
@@ -7,18 +7,26 @@ import {
   Phone,
   Calendar,
   Info,
+  Store,
+  MapPin,
+  Clock,
 } from "lucide-react";
 
 interface UserProfileCardProps {
   user: UserProfile;
+  shops?: LaundryShop[];
 }
 
-export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user }) => {
+export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user, shops = [] }) => {
+  const isOwner = user.role === UserRole.OWNER;
+  const ownedShop = shops.length > 0 ? shops[0] : null;
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+      {/* Profile Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-full border border-slate-200 bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-lg shrink-0">
+          <div className="w-14 h-14 rounded-full border border-slate-200 bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-xl shrink-0 shadow-2xs overflow-hidden">
             {user.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}
           </div>
           <div>
@@ -34,16 +42,16 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* Role status pill (shadcn badge style) */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
-          <Info size={13} className="text-slate-500 shrink-0" />
+        {/* Role status pill */}
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700">
+          <Info size={14} className="text-slate-500 shrink-0" />
           <span>
             Role Level:{" "}
-            <strong>
+            <strong className="text-slate-900">
               {user.role === UserRole.ADMIN
                 ? "Admin (0)"
                 : user.role === UserRole.OWNER
-                ? "Owner (1)"
+                ? "Shop Owner (1)"
                 : user.role === UserRole.STAFF
                 ? "Branch Staff (3)"
                 : "Customer (2)"}
@@ -53,7 +61,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user }) => {
       </div>
 
       {/* Profile Details Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Email */}
         <div className="flex items-start gap-3 p-3.5 rounded-lg border border-slate-200 bg-slate-50/50">
           <div className="w-8 h-8 rounded-md border border-slate-200 bg-white flex items-center justify-center text-blue-600 shadow-2xs shrink-0">
@@ -114,6 +122,36 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({ user }) => {
           </div>
         </div>
       </div>
+
+      {/* Owner Registered Laundry Shop Info */}
+      {isOwner && ownedShop && (
+        <div className="pt-2">
+          <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg border border-emerald-200 bg-white flex items-center justify-center text-emerald-600 shadow-2xs shrink-0">
+                <Store size={18} />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                  Registered Laundry Shop
+                </p>
+                <h4 className="text-sm font-bold text-slate-900 mt-0.5">
+                  {ownedShop.name}
+                </h4>
+                {ownedShop.address && (
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                    <MapPin size={12} className="text-slate-400 shrink-0" />
+                    <span>{ownedShop.address}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              Active Shop Branch
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
