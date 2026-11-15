@@ -2695,6 +2695,9 @@ export async function sendShopMessage(params: {
   const localList = getLocalMessagesStore();
   localList.push(newMsg);
   saveLocalMessagesStore(localList);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("labadago_messages_updated"));
+  }
 
   // 2. Insert into Supabase table
   try {
@@ -2718,6 +2721,9 @@ export async function sendShopMessage(params: {
 
     if (!error && data) {
       newMsg.id = data.id;
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("labadago_messages_updated"));
+      }
       return { success: true, data: newMsg };
     } else if (error) {
       console.warn("Supabase shop_messages notice (local store used):", error.message);
@@ -2997,6 +3003,9 @@ export async function markShopMessagesAsRead(
   });
   if (changed) {
     saveLocalMessagesStore(localList);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("labadago_messages_updated"));
+    }
   }
 
   // Update Supabase
@@ -3014,8 +3023,90 @@ export async function markShopMessagesAsRead(
     }
 
     await updateQuery;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("labadago_messages_updated"));
+    }
   } catch (err) {
     console.warn("Failed to mark messages read in Supabase:", err);
   }
 }
+
+/**
+ * Get total count of unread messages for the given user, based on their role and shop assignment.
+ * - Customer: incoming messages from shops (sender_role !== 'customer') where is_read is false
+ * - Staff: incoming customer messages (sender_role === 'customer') for their assigned branch
+ * - Owner: incoming customer messages (sender_role === 'customer') across their registered branches
+ */
+export async function getUnreadMessagesCount(
+  userId?: string,
+  role?: UserRole | number,
+  shopId?: string
+): Promise<number> {
+  if (!userId) return 0;
+
+  const isCustomer = role === UserRole.COSTUMER || role === 2;
+  const isStaff = role === UserRole.STAFF || role === 3;
+  const isOwner = role === UserRole.OWNER || role === 1;
+
+  let count = 0;
+  const countedIds = new Set<string>();
+
+  // 1. Query Supabase
+  try {
+    let query = supabase
+      .from("shop_messages")
+      .select("id, shop_id, customer_id, sender_role, is_read, laundry_shops(owner_id)")
+      .eq("is_read", false);
+
+    if (isCustomer) {
+      query = query.eq("customer_id", userId).neq("sender_role", "customer");
+    } else if (isStaff && shopId) {
+      query = query.eq("shop_id", shopId).eq("sender_role", "customer");
+    } else if (isOwner) {
+      query = query.eq("sender_role", "customer");
+    }
+
+    const { data, error } = await query;
+    if (!error && data) {
+      data.forEach((row: any) => {
+        if (isOwner && row.laundry_shops?.owner_id && row.laundry_shops.owner_id !== userId) {
+          return;
+        }
+        if (!countedIds.has(row.id)) {
+          countedIds.add(row.id);
+          count++;
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("Notice querying unread messages count from Supabase:", err);
+  }
+
+  // 2. Count from local store fallback
+  const localList = getLocalMessagesStore();
+  localList.forEach((m) => {
+    if (m.is_read) return;
+    if (countedIds.has(m.id)) return;
+
+    if (isCustomer) {
+      if (m.customer_id === userId && m.sender_role !== "customer") {
+        countedIds.add(m.id);
+        count++;
+      }
+    } else if (isStaff) {
+      if ((!shopId || m.shop_id === shopId) && m.sender_role === "customer") {
+        countedIds.add(m.id);
+        count++;
+      }
+    } else if (isOwner) {
+      if (m.sender_role === "customer") {
+        countedIds.add(m.id);
+        count++;
+      }
+    }
+  });
+
+  return count;
+}
+
 

@@ -1278,4 +1278,37 @@ Ensure that when the administrator approves a partner application:
     - Ran `cd client && pnpm run build`.
     - Verified all 13 routes compiled successfully with **0 errors**.
 
+---
+
+### Update 42: Live Red Number Badge for Unread Messages in Navigation
+
+**Objective**:
+1. Add a pulsing red number badge to the **"Customer Messages"** / **"Customer Inquiries"** navigation items whenever there are unread messages.
+2. Dynamically calculate the unread message count based on the user's active role:
+   - **Shop Owner**: counts unread customer inquiries across all their registered branches.
+   - **Branch Staff**: counts unread customer inquiries for their assigned shop branch.
+   - **Customer**: counts unread counter/shop replies directed to the customer.
+3. Display the red counter badge across:
+   - **Desktop Navigation Sidebar** (`DashboardNav.tsx` & `StaffScannerView.tsx`).
+   - **Mobile Floating Bottom Navigation Bar** (`DashboardNav.tsx`).
+   - **Staff Mobile Navigation Drawer** (`StaffScannerView.tsx`).
+4. Instant real-time updates via window event dispatch (`labadago_messages_updated`) and background polling every 5 seconds.
+
+#### Changes:
+1. **`client/lib/supabase/auth.ts`**:
+   - Implemented `getUnreadMessagesCount(userId, role, shopId)` supporting both Supabase and optimistic local store counting.
+   - Dispatched `labadago_messages_updated` on `sendShopMessage` and `markShopMessagesAsRead`.
+2. **`client/components/dashboard/DashboardNav.tsx`**:
+   - Added `unreadCount` live state with event listener and 5-second polling.
+   - Passed `badge: unreadCount` to `owner-messages`, `staff-messages`, and `cust-messages` items.
+   - Rendered red pill badge on desktop sidebar navigation links (`bg-rose-500 text-white animate-pulse`).
+   - Rendered floating red circular counter badge on the mobile bottom navigation bar over the `MessageSquare` icon.
+3. **`client/components/staff/StaffScannerView.tsx`**:
+   - Added `staffUnreadCount` live state for counter staff.
+   - Bound badge to desktop sidebar and mobile drawer navigation items.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`.
+   - Verified all 13 routes compiled with **0 errors**.
+
+
 

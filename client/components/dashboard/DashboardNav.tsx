@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/components/ui/BrandLogo";
-import { signOutUser, switchUserRole, getCachedUserProfile } from "@/lib/supabase/auth";
+import { signOutUser, switchUserRole, getCachedUserProfile, getUnreadMessagesCount } from "@/lib/supabase/auth";
 import { UserProfile, UserRole } from "@/types/auth";
 import {
   Menu,
@@ -69,12 +69,55 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
   // Synchronously read cached profile to prevent initial render flicker
   const activeUser = user || (typeof window !== "undefined" ? getCachedUserProfile() : null);
 
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
   const isAdmin = activeUser?.role === UserRole.ADMIN || (!activeUser && pathname?.startsWith("/admin"));
   const isStaff = !isAdmin && (activeUser?.role === UserRole.STAFF || (!activeUser && pathname?.startsWith("/staff")));
   const isOwner =
     !isStaff &&
     !isAdmin &&
     (activeUser?.role === UserRole.OWNER || (!activeUser && pathname?.startsWith("/owner")));
+
+  // Live count of unread messages across Owner, Staff, and Customer portals
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchUnread() {
+      if (!activeUser?.id) {
+        setUnreadCount(0);
+        return;
+      }
+      try {
+        const count = await getUnreadMessagesCount(
+          activeUser.id,
+          activeUser.role,
+          activeUser.assigned_shop_id || undefined
+        );
+        if (isMounted) setUnreadCount(count);
+      } catch {
+        // ignore
+      }
+    }
+
+    fetchUnread();
+
+    const handleUpdate = () => {
+      fetchUnread();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("labadago_messages_updated", handleUpdate);
+    }
+
+    const interval = setInterval(fetchUnread, 5000);
+
+    return () => {
+      isMounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("labadago_messages_updated", handleUpdate);
+      }
+      clearInterval(interval);
+    };
+  }, [activeUser?.id, activeUser?.role, activeUser?.assigned_shop_id]);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -160,6 +203,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           label: "Customer Inquiries",
           icon: MessageSquare,
           active: pathname === "/staff" && currentTab === "messages",
+          badge: unreadCount,
         },
         {
           id: "staff-profile",
@@ -195,6 +239,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
             label: "Customer Messages",
             icon: MessageSquare,
             active: pathname === "/owner" && currentTab === "messages",
+            badge: unreadCount,
           },
           {
             id: "owner-staff",
@@ -260,6 +305,7 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         label: "Messages & Inquiries",
         icon: MessageSquare,
         active: pathname === "/customer" && currentTab === "messages",
+        badge: unreadCount,
       },
       {
         id: "cust-hub",
@@ -326,13 +372,20 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
               <Link
                 key={item.id}
                 href={item.href}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${item.active
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${item.active
                   ? "bg-blue-600 text-white font-semibold shadow-xs"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
               >
-                <Icon size={16} className={item.active ? "text-white" : "text-slate-500"} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon size={16} className={item.active ? "text-white" : "text-slate-500"} />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-rose-500 text-white min-w-5 text-center shadow-xs animate-pulse shrink-0">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -557,7 +610,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                   : "text-slate-500"
               }`}
             >
-              <MessageSquare size={16} />
+              <div className="relative">
+                <MessageSquare size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 text-[9px] font-extrabold bg-rose-500 text-white rounded-full min-w-4 h-4 flex items-center justify-center border border-white shadow-xs animate-pulse">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span>Messages</span>
             </Link>
             <Link
@@ -602,7 +662,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                   : "text-slate-500"
               }`}
             >
-              <MessageSquare size={16} />
+              <div className="relative">
+                <MessageSquare size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 text-[9px] font-extrabold bg-rose-500 text-white rounded-full min-w-4 h-4 flex items-center justify-center border border-white shadow-xs animate-pulse">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span>Messages</span>
             </Link>
             <Link
@@ -693,7 +760,14 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
                   : "text-slate-500"
               }`}
             >
-              <MessageSquare size={16} />
+              <div className="relative">
+                <MessageSquare size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 text-[9px] font-extrabold bg-rose-500 text-white rounded-full min-w-4 h-4 flex items-center justify-center border border-white shadow-xs animate-pulse">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span>Messages</span>
             </Link>
           </>

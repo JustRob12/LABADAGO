@@ -16,6 +16,7 @@ import {
   getLaundryTransactions,
   uploadPaymentProof,
   createManualWalkInTransaction,
+  getUnreadMessagesCount,
 } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -153,12 +154,51 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
     "checkin" | "queue" | "processing" | "transactions" | "dashboard" | "customers" | "services" | "reports" | "notifications" | "settings" | "messages"
   >(initialSidebarTab === "messages" ? "messages" : "checkin");
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+  const [staffUnreadCount, setStaffUnreadCount] = useState<number>(0);
 
   useEffect(() => {
     if (initialSidebarTab === "messages") {
       setCurrentSidebarTab("messages");
     }
   }, [initialSidebarTab]);
+
+  // Live count of incoming customer inquiries for this staff's assigned shop
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchUnread() {
+      if (!staffUser?.id) return;
+      try {
+        const count = await getUnreadMessagesCount(
+          staffUser.id,
+          staffUser.role,
+          assignedShop?.id
+        );
+        if (isMounted) setStaffUnreadCount(count);
+      } catch {
+        // ignore
+      }
+    }
+
+    fetchUnread();
+
+    const handleUpdate = () => {
+      fetchUnread();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("labadago_messages_updated", handleUpdate);
+    }
+
+    const interval = setInterval(fetchUnread, 5000);
+
+    return () => {
+      isMounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("labadago_messages_updated", handleUpdate);
+      }
+      clearInterval(interval);
+    };
+  }, [staffUser?.id, staffUser?.role, assignedShop?.id]);
 
   // Staff entry mode toggle (Scan vs Manual Walk-in Entry)
   const [entryMode, setEntryMode] = useState<"scan" | "manual">("scan");
@@ -679,7 +719,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
             {[
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
               { id: "checkin", label: "Customer Check-In", icon: UserCheck },
-              { id: "messages", label: "Customer Inquiries", icon: MessageSquare },
+              {
+                id: "messages",
+                label: "Customer Inquiries",
+                icon: MessageSquare,
+                badge: staffUnreadCount > 0 ? staffUnreadCount : undefined,
+              },
               { id: "transactions", label: "Transactions", icon: FileText },
               { id: "queue", label: "Queue", icon: ListOrdered },
               { id: "processing", label: "Laundry Processing", icon: Shirt },
@@ -714,11 +759,11 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                   </div>
                   {item.badge && (
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                        isActive ? "bg-white text-blue-700" : "bg-rose-500 text-white"
+                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                        isActive ? "bg-white text-rose-600" : "bg-rose-500 text-white animate-pulse"
                       }`}
                     >
-                      {item.badge}
+                      {item.badge > 99 ? "99+" : item.badge}
                     </span>
                   )}
                 </button>
@@ -796,7 +841,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                 {[
                   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                   { id: "checkin", label: "Customer Check-In", icon: UserCheck },
-                  { id: "messages", label: "Customer Inquiries", icon: MessageSquare },
+                  {
+                    id: "messages",
+                    label: "Customer Inquiries",
+                    icon: MessageSquare,
+                    badge: staffUnreadCount > 0 ? staffUnreadCount : undefined,
+                  },
                   { id: "transactions", label: "Transactions", icon: FileText },
                   { id: "queue", label: "Queue", icon: ListOrdered },
                   { id: "processing", label: "Laundry Processing", icon: Shirt },
@@ -826,8 +876,12 @@ export const StaffScannerView: React.FC<StaffScannerViewProps> = ({
                         <span>{item.label}</span>
                       </div>
                       {item.badge && (
-                        <span className="text-[10px] font-bold px-1.5 rounded-full bg-rose-500 text-white">
-                          {item.badge}
+                        <span
+                          className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                            isActive ? "bg-white text-rose-600" : "bg-rose-500 text-white animate-pulse"
+                          }`}
+                        >
+                          {item.badge > 99 ? "99+" : item.badge}
                         </span>
                       )}
                     </button>
