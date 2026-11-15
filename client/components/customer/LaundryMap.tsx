@@ -56,13 +56,13 @@ export function calculateDistanceKm(
 }
 
 // CARTO Basemap Styles & User API Key
+const CARTO_API_KEY =
+  process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
+
 const withCartoKey = (baseUrl: string) => {
-  const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
-  // CARTO public basemaps do not require an API key; never append broken dummy keys
-  if (!key || key.startsWith("cb1_") || key.includes("your-carto") || key.length < 10) {
-    return baseUrl;
-  }
-  return `${baseUrl}?key=${key}`;
+  if (!CARTO_API_KEY) return baseUrl;
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${sep}api_key=${CARTO_API_KEY}`;
 };
 
 const CARTO_BASEMAPS = {
@@ -73,6 +73,10 @@ const CARTO_BASEMAPS = {
   positron: {
     name: "CARTO Light (Positron)",
     url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"),
+  },
+  osm: {
+    name: "OpenStreetMap (Standard)",
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
   },
   dark: {
     name: "CARTO Dark Matter",
@@ -109,7 +113,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
   const lastRadiusRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [basemapStyle, setBasemapStyle] = useState<"voyager" | "positron" | "dark">("voyager");
+  const [basemapStyle, setBasemapStyle] = useState<"voyager" | "positron" | "osm" | "dark">("voyager");
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [liveLocation, setLiveLocation] = useState<[number, number] | null>(
     initialUserLocation || [14.6500, 121.0500]
@@ -141,7 +145,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     };
   }, [sidebarOpen, isFullScreen, isInternalFullscreen]);
 
-  // Robust mobile resize & orientation listener to invalidateSize
+  // Robust container ResizeObserver & window resize listener
   useEffect(() => {
     const handleResize = () => {
       if (mapInstanceRef.current && mapInstanceRef.current._container) {
@@ -154,16 +158,29 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
 
-    const t1 = setTimeout(handleResize, 100);
-    const t2 = setTimeout(handleResize, 350);
-    const t3 = setTimeout(handleResize, 800);
+    let observer: ResizeObserver | null = null;
+    if (mapContainerRef.current && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        handleResize();
+      });
+      observer.observe(mapContainerRef.current);
+    }
+
+    const t1 = setTimeout(handleResize, 50);
+    const t2 = setTimeout(handleResize, 150);
+    const t3 = setTimeout(handleResize, 350);
+    const t4 = setTimeout(handleResize, 700);
+    const t5 = setTimeout(handleResize, 1200);
 
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("orientationchange", handleResize);
+      if (observer) observer.disconnect();
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
     };
   }, []);
 
@@ -275,13 +292,18 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
         mapInstanceRef.current = map;
 
-        setTimeout(() => {
+        const triggerInvalidate = () => {
           if (isMounted && mapInstanceRef.current && mapInstanceRef.current._container) {
             try {
-              mapInstanceRef.current.invalidateSize();
+              mapInstanceRef.current.invalidateSize({ animate: false });
             } catch (_) {}
           }
-        }, 200);
+        };
+
+        setTimeout(triggerInvalidate, 50);
+        setTimeout(triggerInvalidate, 150);
+        setTimeout(triggerInvalidate, 350);
+        setTimeout(triggerInvalidate, 700);
       } catch (err) {
         console.error("Error initializing CARTO Leaflet map:", err);
       }
@@ -889,8 +911,8 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       {/* Map Canvas */}
       <div
         ref={mapContainerRef}
-        className="w-full h-full z-10 cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "none" }}
+        className="w-full h-full min-h-[440px] z-10 cursor-grab active:cursor-grabbing"
+        style={{ touchAction: "none", minHeight: "440px" }}
       />
 
       {/* Floating Control Buttons (Positioned above floating bottom nav on mobile) */}

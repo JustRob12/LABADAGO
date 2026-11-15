@@ -698,3 +698,48 @@ Ensure that when the administrator approves a partner application:
    - Added `public.partner_applications` table schema with RLS policies and `approve_partner_application(p_application_id)` security-definer function for atomic shop provisioning and permanent `profiles.role = 1` upgrade.
 4. **Verification**:
    - Verified with Next.js Turbopack build (`pnpm run build`): **0 errors across all 13 routes**.
+
+---
+
+### Update 32: Fix Admin Map Display with CARTO API Key, Remove Owner Portal & Static Data from Admin, and Add Dedicated Shop Owners & Customers Views
+
+**Objective**:
+1. Fix the Admin and customer map display so map tiles render properly without blank canvases, utilizing the user's CARTO API key (`cb1_430d_1_0464d8b330e7d05226c320d8`), automatic Leaflet `ResizeObserver` / multi-interval `invalidateSize()`, and OpenStreetMap fallback.
+2. Remove "Owner Portal" and static data / mock charts (`OwnerAnalyticsDashboard`) from the Admin profile and navigation.
+3. Enable the Admin to inspect both **Shop Owners** (`/admin?tab=owners`) and **Customers** (`/admin?tab=customers`), alongside **Partner Applications**, **Shops View**, and **Platform Map**.
+
+#### Changes:
+1. **Interactive Map Display Fix (`client/components/customer/LaundryMap.tsx`)**:
+   - Updated CARTO basemap key handling in `withCartoKey()` to support user's API key `cb1_430d_1_0464d8b330e7d05226c320d8` (`api_key=${CARTO_API_KEY}`).
+   - Added a `ResizeObserver` on `mapContainerRef.current` and staggered invalidation calls (50ms, 150ms, 350ms, 700ms, 1200ms) to ensure Leaflet calculates non-zero container dimensions when switching tabs.
+   - Added `min-height: 440px` and explicit dimensions to container canvas.
+   - Enhanced `tileerror` fallback: individual tiles fall back to OpenStreetMap, and persistent tile errors automatically switch the basemap layer to OpenStreetMap Standard (`osm`).
+
+2. **Remove Owner Portal & Static Data from Admin Profile (`client/app/dashboard/page.tsx` & `DashboardNav.tsx`)**:
+   - Separated role checks: `isAdmin = user?.role === UserRole.ADMIN` and `isOwner = user?.role === UserRole.OWNER`.
+   - For Admin on `/dashboard`:
+     - Completely removed `OwnerAnalyticsDashboard` with its mock revenue (`₱12,450`), fake transaction trends line chart, and static staff overview.
+     - Removed the "Enter Owner Portal" button.
+     - Displayed the dedicated **Platform Super Admin Hub** with real metrics (Total Platform Shops, Shop Owners, Registered Customers, Pending Applications) and quick links to Shops View, Shop Owners, Customers Directory, Platform Map, and Partner Applications.
+   - In `DashboardNav.tsx`:
+     - Removed "Owner Portal" (`/owner`) from Admin's navigation menu.
+     - Removed "Customer View" (`/customer`) from Admin's navigation menu.
+     - Updated desktop sidebar with: `Partner Applications`, `Shops View`, `Shop Owners`, `Customers`, `Platform Map`, and `Admin Profile & Hub`.
+     - Updated mobile bottom floating nav for Admin with: `Partners`, `Shops`, `Owners`, `Users`, `Map`, and `Hub`.
+
+3. **Dedicated Shop Owners & Customers Management Tabs (`client/app/admin/page.tsx` & `client/lib/supabase/auth.ts`)**:
+   - Added `getPlatformUsers()` in `client/lib/supabase/auth.ts`: queries `profiles` joined with `laundry_shops`, merging with local store and seeded default owners/customers.
+   - Added **Shop Owners Tab** (`/admin?tab=owners`):
+     - Displays all verified shop owners with initials avatar, full name, email, phone number, joined date, and status badge (`Shop Owner (Role 1)`).
+     - Shows assigned laundry branch with address and a direct "Locate on Map" action button.
+   - Added **Customers Tab** (`/admin?tab=customers`):
+     - Displays all registered customer accounts with initials avatar, full name, email, phone number, gender, registration date, and status badge (`Customer (Role 2)`).
+   - Added real-time search filtering across shop owners (by name, email, phone, shop) and customers (by name, email, phone, gender).
+
+4. **Map Tab Sizing in Admin (`client/app/admin/page.tsx`)**:
+   - Replaced `<div className="flex-1 w-full relative min-h-0">` with an explicit pixel container `<div className="w-full h-[650px] min-h-[500px] relative">`.
+   - Guaranteed Leaflet tile requests and layout are never blocked by 0px height calculation.
+
+5. **Build & Production Verification**:
+   - Executed `cd client && pnpm run build`.
+   - All 13 static pages compiled successfully in 1.8s with **0 errors**.

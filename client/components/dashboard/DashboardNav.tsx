@@ -109,9 +109,23 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
         {
           id: "admin-shops",
           href: "/admin?tab=shops",
-          label: "Platform Shops",
+          label: "Shops View",
           icon: Store,
           active: pathname === "/admin" && currentTab === "shops",
+        },
+        {
+          id: "admin-owners",
+          href: "/admin?tab=owners",
+          label: "Shop Owners",
+          icon: Users,
+          active: pathname === "/admin" && currentTab === "owners",
+        },
+        {
+          id: "admin-customers",
+          href: "/admin?tab=customers",
+          label: "Customers",
+          icon: UserIcon,
+          active: pathname === "/admin" && currentTab === "customers",
         },
         {
           id: "admin-map",
@@ -119,20 +133,6 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           label: "Platform Map",
           icon: MapPin,
           active: pathname === "/admin" && currentTab === "map",
-        },
-        {
-          id: "admin-owner-view",
-          href: "/owner",
-          label: "Owner Portal",
-          icon: LayoutDashboard,
-          active: pathname?.startsWith("/owner"),
-        },
-        {
-          id: "admin-customer-view",
-          href: "/customer",
-          label: "Customer View",
-          icon: Store,
-          active: pathname?.startsWith("/customer"),
         },
         {
           id: "admin-hub",
@@ -457,45 +457,67 @@ const DashboardNavContent: React.FC<DashboardNavProps> = ({
           <>
             <Link
               href="/admin?tab=applications"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
                 pathname === "/admin" && (!currentTab || currentTab === "applications")
                   ? "text-indigo-600 font-bold bg-indigo-50"
                   : "text-slate-500"
               }`}
             >
-              <FileText size={16} />
+              <FileText size={15} />
               <span>Partners</span>
             </Link>
             <Link
               href="/admin?tab=shops"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
                 pathname === "/admin" && currentTab === "shops"
                   ? "text-indigo-600 font-bold bg-indigo-50"
                   : "text-slate-500"
               }`}
             >
-              <Store size={16} />
+              <Store size={15} />
               <span>Shops</span>
             </Link>
             <Link
+              href="/admin?tab=owners"
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
+                pathname === "/admin" && currentTab === "owners"
+                  ? "text-indigo-600 font-bold bg-indigo-50"
+                  : "text-slate-500"
+              }`}
+            >
+              <Users size={15} />
+              <span>Owners</span>
+            </Link>
+            <Link
+              href="/admin?tab=customers"
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
+                pathname === "/admin" && currentTab === "customers"
+                  ? "text-indigo-600 font-bold bg-indigo-50"
+                  : "text-slate-500"
+              }`}
+            >
+              <UserIcon size={15} />
+              <span>Users</span>
+            </Link>
+            <Link
               href="/admin?tab=map"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
                 pathname === "/admin" && currentTab === "map"
                   ? "text-indigo-600 font-bold bg-indigo-50"
                   : "text-slate-500"
               }`}
             >
-              <MapPin size={16} />
+              <MapPin size={15} />
               <span>Map</span>
             </Link>
             <Link
               href="/dashboard"
-              className={`flex flex-col items-center gap-0.5 text-[10px] font-medium py-1 px-2.5 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-0.5 text-[9px] font-medium py-1 px-1.5 rounded-xl transition-colors ${
                 pathname === "/dashboard" ? "text-indigo-600 font-bold bg-indigo-50" : "text-slate-500"
               }`}
             >
-              <UserIcon size={16} />
-              <span>Profile</span>
+              <ShieldCheck size={15} />
+              <span>Hub</span>
             </Link>
           </>
         ) : isStaff ? (

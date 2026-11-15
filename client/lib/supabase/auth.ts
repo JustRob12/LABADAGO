@@ -200,12 +200,113 @@ export const DEFAULT_REGISTERED_SHOPS: LaundryShop[] = [
   },
 ];
 
+const DEFAULT_PLATFORM_USERS: UserProfile[] = [
+  // Shop Owners (Role = 1)
+  {
+    id: "usr-owner-001",
+    email: "maria.santos@email.com",
+    full_name: "Maria Elena Santos",
+    date_of_birth: "1988-04-12",
+    phone_number: "0917 123 4567",
+    gender: "Female",
+    role: UserRole.OWNER,
+    assigned_shop_id: "shop-001",
+    assigned_shop_name: "AquaPure Clean Express",
+    created_at: "2026-01-15T08:30:00Z",
+  },
+  {
+    id: "usr-owner-002",
+    email: "juan.reyes@email.com",
+    full_name: "Juan Carlo Reyes",
+    date_of_birth: "1985-09-23",
+    phone_number: "0918 234 5678",
+    gender: "Male",
+    role: UserRole.OWNER,
+    assigned_shop_id: "shop-002",
+    assigned_shop_name: "Fresh Spin Laundry & Dry Clean",
+    created_at: "2026-02-10T10:15:00Z",
+  },
+  {
+    id: "usr-owner-003",
+    email: "ricardo.lim@email.com",
+    full_name: "Ricardo Lim",
+    date_of_birth: "1990-11-05",
+    phone_number: "0921 345 6789",
+    gender: "Male",
+    role: UserRole.OWNER,
+    assigned_shop_id: "shop-003",
+    assigned_shop_name: "Bubble Care Self-Service & Full Laundry",
+    created_at: "2026-03-01T14:20:00Z",
+  },
+  // Customers (Role = 2)
+  {
+    id: "usr-cust-001",
+    email: "beatrice.g@email.com",
+    full_name: "Beatrice Gomez",
+    date_of_birth: "1996-07-19",
+    phone_number: "0915 882 1234",
+    gender: "Female",
+    role: UserRole.COSTUMER,
+    created_at: "2026-02-20T09:00:00Z",
+  },
+  {
+    id: "usr-cust-002",
+    email: "daniel.padilla@email.com",
+    full_name: "Daniel Padilla",
+    date_of_birth: "1994-03-14",
+    phone_number: "0927 345 7890",
+    gender: "Male",
+    role: UserRole.COSTUMER,
+    created_at: "2026-03-05T11:45:00Z",
+  },
+  {
+    id: "usr-cust-003",
+    email: "angela.mercado@email.com",
+    full_name: "Angela Mercado",
+    date_of_birth: "1998-12-02",
+    phone_number: "0919 456 1234",
+    gender: "Female",
+    role: UserRole.COSTUMER,
+    created_at: "2026-03-12T16:10:00Z",
+  },
+  {
+    id: "usr-cust-004",
+    email: "mark.tan@email.com",
+    full_name: "Mark Kenneth Tan",
+    date_of_birth: "1992-06-28",
+    phone_number: "0922 890 1234",
+    gender: "Male",
+    role: UserRole.COSTUMER,
+    created_at: "2026-03-18T13:25:00Z",
+  },
+  {
+    id: "usr-cust-005",
+    email: "sofia.rodriguez@email.com",
+    full_name: "Sofia Rodriguez",
+    date_of_birth: "1999-01-30",
+    phone_number: "0930 123 4567",
+    gender: "Female",
+    role: UserRole.COSTUMER,
+    created_at: "2026-04-02T15:40:00Z",
+  },
+  {
+    id: "usr-cust-006",
+    email: "christian.baut@email.com",
+    full_name: "Christian Bautista",
+    date_of_birth: "1993-08-15",
+    phone_number: "0917 555 4321",
+    gender: "Male",
+    role: UserRole.COSTUMER,
+    created_at: "2026-04-10T10:05:00Z",
+  },
+];
+
 // In-memory fallback stores for session
 let localShopsStore: LaundryShop[] = [...DEFAULT_REGISTERED_SHOPS];
 let localTransactionsStore: LaundryTransaction[] = [];
 let localStaffStore: BranchStaffMember[] = [];
 let localReviewsStore: ShopReview[] = [];
-let localProfilesStore: UserProfile[] = [];
+let localProfilesStore: UserProfile[] = [...DEFAULT_PLATFORM_USERS];
 let localPartnerApplicationsStore: PartnerApplication[] = [];
 
 /**
@@ -2509,4 +2610,60 @@ export async function reviewPartnerApplication(
     const message = err instanceof Error ? err.message : "Failed to review application.";
     return { success: false, error: message };
   }
+}
+
+/**
+ * Fetch all platform users (Owners and Customers) for Admin inspection
+ */
+export async function getPlatformUsers(): Promise<UserProfile[]> {
+  const userMap = new Map<string, UserProfile>();
+
+  // 1. Seed defaults first
+  DEFAULT_PLATFORM_USERS.forEach((u) => userMap.set(u.id, u));
+
+  // 2. Query Supabase database profiles
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*, laundry_shops(name)")
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      data.forEach((p: any) => {
+        const assignedName =
+          p.laundry_shops?.name ||
+          (p.assigned_shop_id ? localShopsStore.find((s) => s.id === p.assigned_shop_id)?.name : null) ||
+          p.assigned_shop_name ||
+          null;
+
+        userMap.set(p.id, {
+          id: p.id,
+          email: p.email || null,
+          full_name: p.full_name || "User",
+          date_of_birth: p.date_of_birth || "",
+          phone_number: p.phone_number || "",
+          gender: p.gender || "Prefer not to say",
+          role: Number(p.role) as UserRole,
+          assigned_shop_id: p.assigned_shop_id || null,
+          assigned_shop_name: assignedName,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+        });
+      });
+    }
+  } catch (err) {
+    console.warn("Notice querying profiles from Supabase, checking local profiles store:", err);
+  }
+
+  // 3. Merge in-memory local profiles store
+  localProfilesStore.forEach((u) => {
+    // If shop name missing but assigned_shop_id exists, match with shop
+    if (u.assigned_shop_id && !u.assigned_shop_name) {
+      const matchShop = localShopsStore.find((s) => s.id === u.assigned_shop_id);
+      if (matchShop) u.assigned_shop_name = matchShop.name;
+    }
+    userMap.set(u.id, u);
+  });
+
+  return Array.from(userMap.values());
 }

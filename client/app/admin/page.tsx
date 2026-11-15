@@ -8,6 +8,7 @@ import {
   getPartnerApplications,
   reviewPartnerApplication,
   getLaundryShops,
+  getPlatformUsers,
   switchUserRole,
 } from "@/lib/supabase/auth";
 import { UserProfile, UserRole, PartnerApplication, LaundryShop } from "@/types/auth";
@@ -24,6 +25,7 @@ import {
   Phone,
   Mail,
   User,
+  Users,
   ArrowRight,
   RefreshCw,
   Search,
@@ -51,15 +53,18 @@ function AdminPageContent() {
   );
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
-  // Applications & Shops data
+  // Applications, Shops & Platform Users data
   const [applications, setApplications] = useState<PartnerApplication[]>([]);
   const [activeShops, setActiveShops] = useState<LaundryShop[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [selectedShop, setSelectedShop] = useState<LaundryShop | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // Active Tab: "applications" | "shops" | "map"
-  const [currentTab, setCurrentTab] = useState<"applications" | "shops" | "map">(() => {
+  // Active Tab: "applications" | "shops" | "owners" | "customers" | "map"
+  const [currentTab, setCurrentTab] = useState<"applications" | "shops" | "owners" | "customers" | "map">(() => {
     if (tabParam === "shops") return "shops";
+    if (tabParam === "owners") return "owners";
+    if (tabParam === "customers") return "customers";
     if (tabParam === "map") return "map";
     return "applications";
   });
@@ -68,6 +73,10 @@ function AdminPageContent() {
   useEffect(() => {
     if (tabParam === "shops") {
       setCurrentTab("shops");
+    } else if (tabParam === "owners") {
+      setCurrentTab("owners");
+    } else if (tabParam === "customers") {
+      setCurrentTab("customers");
     } else if (tabParam === "map") {
       setCurrentTab("map");
     } else if (tabParam === "applications") {
@@ -75,7 +84,7 @@ function AdminPageContent() {
     }
   }, [tabParam]);
 
-  const handleTabChange = (tab: "applications" | "shops" | "map") => {
+  const handleTabChange = (tab: "applications" | "shops" | "owners" | "customers" | "map") => {
     setCurrentTab(tab);
     router.push(`/admin?tab=${tab}`, { scroll: false });
   };
@@ -99,12 +108,14 @@ function AdminPageContent() {
   const loadData = async () => {
     setIsLoadingData(true);
     try {
-      const [apps, shops] = await Promise.all([
+      const [apps, shops, platformUsers] = await Promise.all([
         getPartnerApplications(),
         getLaundryShops(),
+        getPlatformUsers(),
       ]);
       setApplications(apps);
       setActiveShops(shops);
+      setUsers(platformUsers);
       if (shops.length > 0 && !selectedShop) {
         setSelectedShop(shops[0]);
       }
@@ -151,6 +162,32 @@ function AdminPageContent() {
       shop.name.toLowerCase().includes(query) ||
       shop.address.toLowerCase().includes(query) ||
       shop.phone_number.includes(query)
+    );
+  });
+
+  // Shop Owners & Customers lists
+  const ownersList = users.filter((u) => u.role === UserRole.OWNER);
+  const customersList = users.filter((u) => u.role === UserRole.COSTUMER);
+
+  const filteredOwners = ownersList.filter((owner) => {
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      !q ||
+      owner.full_name.toLowerCase().includes(q) ||
+      (owner.email && owner.email.toLowerCase().includes(q)) ||
+      owner.phone_number.includes(q) ||
+      (owner.assigned_shop_name && owner.assigned_shop_name.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredCustomers = customersList.filter((cust) => {
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      !q ||
+      cust.full_name.toLowerCase().includes(q) ||
+      (cust.email && cust.email.toLowerCase().includes(q)) ||
+      cust.phone_number.includes(q) ||
+      (cust.gender && cust.gender.toLowerCase().includes(q))
     );
   });
 
@@ -379,11 +416,11 @@ function AdminPageContent() {
         {/* Tab Switcher & Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Main Clean Navigation Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-2xl shadow-2xs self-start sm:self-auto">
+          <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-2xl shadow-2xs self-start sm:self-auto overflow-x-auto max-w-full">
             <button
               type="button"
               onClick={() => handleTabChange("applications")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 currentTab === "applications"
                   ? "bg-indigo-600 text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -396,20 +433,46 @@ function AdminPageContent() {
             <button
               type="button"
               onClick={() => handleTabChange("shops")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 currentTab === "shops"
                   ? "bg-indigo-600 text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <Store size={14} />
-              <span>Platform Shops ({activeShops.length})</span>
+              <span>Shops View ({activeShops.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("owners")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                currentTab === "owners"
+                  ? "bg-indigo-600 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Users size={14} />
+              <span>Shop Owners ({ownersList.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("customers")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                currentTab === "customers"
+                  ? "bg-indigo-600 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <User size={14} />
+              <span>Customers ({customersList.length})</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTabChange("map")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 currentTab === "map"
                   ? "bg-indigo-600 text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -431,7 +494,11 @@ function AdminPageContent() {
                 placeholder={
                   currentTab === "applications"
                     ? "Search shop, applicant, or address..."
-                    : "Search platform shops..."
+                    : currentTab === "shops"
+                    ? "Search platform shops..."
+                    : currentTab === "owners"
+                    ? "Search shop owners by name, email, or shop..."
+                    : "Search customers by name, email, or phone..."
                 }
                 className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 shadow-2xs"
               />
@@ -882,7 +949,225 @@ function AdminPageContent() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: PLATFORM MAP (INTERACTIVE LEAFLET SHOPS MAP)                       */}
+        {/* TAB 3: SHOP OWNERS (THE ADMIN CAN SEE OWNERS)                             */}
+        {/* ========================================================================= */}
+        {currentTab === "owners" && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Users size={18} className="text-amber-600" />
+                  <span>All Registered Laundry Shop Owners</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Platform laundry shop owners, verified store proprietors, and their assigned laundry branch locations
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-xl">
+                  {filteredOwners.length} Shop Owners
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("shops")}
+                  className="px-3 py-1 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  View Shops Directory
+                </button>
+              </div>
+            </div>
+
+            {filteredOwners.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                <Users size={40} className="mx-auto mb-2 text-slate-300" />
+                <p className="font-bold text-slate-700 text-sm">No shop owners match your search.</p>
+                <p className="text-slate-500 mt-1">Try clearing your search query or review partner applications to approve new owners.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOwners.map((owner) => {
+                  const assignedShop = activeShops.find(
+                    (s) => s.id === owner.assigned_shop_id || s.name === owner.assigned_shop_name
+                  );
+                  return (
+                    <div
+                      key={owner.id}
+                      className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all space-y-4 flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        {/* Owner Header */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                              {owner.full_name ? owner.full_name.charAt(0).toUpperCase() : "O"}
+                            </div>
+                            <div>
+                              <h4 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                                {owner.full_name}
+                              </h4>
+                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                Shop Owner (Role 1)
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Contact Info */}
+                        <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2 truncate">
+                            <Mail size={13} className="text-slate-400 shrink-0" />
+                            <span className="truncate">{owner.email || "No email registered"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Phone size={13} className="text-slate-400 shrink-0" />
+                            <span>{owner.phone_number || "No phone registered"}</span>
+                          </div>
+                          {owner.created_at && (
+                            <div className="flex items-center gap-2 text-slate-400 text-[11px] pt-1 border-t border-slate-200/50">
+                              <Clock size={11} className="shrink-0" />
+                              <span>Joined: {new Date(owner.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Assigned Laundry Branch */}
+                        <div className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/40 space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">
+                            Assigned Laundry Branch
+                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 truncate">
+                              <Store size={14} className="text-indigo-600 shrink-0" />
+                              <span className="truncate">{owner.assigned_shop_name || assignedShop?.name || "Main Registered Branch"}</span>
+                            </div>
+                          </div>
+                          {assignedShop?.address && (
+                            <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
+                              <MapPin size={11} className="text-slate-400 shrink-0" />
+                              <span>{assignedShop.address}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                          <CheckCircle2 size={12} />
+                          Active &amp; Approved
+                        </span>
+                        {assignedShop && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectShopOnMap(assignedShop)}
+                            className="px-3 py-1 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <MapPin size={12} />
+                            <span>Locate on Map</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: CUSTOMERS (THE ADMIN CAN SEE CUSTOMERS)                            */}
+        {/* ========================================================================= */}
+        {currentTab === "customers" && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <User size={18} className="text-emerald-600" />
+                  <span>All Registered Platform Customers</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Registered customer accounts utilizing live order tracking, walk-in QR passes, and shop discovery
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                  {filteredCustomers.length} Customers
+                </span>
+              </div>
+            </div>
+
+            {filteredCustomers.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                <User size={40} className="mx-auto mb-2 text-slate-300" />
+                <p className="font-bold text-slate-700 text-sm">No customers match your search.</p>
+                <p className="text-slate-500 mt-1">Try clearing your search query or check back as new customers sign up.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredCustomers.map((cust) => (
+                  <div
+                    key={cust.id}
+                    className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all space-y-4 flex flex-col justify-between"
+                  >
+                    <div className="space-y-3">
+                      {/* Customer Header */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                          {cust.full_name ? cust.full_name.charAt(0).toUpperCase() : "C"}
+                        </div>
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                            {cust.full_name}
+                          </h4>
+                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Customer (Role 2)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Contact Info */}
+                      <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-2 truncate">
+                          <Mail size={13} className="text-slate-400 shrink-0" />
+                          <span className="truncate">{cust.email || "No email registered"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Phone size={13} className="text-slate-400 shrink-0" />
+                          <span>{cust.phone_number || "No phone registered"}</span>
+                        </div>
+                        {cust.gender && (
+                          <div className="flex items-center gap-2 text-slate-500 pt-1 border-t border-slate-200/50 text-[11px]">
+                            <span>Gender: <strong className="text-slate-700">{cust.gender}</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Member Since / Status */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Clock size={11} />
+                        {cust.created_at
+                          ? `Registered ${new Date(cust.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                          : "Verified Member"}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Active
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: PLATFORM MAP (INTERACTIVE LEAFLET SHOPS MAP)                       */}
         {/* ========================================================================= */}
         {currentTab === "map" && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col h-[700px] min-h-[500px]">
@@ -913,7 +1198,7 @@ function AdminPageContent() {
             </div>
 
             {/* Interactive Leaflet Map */}
-            <div className="flex-1 w-full relative min-h-0">
+            <div className="w-full h-[650px] min-h-[500px] relative">
               <LaundryMap
                 shops={activeShops}
                 selectedShop={selectedShop}

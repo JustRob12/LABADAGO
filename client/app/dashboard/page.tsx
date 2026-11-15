@@ -8,8 +8,10 @@ import {
   getCachedUserProfile,
   getLaundryShops,
   getLaundryTransactions,
+  getPlatformUsers,
+  getPartnerApplications,
 } from "@/lib/supabase/auth";
-import { UserProfile, UserRole, LaundryShop, LaundryTransaction } from "@/types/auth";
+import { UserProfile, UserRole, LaundryShop, LaundryTransaction, PartnerApplication } from "@/types/auth";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { UserProfileCard } from "@/components/dashboard/UserProfileCard";
 import { OwnerAnalyticsDashboard } from "@/components/owner/OwnerAnalyticsDashboard";
@@ -28,6 +30,8 @@ import {
   Sparkles,
   Handshake,
   ShieldCheck,
+  Users,
+  FileText,
 } from "lucide-react";
 
 function DashboardContent() {
@@ -37,6 +41,8 @@ function DashboardContent() {
   );
   const [shops, setShops] = useState<LaundryShop[]>([]);
   const [transactions, setTransactions] = useState<LaundryTransaction[]>([]);
+  const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
+  const [adminApps, setAdminApps] = useState<PartnerApplication[]>([]);
   const [isLoading, setIsLoading] = useState(() =>
     typeof window !== "undefined" ? !getCachedUserProfile() : true
   );
@@ -51,12 +57,21 @@ function DashboardContent() {
         }
         setUser(profile);
 
-        if (profile.role === UserRole.OWNER || profile.role === UserRole.ADMIN) {
+        if (profile.role === UserRole.OWNER) {
           const ownerShops = await getLaundryShops(profile.id);
           setShops(ownerShops);
           const shopIds = ownerShops.map((s) => s.id);
           const txList = await getLaundryTransactions(undefined, undefined, shopIds);
           setTransactions(txList);
+        } else if (profile.role === UserRole.ADMIN) {
+          const [allShops, allUsers, allApps] = await Promise.all([
+            getLaundryShops(),
+            getPlatformUsers(),
+            getPartnerApplications(),
+          ]);
+          setShops(allShops);
+          setAdminUsers(allUsers);
+          setAdminApps(allApps);
         }
       } catch (err) {
         console.error("Failed to load user profile:", err);
@@ -68,7 +83,8 @@ function DashboardContent() {
     loadUser();
   }, [router]);
 
-  const isOwner = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
+  const isAdmin = user?.role === UserRole.ADMIN;
+  const isOwner = user?.role === UserRole.OWNER;
   const isStaff = user?.role === UserRole.STAFF;
 
   return (
@@ -96,34 +112,61 @@ function DashboardContent() {
               <div className="flex items-center gap-3.5">
                 <div
                   className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
-                    isStaff
+                    isAdmin
+                      ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                      : isStaff
                       ? "border-teal-200 bg-teal-50 text-teal-600"
                       : isOwner
                       ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                       : "border-blue-200 bg-blue-50 text-blue-600"
                   }`}
                 >
-                  {isStaff ? <ScanLine size={20} /> : isOwner ? <Store size={20} /> : <User size={20} />}
+                  {isAdmin ? (
+                    <ShieldCheck size={20} />
+                  ) : isStaff ? (
+                    <ScanLine size={20} />
+                  ) : isOwner ? (
+                    <Store size={20} />
+                  ) : (
+                    <User size={20} />
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                      Active Portal: {isStaff ? "Branch Staff Counter" : isOwner ? "Laundry Shop Owner" : "Customer"}
+                      Active Portal:{" "}
+                      {isAdmin
+                        ? "Platform Super Admin"
+                        : isStaff
+                        ? "Branch Staff Counter"
+                        : isOwner
+                        ? "Laundry Shop Owner"
+                        : "Customer"}
                     </h3>
                     <span
                       className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                        isStaff
+                        isAdmin
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                          : isStaff
                           ? "bg-teal-50 text-teal-700 border-teal-200"
                           : isOwner
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : "bg-blue-50 text-blue-700 border-blue-200"
                       }`}
                     >
-                      {isStaff ? "Role 3 (Staff)" : isOwner ? "Role 1 (Owner)" : "Role 2 (Customer)"}
+                      {isAdmin
+                        ? "Role 0 (Admin)"
+                        : isStaff
+                        ? "Role 3 (Staff)"
+                        : isOwner
+                        ? "Role 1 (Owner)"
+                        : "Role 2 (Customer)"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {isStaff
+                    {isAdmin
+                      ? "Platform administrator view: review partner applications, manage shops, inspect shop owners & customers, and view platform map."
+                      : isStaff
                       ? user?.assigned_shop_name
                         ? `Assigned Branch: ${user.assigned_shop_name} • Counter Scanning & Dispatch (Role locked by owner)`
                         : "Counter QR Scanning & Laundry Handover (Role locked by owner)"
@@ -135,7 +178,29 @@ function DashboardContent() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {isStaff ? (
+                {isAdmin ? (
+                  <>
+                    <Link href="/admin?tab=applications">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        rightIcon={<ArrowRight size={14} />}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold"
+                      >
+                        Partner Applications
+                      </Button>
+                    </Link>
+                    <Link href="/admin?tab=shops">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs font-semibold text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                      >
+                        Shops View
+                      </Button>
+                    </Link>
+                  </>
+                ) : isStaff ? (
                   <Link href="/staff">
                     <Button
                       variant="primary"
@@ -183,8 +248,134 @@ function DashboardContent() {
               </div>
             </div>
 
-            {isOwner ? (
-              /* Owner / Admin Analytics Dashboard View */
+            {isAdmin ? (
+              /* Admin Hub: Clean Overview & Quick Access to Shops, Owners, Customers, Map, and Applications */
+              <div className="space-y-6">
+                {/* 4 Stat Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span className="text-xs font-medium">Platform Shops</span>
+                      <Store size={16} className="text-indigo-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">{shops.length}</p>
+                    <p className="text-[11px] text-slate-400">Registered locations</p>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span className="text-xs font-medium">Shop Owners</span>
+                      <Users size={16} className="text-amber-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {adminUsers.filter((u) => u.role === UserRole.OWNER).length}
+                    </p>
+                    <p className="text-[11px] text-slate-400">Active owners</p>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span className="text-xs font-medium">Customers</span>
+                      <User size={16} className="text-emerald-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {adminUsers.filter((u) => u.role === UserRole.COSTUMER).length}
+                    </p>
+                    <p className="text-[11px] text-slate-400">Registered users</p>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between text-slate-500">
+                      <span className="text-xs font-medium">Partner Requests</span>
+                      <FileText size={16} className="text-blue-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {adminApps.filter((a) => a.status === "pending").length}
+                    </p>
+                    <p className="text-[11px] text-slate-400">Pending review</p>
+                  </div>
+                </div>
+
+                {/* Quick Navigation Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Link href="/admin?tab=shops">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-10 h-10 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                        <Store size={20} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
+                        <span>Shops View</span>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-indigo-600" />
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Inspect all registered laundry shops, operating hours, machine counts, and service offerings.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/admin?tab=owners">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-amber-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-10 h-10 rounded-xl border border-amber-200 bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
+                        <Users size={20} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-amber-600 transition-colors flex items-center justify-between">
+                        <span>Shop Owners</span>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-amber-600" />
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        View directory of all platform shop owners, their contact details, and assigned laundry branches.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/admin?tab=customers">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-10 h-10 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                        <User size={20} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+                        <span>Customers Directory</span>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-emerald-600" />
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Browse registered customer accounts, registration dates, gender, and contact phone numbers.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/admin?tab=map">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-10 h-10 rounded-xl border border-blue-200 bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                        <MapPin size={20} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
+                        <span>Platform Map</span>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-blue-600" />
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Interactive CARTO map displaying the geographic coverage of all partner laundry shops.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <Link href="/admin?tab=applications">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group">
+                      <div className="w-10 h-10 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                        <FileText size={20} />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
+                        <span>Partner Applications</span>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-indigo-600" />
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Review pending applications, inspect business details, and approve new laundry partners.
+                      </p>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            ) : isOwner ? (
+              /* Genuine Owner Analytics Dashboard View */
               <div className="space-y-6">
                 <OwnerAnalyticsDashboard
                   transactions={transactions}
