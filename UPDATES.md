@@ -1523,3 +1523,48 @@ Fix why approved/scanned orders remained `Pending` in the Supabase database and 
 
 
 
+
+
+---
+
+### Update 49: Free MapLibre GL Engine Migration, Live Shop Rating System, and Staff Messenger Glitch Resolution
+**Date**: November 16, 2026
+
+#### Problems Addressed:
+1. **Leaflet Tile & DOM Positioning Failures**:
+   - Leaflet was crashing with `TypeError: Cannot set properties of undefined (setting '_leaflet_pos')` and failing to render tiles reliably in Next.js 16 (Turbopack).
+2. **Missing Customer Rating & Reviews Experience**:
+   - Customers could not rate shops directly on completed orders with a prominent "Rate Shop" action.
+   - Home and shop card views had hardcoded placeholder numbers (`4.8 (128)`) rather than displaying live calculated shop ratings from Supabase.
+   - Review insertions previously failed with `PGRST204` because `order_id` was included in the Supabase `reviews` table payload where the column did not exist in the schema cache.
+3. **Staff Page Messages Glitch**:
+   - The Staff Messenger on `/staff` was jittery and jumping continuously every 3.5 seconds due to `scrollIntoView()` targeting the document window, new array instances on every poll re-triggering auto-scroll, and dependency churn in `loadConversations`.
+
+#### Changes Implemented:
+1. **Free MapLibre GL WebGL Engine Migration**:
+   - Added `maplibre-gl` (^6.18.0) and imported `@import "maplibre-gl/dist/maplibre-gl.css"` in `client/app/globals.css`.
+   - Created `client/lib/map/maplibreStyles.ts` with 4 free, zero-API-key raster tile presets (CARTO Voyager, OpenStreetMap Standard, CARTO Positron, CARTO Dark Matter).
+   - Replaced Leaflet across all components:
+     - `client/components/customer/ShopRouteNavigation.tsx`: Turn-by-turn route view with OSRM routing, live route casing, user pulse puck, destination shop pin, midpoint ETA pill, and camera bounds fit without `_leaflet_pos` errors.
+     - `client/components/owner/ShopLocationPicker.tsx`: Owner branch location picker with draggable emerald marker, click-to-pin, search/presets, and GPS coordinate capture.
+     - `client/components/customer/LaundryMap.tsx`: Customer interactive laundry discovery map with high-performance WebGL tile rendering, radius boundary circle, price & queue status markers, active route polyline, and bottom drawer.
+2. **Customer Rating & Review Experience**:
+   - **`client/components/customer/CustomerOrderTracker.tsx`**:
+     - Added a dedicated, prominent "Laundry Completed! How was your experience?" card for completed orders featuring an interactive 5-star quick-tap strip and a prominent **`[★ Rate Shop]`** button.
+     - For already rated orders, displays "✓ Rated ★{rating}.0" with an "Edit Review" button and loads existing comments for seamless editing.
+   - **`client/lib/supabase/auth.ts`**:
+     - Updated `submitShopReview`: Omitted `order_id` from the Supabase `reviews` insert payload, ensuring clean HTTP 201 persistence, and recalculated `laundry_shops.rating` and `total_reviews`.
+     - Saved per-order review metadata in `localStorage` (`labadago_order_review_${tx.id}`) and dispatched `labadago:rating-updated` global event.
+   - **`client/components/customer/ShopCard.tsx` & `CustomerHomeView.tsx`**:
+     - Replaced hardcoded `4.8 (128)` ratings with live database ratings (`shop.rating` and `shop.total_reviews`).
+   - **`client/components/customer/ShopServicesView.tsx`**:
+     - Replaced hardcoded ratings with live database rating and total review counts.
+     - Added a dedicated **Customer Reviews & Ratings** section displaying average rating and real customer reviews with star breakdowns, customer names, dates, and feedback comments.
+3. **Staff Messenger Glitch Resolution**:
+   - **`client/components/messaging/ShopMessenger.tsx`**:
+     - Replaced window-level `scrollIntoView()` with an isolated `chatContainerRef.scrollTo()` on the messages scroll container.
+     - Added `isNearBottomRef` detection so user scroll position is preserved when reading older messages.
+     - Added reference equality checks in `setMessages` and `setConversations` so background polling intervals do not trigger redundant re-renders or page jumps when messages have not changed.
+     - Stabilized `loadConversations` and `loadMessagesForSelected` dependencies with primitive IDs.
+4. **Build Verification**:
+   - Ran `cd client && pnpm run build`. Verified 0 TypeScript errors and clean compilation across all 13 routes.

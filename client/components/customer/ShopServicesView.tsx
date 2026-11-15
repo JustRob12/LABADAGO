@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LaundryShop, ShopService, UserProfile } from "@/types/auth";
+import { LaundryShop, ShopService, UserProfile, ShopReview } from "@/types/auth";
 import { formatTo12Hour } from "@/components/owner/ShopSetupForm";
-import { getShopServices, sendShopMessage, getCachedUserProfile } from "@/lib/supabase/auth";
+import { getShopServices, sendShopMessage, getCachedUserProfile, getShopReviews } from "@/lib/supabase/auth";
 import {
   ArrowLeft,
   Heart,
@@ -107,6 +107,37 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [customMsg, setCustomMsg] = useState("");
+  const [reviewsList, setReviewsList] = useState<ShopReview[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchReviews = async () => {
+      setIsLoadingReviews(true);
+      try {
+        const revs = await getShopReviews(shop.id);
+        if (isMounted) setReviewsList(revs);
+      } catch {
+        // ignore
+      } finally {
+        if (isMounted) setIsLoadingReviews(false);
+      }
+    };
+    fetchReviews();
+
+    const handleRatingUpdated = () => {
+      fetchReviews();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("labadago:rating-updated", handleRatingUpdated);
+    }
+    return () => {
+      isMounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("labadago:rating-updated", handleRatingUpdated);
+      }
+    };
+  }, [shop.id]);
 
   const handleSendInquiry = async () => {
     if (!customMsg.trim() || isSendingMessage) return;
@@ -312,8 +343,10 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
             <div className="flex items-center gap-2 mt-1 text-xs text-slate-600 flex-wrap">
               <span className="flex items-center gap-1 font-bold text-amber-500">
                 <Star size={14} className="fill-amber-400" />
-                <span className="text-slate-900">{shop.rating || 4.8}</span>
-                <span className="text-slate-400 font-normal">({shop.total_reviews || 128})</span>
+                <span className="text-slate-900">{Number(shop.rating || 5).toFixed(1)}</span>
+                <span className="text-slate-400 font-normal">
+                  ({reviewsList.length > 0 ? reviewsList.length : (shop.total_reviews || 0)} {((reviewsList.length || shop.total_reviews || 0) === 1 ? "review" : "reviews")})
+                </span>
               </span>
               <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1 font-semibold text-emerald-600">
@@ -486,6 +519,78 @@ export const ShopServicesView: React.FC<ShopServicesViewProps> = ({
             {openTimeStr} – {closeTimeStr}
           </span>
         </div>
+      </div>
+
+      {/* 7. Customer Ratings & Reviews */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+            Customer Reviews & Ratings
+          </h3>
+          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1">
+            <Star size={13} className="fill-amber-500 text-amber-500" />
+            <span>{Number(shop.rating || 5).toFixed(1)} / 5.0</span>
+          </span>
+        </div>
+
+        {reviewsList.length === 0 ? (
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs text-center space-y-1.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto">
+              <Star size={20} className="fill-amber-400" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-800">No Reviews Yet</h4>
+            <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+              Be the first customer to leave a review! After claiming your completed laundry, tap &ldquo;Rate Shop&rdquo; on the Live Order Tracker.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {reviewsList.map((rev) => (
+              <div
+                key={rev.id}
+                className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                      {rev.customer_name ? rev.customer_name.charAt(0).toUpperCase() : "C"}
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-slate-900">{rev.customer_name || "Valued Customer"}</h5>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(rev.created_at).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={12}
+                        className={
+                          s <= rev.rating
+                            ? "text-amber-400 fill-amber-400"
+                            : "text-slate-200"
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {rev.comment && (
+                  <p className="text-xs text-slate-600 pl-9 leading-relaxed">
+                    &ldquo;{rev.comment}&rdquo;
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Message Shop Modal */}

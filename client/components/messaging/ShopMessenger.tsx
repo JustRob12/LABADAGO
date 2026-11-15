@@ -107,7 +107,10 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isNearBottomRef = useRef(true);
+  const prevMessagesLengthRef = useRef(0);
 
   // Active target shop (for staff, owner, or customer)
   const effectiveShopId =
@@ -117,6 +120,11 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
       ? shopFilter
       : undefined;
 
+  const currentUserId = currentUser.id;
+  const currentUserName = currentUser.full_name;
+  const currentUserPhone = currentUser.phone_number;
+  const assignedShopId = assignedShop?.id;
+
   // Load conversation threads
   const loadConversations = useCallback(
     async (selectFirst = false) => {
@@ -124,16 +132,16 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
         let threads: ShopConversation[] = [];
 
         if (mode === "customer") {
-          threads = await getCustomerConversations(currentUser.id);
+          threads = await getCustomerConversations(currentUserId);
         } else if (mode === "staff") {
-          if (assignedShop?.id) {
-            threads = await getShopConversations(assignedShop.id);
+          if (assignedShopId) {
+            threads = await getShopConversations(assignedShopId);
           }
         } else {
           // Owner mode
           threads = await getShopConversations(
             effectiveShopId,
-            currentUser.id
+            currentUserId
           );
         }
 
@@ -144,9 +152,9 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
             threads.unshift({
               shop_id: targetShop.id,
               shop_name: targetShop.name,
-              customer_id: currentUser.id,
-              customer_name: currentUser.full_name,
-              customer_phone: currentUser.phone_number,
+              customer_id: currentUserId,
+              customer_name: currentUserName,
+              customer_phone: currentUserPhone,
               last_message: "Start a conversation with " + targetShop.name,
               last_message_at: new Date().toISOString(),
               last_sender_name: targetShop.name,
@@ -156,47 +164,75 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
           }
         }
 
-        setConversations(threads);
+        setConversations((prev) => {
+          if (
+            prev.length === threads.length &&
+            prev.every(
+              (p, i) =>
+                p.shop_id === threads[i]?.shop_id &&
+                p.customer_id === threads[i]?.customer_id &&
+                p.last_message_at === threads[i]?.last_message_at &&
+                p.unread_count === threads[i]?.unread_count
+            )
+          ) {
+            return prev;
+          }
+          return threads;
+        });
 
-        // Auto-select initial conversation or first thread
-        if (selectFirst && threads.length > 0) {
-          if (initialShopId) {
-            const match = threads.find((t) => t.shop_id === initialShopId);
-            if (match) {
-              setSelectedConversation(match);
-              setMobileShowChat(true);
-              return;
-            }
+        // Auto-select initial conversation or first thread without blowing away active selection
+        setSelectedConversation((currentSelected) => {
+          if (currentSelected) {
+            const updatedMatch = threads.find(
+              (t) =>
+                t.shop_id === currentSelected.shop_id &&
+                t.customer_id === currentSelected.customer_id
+            );
+            return updatedMatch || currentSelected;
           }
-          if (initialCustomerId) {
-            const match = threads.find((t) => t.customer_id === initialCustomerId);
-            if (match) {
-              setSelectedConversation(match);
-              setMobileShowChat(true);
-              return;
+
+          if (selectFirst && threads.length > 0) {
+            if (initialShopId) {
+              const match = threads.find((t) => t.shop_id === initialShopId);
+              if (match) {
+                setMobileShowChat(true);
+                return match;
+              }
             }
+            if (initialCustomerId) {
+              const match = threads.find((t) => t.customer_id === initialCustomerId);
+              if (match) {
+                setMobileShowChat(true);
+                return match;
+              }
+            }
+            return threads[0];
           }
-          setSelectedConversation(threads[0]);
-        }
+
+          return currentSelected;
+        });
       } catch (err) {
         console.error("Failed to load conversations:", err);
       } finally {
         setIsLoadingThreads(false);
       }
     },
-    [mode, currentUser.id, currentUser.full_name, currentUser.phone_number, assignedShop, shops, effectiveShopId, initialShopId, initialCustomerId]
+    [mode, currentUserId, currentUserName, currentUserPhone, assignedShopId, shops, effectiveShopId, initialShopId, initialCustomerId]
   );
 
-  // Initial load
+  // Initial load once on mount or when user/shop identity changes
   useEffect(() => {
     setIsLoadingThreads(true);
     loadConversations(true);
-  }, [loadConversations]);
+  }, [mode, currentUserId, assignedShopId, effectiveShopId]);
 
   // Load messages for currently selected conversation
+  const selectedShopId = selectedConversation?.shop_id;
+  const selectedCustomerId = selectedConversation?.customer_id;
+
   const loadMessagesForSelected = useCallback(
     async (isBackgroundPoll = false) => {
-      if (!selectedConversation) {
+      if (!selectedShopId || !selectedCustomerId) {
         setMessages([]);
         return;
       }
@@ -206,19 +242,21 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
       }
 
       try {
-        const msgs = await getShopMessages(
-          selectedConversation.shop_id,
-          selectedConversation.customer_id
-        );
-        setMessages(msgs);
+        const msgs = await getShopMessages(selectedShopId, selectedCustomerId);
+
+        setMessages((prev) => {
+          if (
+            prev.length === msgs.length &&
+            (prev.length === 0 || prev[prev.length - 1]?.id === msgs[msgs.length - 1]?.id)
+          ) {
+            return prev;
+          }
+          return msgs;
+        });
 
         // Mark incoming messages as read
         const readerRole = mode === "customer" ? "customer" : mode === "staff" ? "staff" : "owner";
-        await markShopMessagesAsRead(
-          selectedConversation.shop_id,
-          selectedConversation.customer_id,
-          readerRole
-        );
+        await markShopMessagesAsRead(selectedShopId, selectedCustomerId, readerRole);
       } catch (err) {
         console.error("Failed to load messages:", err);
       } finally {
@@ -227,20 +265,20 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
         }
       }
     },
-    [selectedConversation, mode]
+    [selectedShopId, selectedCustomerId, mode]
   );
 
   // Refresh messages when selected conversation changes
   useEffect(() => {
     loadMessagesForSelected(false);
-  }, [loadMessagesForSelected]);
+  }, [selectedShopId, selectedCustomerId]);
 
   // Periodic polling for live chat updates every 3.5 seconds
   useEffect(() => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
     pollIntervalRef.current = setInterval(() => {
-      if (selectedConversation) {
+      if (selectedShopId && selectedCustomerId) {
         loadMessagesForSelected(true);
       }
       loadConversations(false);
@@ -249,15 +287,33 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [selectedConversation, loadMessagesForSelected, loadConversations]);
+  }, [selectedShopId, selectedCustomerId, loadMessagesForSelected, loadConversations]);
 
-  // Auto scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Scroll messages container without disturbing outer document scroll
+  const scrollToBottom = (smooth = true) => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    }
+  };
+
+  const handleChatScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 75;
   };
 
   useEffect(() => {
-    scrollToBottom();
+    const countChanged = messages.length !== prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+
+    if (countChanged && isNearBottomRef.current) {
+      requestAnimationFrame(() => {
+        scrollToBottom(true);
+      });
+    }
   }, [messages]);
 
   // Send message handler
@@ -306,6 +362,9 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
               : c
           )
         );
+        requestAnimationFrame(() => {
+          scrollToBottom(true);
+        });
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -588,7 +647,11 @@ export const ShopMessenger: React.FC<ShopMessengerProps> = ({
             </div>
 
             {/* Message Stream */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-slate-50/50 to-white">
+            <div
+              ref={chatContainerRef}
+              onScroll={handleChatScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-slate-50/50 to-white"
+            >
               {isLoadingMessages ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
                   <Loader2 className="animate-spin text-blue-600" size={24} />

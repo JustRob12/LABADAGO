@@ -479,8 +479,12 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                         <span className="flex items-center gap-1 font-semibold text-amber-500">
                           <Star size={13} className="fill-amber-400" />
-                          <span className="text-slate-800 font-bold">{shop.rating || 4.8}</span>
-                          <span className="text-slate-400">({shop.total_reviews || 128})</span>
+                          <span className="text-slate-800 font-bold">
+                            {Number(shop.rating || 5).toFixed(1)}
+                          </span>
+                          <span className="text-slate-400">
+                            ({shop.total_reviews || 0})
+                          </span>
                         </span>
                         <span className="text-slate-300">•</span>
                         <span className="flex items-center gap-1 font-medium text-slate-600">

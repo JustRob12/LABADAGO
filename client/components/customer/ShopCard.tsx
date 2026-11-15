@@ -126,9 +126,11 @@ export const ShopCard: React.FC<ShopCardProps> = ({
           </div>
 
           {/* Rating badge */}
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 shrink-0">
-            <Star size={12} className={shop.total_reviews > 0 ? "text-amber-500 fill-amber-500" : "text-amber-400 fill-amber-400/30"} />
-            <span>{shop.total_reviews > 0 ? Number(shop.rating).toFixed(1) : "New"}</span>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50/70 border border-amber-200/80 text-xs font-semibold text-slate-800 shrink-0">
+            <Star size={12} className={shop.total_reviews > 0 ? "text-amber-500 fill-amber-500" : "text-amber-400 fill-amber-400"} />
+            <span className="font-bold text-slate-900">
+              {shop.total_reviews > 0 ? Number(shop.rating || 5).toFixed(1) : (Number(shop.rating) > 0 ? Number(shop.rating).toFixed(1) : "5.0")}
+            </span>
             <span className="text-[10px] text-slate-400">
               {shop.total_reviews > 0 ? `(${shop.total_reviews})` : "(0)"}
             </span>

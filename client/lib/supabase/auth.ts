@@ -2363,14 +2363,22 @@ export async function submitShopReview(params: {
 
     // 1. Try Supabase insert
     try {
-      await supabase.from("reviews").insert({
+      // Do not include order_id in Supabase insert because the column is not in PostgREST schema cache
+      const payload: Record<string, any> = {
         shop_id: newReview.shop_id,
-        customer_id: newReview.customer_id,
         customer_name: newReview.customer_name,
         rating: newReview.rating,
         comment: newReview.comment,
-        order_id: newReview.order_id,
-      });
+      };
+
+      // Ensure customer_id is a valid UUID before sending to Supabase auth.users FK
+      if (customerId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId)) {
+        payload.customer_id = customerId;
+      } else {
+        payload.customer_id = null;
+      }
+
+      await supabase.from("reviews").insert(payload);
 
       // Recalculate average rating & total reviews from reviews table
       const { data: allReviews } = await supabase
@@ -2390,6 +2398,29 @@ export async function submitShopReview(params: {
       }
     } catch (dbErr) {
       console.warn("Direct reviews table update notice, applying local store:", dbErr);
+    }
+
+    // Persist per-order review metadata in localStorage for instant retrieval
+    if (params.orderId && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          `labadago_order_review_${params.orderId}`,
+          JSON.stringify({
+            rating: clampedRating,
+            comment: params.comment || "",
+            timestamp: new Date().toISOString(),
+          })
+        );
+      } catch {}
+    }
+
+    // Dispatch global event for live shop cards and views to refresh
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("labadago:rating-updated", {
+          detail: { shopId: params.shopId, rating: calculatedAvg, totalReviews: calculatedTotal },
+        })
+      );
     }
 
     // Local fallback update

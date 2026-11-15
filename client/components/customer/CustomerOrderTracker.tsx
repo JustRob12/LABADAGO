@@ -86,7 +86,17 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
   const handleOpenReviewModal = (tx: LaundryTransaction, initialStars: number = 5) => {
     setReviewTx(tx);
     setReviewStars(ratedOrders[tx.id] || initialStars);
-    setFeedbackComment("");
+    let existingComment = "";
+    try {
+      const prev = localStorage.getItem(`labadago_order_review_${tx.id}`);
+      if (prev) {
+        const parsed = JSON.parse(prev);
+        existingComment = parsed.comment || "";
+      }
+    } catch {
+      // ignore
+    }
+    setFeedbackComment(existingComment);
     setReviewSuccessMessage(null);
   };
 
@@ -476,15 +486,75 @@ export const CustomerOrderTracker: React.FC<CustomerOrderTrackerProps> = ({
                 </div>
               )}
 
+              {/* Dedicated Rate Shop Card for Finished / Completed Laundry */}
               {tx.status === "Completed" && (
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 text-xs">
-                  <CheckCircle2 size={16} className="text-slate-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-slate-900">Order Completed & Claimed</p>
-                    <p className="text-slate-600 text-[11px] leading-relaxed">
-                      Thank you for choosing LabadaGo! Please rate your laundry experience below.
-                    </p>
+                <div className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 via-orange-50/50 to-blue-50/40 p-4 sm:p-5 shadow-xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Star size={20} className="fill-white" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-bold text-slate-900">
+                            {ratedOrders[tx.id] ? "Thank You for Rating!" : "Laundry Completed! How was your experience?"}
+                          </h4>
+                          {ratedOrders[tx.id] && (
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              ✓ Rated ★{ratedOrders[tx.id]}.0
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                          {ratedOrders[tx.id]
+                            ? `You rated ${tx.shop_name || "this laundry shop"} ${ratedOrders[tx.id]} out of 5 stars. You can edit your review anytime.`
+                            : `Share your thoughts on ${tx.shop_name || "this laundry shop"} to help fellow customers.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 self-start sm:self-center pl-13 sm:pl-0">
+                      {ratedOrders[tx.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReviewModal(tx, ratedOrders[tx.id])}
+                          className="px-3.5 py-2 rounded-xl bg-white hover:bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                        >
+                          <Star size={14} className="text-amber-500 fill-amber-500" />
+                          <span>Edit Review</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReviewModal(tx, 5)}
+                          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <Star size={15} className="fill-white" />
+                          <span>Rate Shop</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Quick Star Selection Bar */}
+                  {!ratedOrders[tx.id] && (
+                    <div className="pt-2.5 border-t border-amber-200/60 flex items-center gap-2 pl-1 sm:pl-13 flex-wrap">
+                      <span className="text-[11px] font-semibold text-slate-500">Tap to quick rate:</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => handleOpenReviewModal(tx, star)}
+                            className="p-1 text-slate-300 hover:text-amber-400 hover:scale-125 transition-transform cursor-pointer"
+                            title={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                          >
+                            <Star size={19} className="hover:fill-amber-400 text-slate-300 hover:text-amber-400" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
