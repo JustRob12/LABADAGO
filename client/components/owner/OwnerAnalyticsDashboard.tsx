@@ -10,18 +10,15 @@ import {
   Wallet,
   UserPlus,
   TrendingUp,
-  PieChart,
   Clock,
   ShoppingBag,
   Sparkles,
   ChevronRight,
   ChevronDown,
   Calendar,
-  Bell,
   Tag,
   Receipt,
   ArrowRight,
-  FileText,
   UserCheck,
   RotateCcw,
   BarChart3,
@@ -30,7 +27,8 @@ import {
   X,
   Search,
   Check,
-  ArrowUpRight,
+  FileText,
+  Loader2,
 } from "lucide-react";
 
 interface OwnerAnalyticsDashboardProps {
@@ -49,209 +47,309 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
   onNavigateTab,
 }) => {
   // Date and Range controls
-  const [selectedDateFilter, setSelectedDateFilter] = useState<string>("May 31, 2026 (Sunday)");
+  const today = new Date();
+  const todayLabel = today.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>("Today (Live)");
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
   const [trendRange, setTrendRange] = useState<"7d" | "14d" | "30d">("7d");
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(1);
 
   // Modals for Quick Access
   const [activeModal, setActiveModal] = useState<"reports" | "customerRecords" | "activityDetail" | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+  const [customerSearch, setCustomerSearch] = useState("");
 
-  // Staff state
+  // Staff state — loaded from DB
   const [staffList, setStaffList] = useState<BranchStaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
 
   useEffect(() => {
-    async function loadStaff() {
-      try {
-        const staff = await getBranchStaff(shop?.id);
-        setStaffList(staff);
-      } catch (err) {
-        console.error("Failed to load staff in dashboard:", err);
-      }
-    }
-    loadStaff();
+    if (!shop?.id) return;
+    setStaffLoading(true);
+    getBranchStaff(shop.id)
+      .then(setStaffList)
+      .catch((err) => console.error("Failed to load staff:", err))
+      .finally(() => setStaffLoading(false));
   }, [shop?.id]);
 
-  // Scanned transactions (filter out pending/unscanned for accurate counter throughput)
-  const scannedTransactions = useMemo(
-    () => transactions.filter((tx) => tx.status !== "Pending"),
-    [transactions]
-  );
+  // ── Date filtering helper ────────────────────────────────────────────────────
+  const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (selectedDateFilter === "Today (Live)") {
+      const start = startOf(now);
+      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+    }
+    if (selectedDateFilter === "Yesterday") {
+      const start = startOf(now);
+      start.setDate(start.getDate() - 1);
+      const end = startOf(now);
+      return transactions.filter((tx) => {
+        const d = new Date(tx.created_at);
+        return d >= start && d < end;
+      });
+    }
+    if (selectedDateFilter === "Last 7 Days") {
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+    }
+    if (selectedDateFilter === "Last 14 Days") {
+      const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+    }
+    if (selectedDateFilter === "This Month") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return transactions.filter((tx) => new Date(tx.created_at) >= start);
+    }
+    return transactions;
+  }, [transactions, selectedDateFilter]);
 
-  // Dynamic vs default metrics
-  const totalTransactionsCount = scannedTransactions.length > 0 ? scannedTransactions.length : 45;
-  const completedTransactionsCount = useMemo(() => {
-    const count = scannedTransactions.filter((tx) => tx.status === "Completed").length;
-    return count > 0 ? count : 38;
-  }, [scannedTransactions]);
-
-  const completionRate = Math.round((completedTransactionsCount / totalTransactionsCount) * 100) || 84;
+  // ── KPI Metrics (all from real data) ────────────────────────────────────────
+  const totalTransactionsCount = filteredTransactions.length;
+  const completedTransactionsCount = filteredTransactions.filter(
+    (tx) => tx.status === "Completed"
+  ).length;
+  const completionRate =
+    totalTransactionsCount > 0
+      ? Math.round((completedTransactionsCount / totalTransactionsCount) * 100)
+      : 0;
 
   const activeCustomersCount = useMemo(() => {
-    const unique = new Set(scannedTransactions.map((tx) => tx.customer_phone || tx.customer_name).filter(Boolean)).size;
-    return unique > 0 ? unique : 412;
-  }, [scannedTransactions]);
+    return new Set(
+      filteredTransactions
+        .map((tx) => tx.customer_phone || tx.customer_name)
+        .filter(Boolean)
+    ).size;
+  }, [filteredTransactions]);
 
   const estimatedRevenue = useMemo(() => {
-    const rev = scannedTransactions.reduce((sum, tx) => {
+    return filteredTransactions.reduce((sum, tx) => {
       if (tx.payment_status === "Paid" || tx.status === "Completed") {
         return sum + (Number(tx.total_amount) || 0);
       }
       return sum;
     }, 0);
-    return rev > 0 ? rev : 12450;
-  }, [scannedTransactions]);
+  }, [filteredTransactions]);
 
   const totalStaffCount = staffList.length;
   const activeStaffCount = staffList.filter((s) => s.status === "Active").length;
   const onLeaveStaffCount = staffList.filter((s) => s.status === "On Leave").length;
 
-  // Trend data points for 7 days
+  // ── Operational Overview (from real transactions) ────────────────────────────
+  const processingCount = filteredTransactions.filter(
+    (tx) => tx.status === "Washing" || tx.status === "Processing"
+  ).length;
+  const readyPickupCount = filteredTransactions.filter(
+    (tx) => tx.status === "Ready"
+  ).length;
+  const completedTodayCount = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return transactions.filter(
+      (tx) => tx.status === "Completed" && new Date(tx.created_at) >= start
+    ).length;
+  }, [transactions]);
+  const pendingTransactionsCount = filteredTransactions.filter(
+    (tx) => tx.status === "Pending"
+  ).length;
+
+  // ── Transaction Trend Chart (grouped by day) ─────────────────────────────────
   const trendData = useMemo(() => {
-    if (trendRange === "7d") {
-      return [
-        { day: "Mon", value: 32 },
-        { day: "Tue", value: 38 },
-        { day: "Wed", value: 41 },
-        { day: "Thu", value: 35 },
-        { day: "Fri", value: 52 },
-        { day: "Sat", value: 60 },
-        { day: "Sun", value: 45 },
-      ];
-    } else if (trendRange === "14d") {
-      return [
-        { day: "W1-M", value: 28 },
-        { day: "W1-W", value: 35 },
-        { day: "W1-F", value: 48 },
-        { day: "W1-S", value: 58 },
-        { day: "W2-M", value: 34 },
-        { day: "W2-W", value: 42 },
-        { day: "W2-S", value: 65 },
-      ];
+    const now = new Date();
+    const days = trendRange === "7d" ? 7 : trendRange === "14d" ? 14 : 30;
+    const buckets: { label: string; value: number }[] = [];
+
+    if (trendRange === "30d") {
+      // Weekly buckets
+      for (let w = 3; w >= 0; w--) {
+        const start = new Date(now.getTime() - (w + 1) * 7 * 24 * 60 * 60 * 1000);
+        const end = new Date(now.getTime() - w * 7 * 24 * 60 * 60 * 1000);
+        const count = transactions.filter((tx) => {
+          const d = new Date(tx.created_at);
+          return d >= start && d < end;
+        }).length;
+        buckets.push({ label: `Wk ${4 - w}`, value: count });
+      }
     } else {
-      return [
-        { day: "Wk 1", value: 210 },
-        { day: "Wk 2", value: 245 },
-        { day: "Wk 3", value: 270 },
-        { day: "Wk 4", value: 310 },
-      ];
+      // Daily buckets
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        const count = transactions.filter((tx) => {
+          const d = new Date(tx.created_at);
+          return d >= start && d < end;
+        }).length;
+        buckets.push({ label: dayNames[date.getDay()], value: count });
+      }
+      // Show only last 7 day labels when 14d
+      if (trendRange === "14d") {
+        return buckets.filter((_, idx) => idx % 2 === 0);
+      }
     }
-  }, [trendRange]);
+    return buckets;
+  }, [transactions, trendRange]);
 
-  // Operational metrics
-  const processingCount = 12;
-  const readyPickupCount = 8;
-  const completedTodayCount = 38;
-  const pendingTransactionsCount = 7;
-
-  // Customer insights
-  const customerInsights = {
-    registered: 412,
-    newThisMonth: 32,
-    returning: 280,
-    unregistered: 193,
-  };
-
-  // Staff preview table rows matching screenshot
-  const staffTablePreview = [
-    { name: "Maria Santos", role: "Staff", status: "Active", txToday: 15 },
-    { name: "Juan Reyes", role: "Staff", status: "Active", txToday: 12 },
-    { name: "Ana Cruz", role: "Staff", status: "Active", txToday: 11 },
-    { name: "Mark Lim", role: "Staff", status: "On Leave", txToday: 0 },
-  ];
-
-  // Recent activity feed matching screenshot
-  const recentActivities = [
-    {
-      id: "act-1",
-      time: "10:45 AM",
-      title: "Transaction Q-015 completed",
-      subtitle: "Order is ready for pickup",
-      type: "success",
-      icon: <CheckCircle2 size={16} className="text-emerald-600" />,
-      bg: "bg-emerald-50 border-emerald-200",
-    },
-    {
-      id: "act-2",
-      time: "10:30 AM",
-      title: "New customer registered",
-      subtitle: "John Dela Cruz",
-      type: "user",
-      icon: <UserPlus size={16} className="text-blue-600" />,
-      bg: "bg-blue-50 border-blue-200",
-    },
-    {
-      id: "act-3",
-      time: "10:20 AM",
-      title: "Service price updated",
-      subtitle: "Wash & Fold - Regular",
-      type: "service",
-      icon: <Tag size={16} className="text-amber-600" />,
-      bg: "bg-amber-50 border-amber-200",
-    },
-    {
-      id: "act-4",
-      time: "10:15 AM",
-      title: "Transaction Q-014 checked in",
-      subtitle: "Customer: Maria Santos",
-      type: "order",
-      icon: <Receipt size={16} className="text-blue-600" />,
-      bg: "bg-blue-50 border-blue-200",
-    },
-    {
-      id: "act-5",
-      time: "10:05 AM",
-      title: "Staff Mark Lim is now on leave",
-      subtitle: "Sick leave - May 31, 2026",
-      type: "staff",
-      icon: <Calendar size={16} className="text-purple-600" />,
-      bg: "bg-purple-50 border-purple-200",
-    },
-  ];
-
-  // SVG Coordinates calculation for Line Chart
-  // ViewBox: 0 0 540 220
-  // Left: 50, Right: 510, Top: 25, Bottom: 185
-  // Max Y value is 80
-  const maxTrendVal = trendRange === "30d" ? 350 : 80;
+  const maxTrendVal = Math.max(...trendData.map((d) => d.value), 1);
   const chartPoints = trendData.map((pt, idx) => {
     const x = 70 + idx * ((490 - 70) / Math.max(1, trendData.length - 1));
     const y = 185 - (pt.value / maxTrendVal) * 155;
     return { ...pt, x, y };
   });
-
-  const linePathD = chartPoints.reduce((acc, pt, idx) => {
-    return `${acc} ${idx === 0 ? "M" : "L"} ${pt.x} ${pt.y}`;
-  }, "");
-
+  const linePathD = chartPoints.reduce(
+    (acc, pt, idx) => `${acc} ${idx === 0 ? "M" : "L"} ${pt.x} ${pt.y}`,
+    ""
+  );
   const areaPathD = `${linePathD} L ${chartPoints[chartPoints.length - 1]?.x || 490} 185 L ${
     chartPoints[0]?.x || 70
   } 185 Z`;
 
-  // Display Name
+  // ── Most Availed Services (from real transactions) ───────────────────────────
+  const serviceBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    transactions.forEach((tx) => {
+      const name = tx.service_name || "Other";
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name, count], idx) => ({
+        name,
+        count,
+        percent: Math.round((count / total) * 100),
+        color: ["#2563EB", "#10B981", "#F59E0B", "#8B5CF6"][idx],
+        dotClass: ["bg-blue-600", "bg-emerald-500", "bg-amber-500", "bg-purple-500"][idx],
+      }));
+  }, [transactions]);
+
+  // ── Customer Insights (from real transactions) ───────────────────────────────
+  const customerInsights = useMemo(() => {
+    const allPhones = new Set(
+      transactions.map((tx) => tx.customer_phone).filter(Boolean)
+    );
+    const registered = allPhones.size;
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const newThisMonth = new Set(
+      transactions
+        .filter((tx) => new Date(tx.created_at) >= monthStart)
+        .map((tx) => tx.customer_phone)
+        .filter(Boolean)
+    ).size;
+
+    // Returning = appeared more than once
+    const phoneCounts: Record<string, number> = {};
+    transactions.forEach((tx) => {
+      if (tx.customer_phone) {
+        phoneCounts[tx.customer_phone] = (phoneCounts[tx.customer_phone] || 0) + 1;
+      }
+    });
+    const returning = Object.values(phoneCounts).filter((c) => c > 1).length;
+
+    const unregistered = transactions.filter(
+      (tx) => !tx.customer_phone && tx.customer_name
+    ).length;
+
+    return { registered, newThisMonth, returning, unregistered };
+  }, [transactions]);
+
+  // ── Recent Activity (from real transactions) ─────────────────────────────────
+  const recentActivities = useMemo(() => {
+    return [...transactions]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+      .map((tx) => {
+        const time = new Date(tx.created_at).toLocaleTimeString("en-PH", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const isCompleted = tx.status === "Completed";
+        const isPending = tx.status === "Pending";
+        return {
+          id: tx.id,
+          time,
+          title: `Transaction ${tx.tracking_number || tx.id.slice(0, 8)} — ${tx.status}`,
+          subtitle: tx.customer_name ? `Customer: ${tx.customer_name}` : "Walk-in guest",
+          type: isCompleted ? "success" : isPending ? "pending" : "order",
+          icon: isCompleted ? (
+            <CheckCircle2 size={16} className="text-emerald-600" />
+          ) : isPending ? (
+            <Clock size={16} className="text-amber-600" />
+          ) : (
+            <Receipt size={16} className="text-blue-600" />
+          ),
+          bg: isCompleted
+            ? "bg-emerald-50 border-emerald-200"
+            : isPending
+            ? "bg-amber-50 border-amber-200"
+            : "bg-blue-50 border-blue-200",
+          rawTx: tx,
+        };
+      });
+  }, [transactions]);
+
+  // ── Customer Records for modal ───────────────────────────────────────────────
+  const customerRecords = useMemo(() => {
+    const map: Record<
+      string,
+      { name: string; phone: string; orders: number; spent: number; type: string }
+    > = {};
+    transactions.forEach((tx) => {
+      const key = tx.customer_phone || tx.customer_name || "unknown";
+      if (!map[key]) {
+        map[key] = {
+          name: tx.customer_name || "Walk-in Guest",
+          phone: tx.customer_phone || "—",
+          orders: 0,
+          spent: 0,
+          type: tx.customer_phone ? "Registered" : "Unregistered",
+        };
+      }
+      map[key].orders += 1;
+      map[key].spent += Number(tx.total_amount) || 0;
+    });
+    return Object.values(map).sort((a, b) => b.orders - a.orders);
+  }, [transactions]);
+
+  const filteredCustomerRecords = useMemo(() => {
+    if (!customerSearch.trim()) return customerRecords;
+    const q = customerSearch.toLowerCase();
+    return customerRecords.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q)
+    );
+  }, [customerRecords, customerSearch]);
+
+  // ── Display Name ─────────────────────────────────────────────────────────────
   const ownerDisplayName = user?.full_name ? user.full_name.split(" ")[0] : "Owner";
 
   return (
     <div className="space-y-6">
-      {/* ==============================================================================
-          TOP HEADER: GREETING & CONTROLS (Exact layout from reference screenshot)
-          ============================================================================== */}
+      {/* ============================================================
+          TOP HEADER
+          ============================================================ */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-100">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Good morning, {ownerDisplayName}! 👋
-            </h1>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Good morning, {ownerDisplayName}! 👋
+          </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Here&apos;s what&apos;s happening with your laundry shop today.
+            {shop ? (
+              <>Shop: <span className="font-semibold text-slate-700">{shop.name}</span></>
+            ) : (
+              "Here's your shop overview."
+            )}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start md:self-auto">
-          {/* Date Picker / Selector Pill */}
+          {/* Date Picker */}
           <div className="relative">
             <button
               type="button"
@@ -262,80 +360,28 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
               <span>{selectedDateFilter}</span>
               <ChevronDown size={13} className="text-slate-400" />
             </button>
-
             {isDateDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-30 text-xs">
-                {[
-                  "May 31, 2026 (Sunday)",
-                  "Today (Live System Date)",
-                  "Yesterday (May 30, 2026)",
-                  "Last 7 Days (May 25 - 31)",
-                  "This Month (May 2026)",
-                ].map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => {
-                      setSelectedDateFilter(item);
-                      setIsDateDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between ${
-                      selectedDateFilter === item ? "font-semibold text-blue-600 bg-blue-50/50" : "text-slate-700"
-                    }`}
-                  >
-                    <span>{item}</span>
-                    {selectedDateFilter === item && <Check size={13} className="text-blue-600" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Notification Bell with Badge */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setIsNotificationsOpen(!isNotificationsOpen);
-                setNotificationCount(0);
-              }}
-              className="relative p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 shadow-2xs cursor-pointer transition-colors"
-              aria-label="View notifications"
-            >
-              <Bell size={16} />
-              {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
-                  {notificationCount}
-                </span>
-              )}
-            </button>
-
-            {isNotificationsOpen && (
-              <div className="absolute right-0 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl p-3 z-30 text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <span className="font-bold text-slate-800">Notifications</span>
-                  <button
-                    type="button"
-                    onClick={() => setIsNotificationsOpen(false)}
-                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="space-y-2 py-2">
-                  <div className="p-2 rounded-lg bg-blue-50 border border-blue-100">
-                    <p className="font-semibold text-blue-900">1 Unclaimed Order Ready</p>
-                    <p className="text-[11px] text-blue-700 mt-0.5">
-                      Order #Q-015 for Maria Santos has been folded and ready for pickup for over 2 hours.
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="font-semibold text-slate-800">Staff Shift Reminder</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Mark Lim marked on leave today. Shift covered by Allan Reyes.
-                    </p>
-                  </div>
-                </div>
+              <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-30 text-xs">
+                {["Today (Live)", "Yesterday", "Last 7 Days", "Last 14 Days", "This Month", "All Time"].map(
+                  (item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDateFilter(item);
+                        setIsDateDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between ${
+                        selectedDateFilter === item
+                          ? "font-semibold text-blue-600 bg-blue-50/50"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      <span>{item}</span>
+                      {selectedDateFilter === item && <Check size={13} className="text-blue-600" />}
+                    </button>
+                  )
+                )}
               </div>
             )}
           </div>
@@ -355,37 +401,31 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
         </div>
       </div>
 
-      {/* ==============================================================================
-          ROW 1: 5 KPI METRIC TILES (Matches screenshot)
-          ============================================================================== */}
+      {/* ============================================================
+          ROW 1: 5 KPI TILES
+          ============================================================ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        {/* Metric 1: Total Transactions Today */}
+        {/* Metric 1 */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-lg border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center">
-              <ShoppingCart size={18} />
-            </div>
+          <div className="w-9 h-9 rounded-lg border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center">
+            <ShoppingCart size={18} />
           </div>
           <div className="mt-3">
-            <p className="text-xs font-medium text-slate-500">Total Transactions Today</p>
+            <p className="text-xs font-medium text-slate-500">Total Transactions</p>
             <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
               {totalTransactionsCount}
             </p>
-            <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-0.5">
-              <span>↑ 12% vs yesterday</span>
-            </p>
+            <p className="text-[11px] font-medium text-slate-400 mt-1">{selectedDateFilter}</p>
           </div>
         </div>
 
-        {/* Metric 2: Completed Transactions */}
+        {/* Metric 2 */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 size={18} />
-            </div>
+          <div className="w-9 h-9 rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <CheckCircle2 size={18} />
           </div>
           <div className="mt-3">
-            <p className="text-xs font-medium text-slate-500">Completed Transactions</p>
+            <p className="text-xs font-medium text-slate-500">Completed</p>
             <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
               {completedTransactionsCount}
             </p>
@@ -395,74 +435,68 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
           </div>
         </div>
 
-        {/* Metric 3: Active Customers */}
+        {/* Metric 3 */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-lg border border-purple-100 bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Users size={18} />
-            </div>
+          <div className="w-9 h-9 rounded-lg border border-purple-100 bg-purple-50 text-purple-600 flex items-center justify-center">
+            <Users size={18} />
           </div>
           <div className="mt-3">
-            <p className="text-xs font-medium text-slate-500">Active Customers</p>
+            <p className="text-xs font-medium text-slate-500">Unique Customers</p>
             <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
               {activeCustomersCount}
             </p>
-            <p className="text-[11px] font-medium text-slate-500 mt-1">
-              Total registered customers
-            </p>
+            <p className="text-[11px] font-medium text-slate-400 mt-1">{selectedDateFilter}</p>
           </div>
         </div>
 
-        {/* Metric 4: Estimated Revenue */}
+        {/* Metric 4 */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-lg border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Wallet size={18} />
-            </div>
+          <div className="w-9 h-9 rounded-lg border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center">
+            <Wallet size={18} />
           </div>
           <div className="mt-3">
-            <p className="text-xs font-medium text-slate-500">Estimated Revenue</p>
+            <p className="text-xs font-medium text-slate-500">Revenue (Paid)</p>
             <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
               ₱{estimatedRevenue.toLocaleString()}
             </p>
-            <p className="text-[11px] font-semibold text-emerald-600 mt-1 flex items-center gap-0.5">
-              <span>↑ 15% vs yesterday</span>
-            </p>
+            <p className="text-[11px] font-medium text-slate-400 mt-1">{selectedDateFilter}</p>
           </div>
         </div>
 
-        {/* Metric 5: Total Staff */}
+        {/* Metric 5 */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-lg border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center">
-              <UserPlus size={18} />
-            </div>
+          <div className="w-9 h-9 rounded-lg border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center">
+            <UserPlus size={18} />
           </div>
           <div className="mt-3">
             <p className="text-xs font-medium text-slate-500">Total Staff</p>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
-              {totalStaffCount}
-            </p>
-            <p className="text-[11px] font-medium text-slate-500 mt-1">
-              Active Today: {activeStaffCount}
-            </p>
+            {staffLoading ? (
+              <Loader2 size={20} className="animate-spin text-blue-400 mt-2" />
+            ) : (
+              <>
+                <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
+                  {totalStaffCount}
+                </p>
+                <p className="text-[11px] font-medium text-slate-500 mt-1">
+                  Active: {activeStaffCount}
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ==============================================================================
-          ROW 2: 3 WIDGETS (Line Chart, Donut Chart, Operational Overview)
-          ============================================================================== */}
+      {/* ============================================================
+          ROW 2: Line Chart + Service Breakdown + Operational Overview
+          ============================================================ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Widget 1: Transaction Trends Line Chart (5 cols) */}
+        {/* Widget 1: Transaction Trends */}
         <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <TrendingUp size={16} className="text-blue-600" />
               <h3 className="font-bold text-sm text-slate-900">Transaction Trends</h3>
             </div>
-
-            {/* Time Filter Dropdown */}
             <select
               value={trendRange}
               onChange={(e) => setTrendRange(e.target.value as any)}
@@ -474,321 +508,210 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
             </select>
           </div>
 
-          {/* SVG Line Chart */}
-          <div className="w-full h-52 sm:h-56 relative">
-            <svg viewBox="0 0 540 220" className="w-full h-full overflow-visible">
-              <defs>
-                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
+          {transactions.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-400 py-8">
+              <TrendingUp size={28} className="opacity-30" />
+              <p className="text-xs">No transaction data yet</p>
+            </div>
+          ) : (
+            <div className="w-full h-52 sm:h-56 relative">
+              <svg viewBox="0 0 540 220" className="w-full h-full overflow-visible">
+                <defs>
+                  <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
 
-              {/* Grid Lines & Y Axis Labels */}
-              {[80, 60, 40, 20, 0].map((val) => {
-                const y = 185 - (val / 80) * 155;
-                return (
-                  <g key={val}>
-                    <text x="35" y={y + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-medium">
-                      {val}
+                {[0, 25, 50, 75, 100].map((pct) => {
+                  const val = Math.round((pct / 100) * maxTrendVal);
+                  const y = 185 - (pct / 100) * 155;
+                  return (
+                    <g key={pct}>
+                      <text x="35" y={y + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-medium">
+                        {val}
+                      </text>
+                      <line x1="45" y1={y} x2="520" y2={y} stroke="#F1F5F9" strokeWidth="1" strokeDasharray={pct === 0 ? "none" : "3 3"} />
+                    </g>
+                  );
+                })}
+
+                <path d={areaPathD} fill="url(#trendGradient)" />
+                <path d={linePathD} fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+                {chartPoints.map((pt) => (
+                  <g key={pt.label} className="group cursor-pointer">
+                    <circle cx={pt.x} cy={pt.y} r="4.5" fill="#2563EB" stroke="#FFFFFF" strokeWidth="2" className="transition-transform group-hover:scale-125" />
+                    <text x={pt.x} y={pt.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-slate-700">
+                      {pt.value}
                     </text>
-                    <line
-                      x1="45"
-                      y1={y}
-                      x2="520"
-                      y2={y}
-                      stroke="#F1F5F9"
-                      strokeWidth="1"
-                      strokeDasharray={val === 0 ? "none" : "3 3"}
-                    />
+                    <text x={pt.x} y="205" textAnchor="middle" className="text-[11px] font-medium fill-slate-500">
+                      {pt.label}
+                    </text>
                   </g>
-                );
-              })}
+                ))}
+              </svg>
+            </div>
+          )}
 
-              {/* Area Fill */}
-              <path d={areaPathD} fill="url(#trendGradient)" />
-
-              {/* Trend Stroke Line */}
-              <path
-                d={linePathD}
-                fill="none"
-                stroke="#2563EB"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              {/* Points & Value Tooltips */}
-              {chartPoints.map((pt) => (
-                <g key={pt.day} className="group cursor-pointer">
-                  {/* Point circle */}
-                  <circle
-                    cx={pt.x}
-                    cy={pt.y}
-                    r="4.5"
-                    fill="#2563EB"
-                    stroke="#FFFFFF"
-                    strokeWidth="2"
-                    className="transition-transform group-hover:scale-125"
-                  />
-
-                  {/* Value badge on point */}
-                  <text
-                    x={pt.x}
-                    y={pt.y - 10}
-                    textAnchor="middle"
-                    className="text-[10px] font-bold fill-slate-700"
-                  >
-                    {pt.value}
-                  </text>
-
-                  {/* X axis Day label */}
-                  <text
-                    x={pt.x}
-                    y="205"
-                    textAnchor="middle"
-                    className="text-[11px] font-medium fill-slate-500"
-                  >
-                    {pt.day}
-                  </text>
-                </g>
-              ))}
-            </svg>
-          </div>
-
-          {/* Legend */}
           <div className="flex items-center justify-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
             <span className="w-2.5 h-2.5 bg-blue-600 rotate-45 inline-block"></span>
             <span className="font-medium text-slate-600">Transactions</span>
           </div>
         </div>
 
-        {/* Widget 2: Most Availed Services Pie Chart (4 cols) */}
+        {/* Widget 2: Most Availed Services */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-2">
-            <PieChart size={16} className="text-blue-600" />
+            <Layers size={16} className="text-blue-600" />
             <h3 className="font-bold text-sm text-slate-900">Most Availed Services</h3>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-around gap-4 py-2">
-            {/* SVG Pie Chart with Percentages inside */}
-            <div className="w-40 h-40 relative shrink-0">
-              <svg viewBox="0 0 200 200" className="w-full h-full">
-                {/* Wedge 1: Wash & Fold 45% (162 deg from -90) */}
-                <path
-                  d="M 100 100 L 100 15 A 85 85 0 0 1 180.84 126.27 Z"
-                  fill="#2563EB"
-                  stroke="#FFFFFF"
-                  strokeWidth="2"
-                />
-                <text x="135" y="70" fill="#FFFFFF" textAnchor="middle" className="text-[11px] font-bold">
-                  45%
-                </text>
-
-                {/* Wedge 2: Wash, Dry & Iron 25% (90 deg from 72 to 162) */}
-                <path
-                  d="M 100 100 L 180.84 126.27 A 85 85 0 0 1 73.73 180.84 Z"
-                  fill="#10B981"
-                  stroke="#FFFFFF"
-                  strokeWidth="2"
-                />
-                <text x="130" y="150" fill="#FFFFFF" textAnchor="middle" className="text-[11px] font-bold">
-                  25%
-                </text>
-
-                {/* Wedge 3: Blanket Wash 15% (54 deg from 162 to 216) */}
-                <path
-                  d="M 100 100 L 73.73 180.84 A 85 85 0 0 1 19.16 126.27 Z"
-                  fill="#F59E0B"
-                  stroke="#FFFFFF"
-                  strokeWidth="2"
-                />
-                <text x="55" y="150" fill="#FFFFFF" textAnchor="middle" className="text-[11px] font-bold">
-                  15%
-                </text>
-
-                {/* Wedge 4: Others 15% (54 deg from 216 to 270) */}
-                <path
-                  d="M 100 100 L 19.16 126.27 A 85 85 0 0 1 100 15 Z"
-                  fill="#8B5CF6"
-                  stroke="#FFFFFF"
-                  strokeWidth="2"
-                />
-                <text x="65" y="75" fill="#FFFFFF" textAnchor="middle" className="text-[11px] font-bold">
-                  15%
-                </text>
-              </svg>
+          {serviceBreakdown.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-400 py-8">
+              <Layers size={28} className="opacity-30" />
+              <p className="text-xs">No service data yet</p>
             </div>
-
-            {/* Legend Beside Chart */}
-            <div className="space-y-2 text-xs w-full sm:w-auto">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
-                  <span className="text-slate-600">Wash & Fold</span>
+          ) : (
+            <div className="space-y-3 py-2">
+              {serviceBreakdown.map((s, idx) => (
+                <div key={s.name}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: s.color }}
+                      />
+                      <span className="text-slate-700 truncate max-w-[140px]">{s.name}</span>
+                    </div>
+                    <span className="font-bold text-slate-900 ml-2">{s.percent}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-100">
+                    <div
+                      className="h-1.5 rounded-full"
+                      style={{ width: `${s.percent}%`, backgroundColor: s.color }}
+                    />
+                  </div>
                 </div>
-                <span className="font-bold text-slate-900">45%</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
-                  <span className="text-slate-600">Wash, Dry & Iron</span>
-                </div>
-                <span className="font-bold text-slate-900">25%</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
-                  <span className="text-slate-600">Blanket Wash</span>
-                </div>
-                <span className="font-bold text-slate-900">15%</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0"></span>
-                  <span className="text-slate-600">Others</span>
-                </div>
-                <span className="font-bold text-slate-900">15%</span>
-              </div>
+              ))}
             </div>
-          </div>
+          )}
 
           <div className="text-[11px] text-slate-400 text-center pt-2 border-t border-slate-100">
-            Based on all completed order records
+            Based on {transactions.length} total transaction{transactions.length !== 1 ? "s" : ""}
           </div>
         </div>
 
-        {/* Widget 3: Operational Overview 2x2 Grid (3 cols) */}
+        {/* Widget 3: Operational Overview */}
         <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-2">
             <Compass size={16} className="text-blue-600" />
             <h3 className="font-bold text-sm text-slate-900">Operational Overview</h3>
           </div>
 
-          {/* 2x2 Grid */}
           <div className="grid grid-cols-2 gap-2.5 my-auto">
-            {/* Box 1: Laundry Currently Processing */}
             <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 flex flex-col justify-between">
               <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
                 <Sparkles size={14} />
               </div>
               <div className="mt-2">
-                <p className="text-[11px] font-medium text-slate-600 leading-tight">
-                  Laundry Currently Processing
-                </p>
+                <p className="text-[11px] font-medium text-slate-600 leading-tight">Currently Processing</p>
                 <p className="text-2xl font-black text-blue-600 mt-1">{processingCount}</p>
               </div>
             </div>
 
-            {/* Box 2: Ready for Pickup */}
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 flex flex-col justify-between">
               <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
                 <ShoppingBag size={14} />
               </div>
               <div className="mt-2">
-                <p className="text-[11px] font-medium text-slate-600 leading-tight">
-                  Ready for Pickup
-                </p>
+                <p className="text-[11px] font-medium text-slate-600 leading-tight">Ready for Pickup</p>
                 <p className="text-2xl font-black text-emerald-600 mt-1">{readyPickupCount}</p>
               </div>
             </div>
 
-            {/* Box 3: Completed Today */}
             <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 flex flex-col justify-between">
               <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
                 <CheckCircle2 size={14} />
               </div>
               <div className="mt-2">
-                <p className="text-[11px] font-medium text-slate-600 leading-tight">
-                  Completed Today
-                </p>
+                <p className="text-[11px] font-medium text-slate-600 leading-tight">Completed Today</p>
                 <p className="text-2xl font-black text-amber-600 mt-1">{completedTodayCount}</p>
               </div>
             </div>
 
-            {/* Box 4: Pending Transactions */}
             <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-3 flex flex-col justify-between">
               <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
                 <Clock size={14} />
               </div>
               <div className="mt-2">
-                <p className="text-[11px] font-medium text-slate-600 leading-tight">
-                  Pending Transactions
-                </p>
+                <p className="text-[11px] font-medium text-slate-600 leading-tight">Pending</p>
                 <p className="text-2xl font-black text-rose-600 mt-1">{pendingTransactionsCount}</p>
               </div>
             </div>
           </div>
 
           <div className="text-[11px] text-slate-400 text-center pt-2 border-t border-slate-100">
-            Real-time shop machines & queue
+            Live queue status
           </div>
         </div>
       </div>
 
-      {/* ==============================================================================
-          ROW 3: 3 CARDS (Customer Insights, Staff Overview, Recent Activity)
-          ============================================================================== */}
+      {/* ============================================================
+          ROW 3: Customer Insights + Staff Overview + Recent Activity
+          ============================================================ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Card 1: Customer Insights (4 cols) */}
+        {/* Card 1: Customer Insights */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center gap-2 mb-3">
             <Users size={16} className="text-blue-600" />
             <h3 className="font-bold text-sm text-slate-900">Customer Insights</h3>
           </div>
 
-          {/* 4 Column Stat Tiles inside */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-auto">
-            {/* Tile 1: Registered Customers */}
             <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between text-center">
               <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-1">
                 <Users size={13} />
               </div>
-              <p className="text-[10px] font-medium text-slate-500 leading-tight">Registered Customers</p>
+              <p className="text-[10px] font-medium text-slate-500 leading-tight">With Phone</p>
               <p className="text-xl font-black text-blue-600 my-1">{customerInsights.registered}</p>
-              <p className="text-[9px] text-slate-400">Total customers</p>
+              <p className="text-[9px] text-slate-400">All time</p>
             </div>
 
-            {/* Tile 2: New Customers This Month */}
             <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between text-center">
               <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-1">
                 <UserPlus size={13} />
               </div>
               <p className="text-[10px] font-medium text-slate-500 leading-tight">New This Month</p>
               <p className="text-xl font-black text-emerald-600 my-1">{customerInsights.newThisMonth}</p>
-              <p className="text-[9px] font-semibold text-emerald-600">↑ 8% vs last mo</p>
+              <p className="text-[9px] text-slate-400">This month</p>
             </div>
 
-            {/* Tile 3: Returning Customers */}
             <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between text-center">
               <div className="w-7 h-7 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-1">
                 <RotateCcw size={13} />
               </div>
-              <p className="text-[10px] font-medium text-slate-500 leading-tight">Returning Customers</p>
+              <p className="text-[10px] font-medium text-slate-500 leading-tight">Returning</p>
               <p className="text-xl font-black text-purple-600 my-1">{customerInsights.returning}</p>
-              <p className="text-[9px] text-slate-400">68% of total</p>
+              <p className="text-[9px] text-slate-400">2+ orders</p>
             </div>
 
-            {/* Tile 4: Unregistered Customers */}
             <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between text-center">
               <div className="w-7 h-7 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-1">
                 <UserCheck size={13} />
               </div>
-              <p className="text-[10px] font-medium text-slate-500 leading-tight">Unregistered</p>
+              <p className="text-[10px] font-medium text-slate-500 leading-tight">Walk-ins</p>
               <p className="text-xl font-black text-amber-600 my-1">{customerInsights.unregistered}</p>
-              <p className="text-[9px] text-slate-400">32% of total</p>
+              <p className="text-[9px] text-slate-400">No phone #</p>
             </div>
           </div>
 
           <div className="text-[11px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">
-            Loyalty and retention rate: 68%
+            Derived from {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
           </div>
         </div>
 
-        {/* Card 2: Staff Overview (4 cols) */}
+        {/* Card 2: Staff Overview */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -804,14 +727,13 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
             </button>
           </div>
 
-          {/* 3 mini stats row */}
           <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-slate-100 text-center">
             <div>
               <p className="text-[10px] text-slate-400">Total Staff</p>
               <p className="text-base font-bold text-blue-600">{totalStaffCount}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-400">Active Today</p>
+              <p className="text-[10px] text-slate-400">Active</p>
               <p className="text-base font-bold text-emerald-600">{activeStaffCount}</p>
             </div>
             <div>
@@ -820,41 +742,49 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
             </div>
           </div>
 
-          {/* Staff Table Preview */}
           <div className="overflow-x-auto my-2">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-[11px] text-slate-400 font-medium border-b border-slate-100">
-                  <th className="pb-1.5 font-medium">Staff Name</th>
-                  <th className="pb-1.5 font-medium">Role</th>
-                  <th className="pb-1.5 font-medium">Status</th>
-                  <th className="pb-1.5 font-medium text-right">Transactions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 text-[11px]">
-                {staffTablePreview.map((staff) => (
-                  <tr key={staff.name} className="hover:bg-slate-50/50">
-                    <td className="py-1.5 font-medium text-slate-800">{staff.name}</td>
-                    <td className="py-1.5 text-slate-500">{staff.role}</td>
-                    <td className="py-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1 font-semibold ${
-                          staff.status === "Active" ? "text-emerald-600" : "text-amber-600"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            staff.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
-                          }`}
-                        ></span>
-                        {staff.status}
-                      </span>
-                    </td>
-                    <td className="py-1.5 font-bold text-slate-800 text-right">{staff.txToday}</td>
+            {staffLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 size={20} className="animate-spin text-slate-400" />
+              </div>
+            ) : staffList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 gap-1 text-slate-400">
+                <Users size={22} className="opacity-30" />
+                <p className="text-xs">No staff assigned yet</p>
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-[11px] text-slate-400 font-medium border-b border-slate-100">
+                    <th className="pb-1.5 font-medium">Staff Name</th>
+                    <th className="pb-1.5 font-medium">Role</th>
+                    <th className="pb-1.5 font-medium">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-[11px]">
+                  {staffList.slice(0, 5).map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-50/50">
+                      <td className="py-1.5 font-medium text-slate-800">{s.full_name}</td>
+                      <td className="py-1.5 text-slate-500">{s.role_title || "Staff"}</td>
+                      <td className="py-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 font-semibold ${
+                            s.status === "Active" ? "text-emerald-600" : "text-amber-600"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              s.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+                            }`}
+                          />
+                          {s.status || "Active"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <div className="text-right pt-2 border-t border-slate-100">
@@ -869,7 +799,7 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
           </div>
         </div>
 
-        {/* Card 3: Recent Activity (4 cols) */}
+        {/* Card 3: Recent Activity */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -885,51 +815,56 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
             </button>
           </div>
 
-          {/* Activity items list */}
           <div className="space-y-2.5 my-1">
-            {recentActivities.map((act) => (
-              <div
-                key={act.id}
-                onClick={() => {
-                  setSelectedActivity(act);
-                  setActiveModal("activityDetail");
-                }}
-                className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-[10px] font-semibold text-slate-400 w-14 shrink-0">
-                    {act.time}
-                  </span>
-                  <div className={`w-7 h-7 rounded-md border flex items-center justify-center shrink-0 ${act.bg}`}>
-                    {act.icon}
-                  </div>
-                  <div className="min-w-0 text-left">
-                    <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-600 transition-colors">
-                      {act.title}
-                    </p>
-                    <p className="text-[10px] text-slate-400 truncate">{act.subtitle}</p>
-                  </div>
-                </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 shrink-0 ml-1" />
+            {recentActivities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 gap-1 text-slate-400">
+                <Clock size={22} className="opacity-30" />
+                <p className="text-xs">No activity yet</p>
               </div>
-            ))}
+            ) : (
+              recentActivities.map((act) => (
+                <div
+                  key={act.id}
+                  onClick={() => {
+                    setSelectedActivity(act);
+                    setActiveModal("activityDetail");
+                  }}
+                  className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-[10px] font-semibold text-slate-400 w-14 shrink-0">
+                      {act.time}
+                    </span>
+                    <div className={`w-7 h-7 rounded-md border flex items-center justify-center shrink-0 ${act.bg}`}>
+                      {act.icon}
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-600 transition-colors">
+                        {act.title}
+                      </p>
+                      <p className="text-[10px] text-slate-400 truncate">{act.subtitle}</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-600 shrink-0 ml-1" />
+                </div>
+              ))
+            )}
           </div>
 
           <div className="text-[11px] text-slate-400 text-center pt-2 border-t border-slate-100">
-            Real-time events log
+            Live events from your transactions
           </div>
         </div>
       </div>
 
-      {/* ==============================================================================
-          ROW 4: QUICK ACCESS (5 Horizontal Cards matching reference screenshot)
-          ============================================================================== */}
+      {/* ============================================================
+          ROW 4: QUICK ACCESS
+          ============================================================ */}
       <div>
         <h3 className="text-sm font-bold text-slate-900 mb-3 tracking-tight">Quick Access</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-          {/* Action 1: View Reports */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div
-            onClick={() => setActiveModal("reports")}
+            onClick={() => onNavigateTab && onNavigateTab("scanner")}
             className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer group flex items-center justify-between"
           >
             <div className="flex items-center gap-3">
@@ -937,18 +872,13 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
                 <BarChart3 size={18} />
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                  View Reports
-                </p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  See detailed analytics and business reports
-                </p>
+                <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">View Transactions</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Browse all orders</p>
               </div>
             </div>
             <ArrowRight size={15} className="text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 ml-2" />
           </div>
 
-          {/* Action 2: Manage Services */}
           <div
             onClick={() => onNavigateTab && onNavigateTab("setup")}
             className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer group flex items-center justify-between"
@@ -958,18 +888,13 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
                 <Tag size={18} />
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                  Manage Services
-                </p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  Add or update laundry services and prices
-                </p>
+                <p className="text-xs font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">Manage Services</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Add or update prices</p>
               </div>
             </div>
             <ArrowRight size={15} className="text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0 ml-2" />
           </div>
 
-          {/* Action 3: Manage Staff */}
           <div
             onClick={() => onNavigateTab && onNavigateTab("staff")}
             className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer group flex items-center justify-between"
@@ -979,54 +904,24 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
                 <Users size={18} />
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
-                  Manage Staff
-                </p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  Create and manage staff accounts
-                </p>
+                <p className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">Manage Staff</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Staff accounts & roles</p>
               </div>
             </div>
             <ArrowRight size={15} className="text-slate-400 group-hover:text-purple-600 transition-colors shrink-0 ml-2" />
           </div>
 
-          {/* Action 4: View Transactions */}
-          <div
-            onClick={() => onNavigateTab && onNavigateTab("scanner")}
-            className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:border-amber-300 hover:shadow-xs transition-all cursor-pointer group flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <Receipt size={18} />
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
-                  View Transactions
-                </p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  Browse all transactions and order history
-                </p>
-              </div>
-            </div>
-            <ArrowRight size={15} className="text-slate-400 group-hover:text-amber-600 transition-colors shrink-0 ml-2" />
-          </div>
-
-          {/* Action 5: Customer Records */}
           <div
             onClick={() => setActiveModal("customerRecords")}
             className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:border-cyan-300 hover:shadow-xs transition-all cursor-pointer group flex items-center justify-between"
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg border border-cyan-100 bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0">
-                <Users size={18} />
+                <FileText size={18} />
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">
-                  Customer Records
-                </p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  Manage customer information
-                </p>
+                <p className="text-xs font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">Customer Records</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">View customer history</p>
               </div>
             </div>
             <ArrowRight size={15} className="text-slate-400 group-hover:text-cyan-600 transition-colors shrink-0 ml-2" />
@@ -1034,82 +929,18 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
         </div>
       </div>
 
-      {/* ==============================================================================
-          MODALS FOR QUICK ACCESS
-          ============================================================================== */}
+      {/* ============================================================
+          MODALS
+          ============================================================ */}
 
-      {/* 1. View Reports Modal */}
-      {activeModal === "reports" && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="text-blue-600" size={20} />
-                <h3 className="font-bold text-slate-900">Comprehensive Business Reports</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <p className="font-bold text-slate-800">Financial Summary</p>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div>
-                    <span className="text-slate-500">Gross Sales Today:</span>
-                    <p className="font-bold text-emerald-600 text-sm">₱{estimatedRevenue.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Estimated Monthly Run:</span>
-                    <p className="font-bold text-blue-600 text-sm">₱{(estimatedRevenue * 28).toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <p className="font-bold text-slate-800">Throughput & Machine Efficiency</p>
-                <p className="text-slate-500 mt-1">
-                  Average turnaround time: <span className="font-bold text-slate-800">2.4 hours per 8kg load</span>. Peak hours: <span className="font-bold text-slate-800">10:00 AM - 3:00 PM</span>.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <p className="font-bold text-slate-800">Service Breakdown</p>
-                <ul className="list-disc list-inside text-slate-600 space-y-1 mt-1">
-                  <li>Wash & Fold: 45% (Highest volume)</li>
-                  <li>Wash, Dry & Iron: 25% (Highest margin)</li>
-                  <li>Blanket & Comforter: 15%</li>
-                  <li>Shoe & Dry clean: 15%</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer shadow-xs"
-              >
-                Close Report
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Customer Records Modal */}
+      {/* Customer Records Modal */}
       {activeModal === "customerRecords" && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Users className="text-cyan-600" size={20} />
-                <h3 className="font-bold text-slate-900">Customer Records Directory</h3>
+                <h3 className="font-bold text-slate-900">Customer Records</h3>
               </div>
               <button
                 type="button"
@@ -1120,36 +951,36 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50">
-                <Search size={14} className="text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search customer by name or phone..."
-                  className="bg-transparent text-xs w-full focus:outline-none text-slate-700"
-                />
-              </div>
+            <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50">
+              <Search size={14} className="text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name or phone..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="bg-transparent text-xs w-full focus:outline-none text-slate-700"
+              />
+            </div>
 
-              <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto text-xs">
-                {[
-                  { name: "John Michael Reyes", phone: "0917 456 7890", orders: 14, spent: "₱2,800", type: "Registered" },
-                  { name: "Maria Santos", phone: "0917 123 4567", orders: 9, spent: "₱1,950", type: "Registered" },
-                  { name: "Walk-In Guest #104", phone: "0920 987 6543", orders: 2, spent: "₱450", type: "Unregistered" },
-                  { name: "Sofia Cruz", phone: "0999 222 3344", orders: 6, spent: "₱1,200", type: "Registered" },
-                  { name: "Walk-In Guest #109", phone: "0918 555 7788", orders: 1, spent: "₱200", type: "Unregistered" },
-                ].map((cust) => (
-                  <div key={cust.phone} className="py-2.5 flex items-center justify-between">
+            <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto text-xs">
+              {filteredCustomerRecords.length === 0 ? (
+                <div className="py-8 text-center text-slate-400">
+                  {transactions.length === 0 ? "No transactions yet." : "No matching customers."}
+                </div>
+              ) : (
+                filteredCustomerRecords.map((cust, idx) => (
+                  <div key={idx} className="py-2.5 flex items-center justify-between">
                     <div>
                       <p className="font-bold text-slate-800">{cust.name}</p>
                       <p className="text-[11px] text-slate-400">{cust.phone} • {cust.type}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-blue-600">{cust.orders} Orders</p>
-                      <p className="text-[11px] text-slate-500">{cust.spent} Spent</p>
+                      <p className="font-bold text-blue-600">{cust.orders} Order{cust.orders !== 1 ? "s" : ""}</p>
+                      <p className="text-[11px] text-slate-500">₱{cust.spent.toLocaleString()} Spent</p>
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -1158,14 +989,14 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
                 onClick={() => setActiveModal(null)}
                 className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs cursor-pointer shadow-xs"
               >
-                Close Directory
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 3. Activity Detail Modal */}
+      {/* Activity Detail Modal */}
       {activeModal === "activityDetail" && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
@@ -1176,10 +1007,7 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  setSelectedActivity(null);
-                }}
+                onClick={() => { setActiveModal(null); setSelectedActivity(null); }}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X size={18} />
@@ -1195,31 +1023,59 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
                   </div>
                   <p className="text-slate-600 mt-1">{selectedActivity.subtitle}</p>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  Event recorded on {selectedDateFilter}. Logged by automatic counter scanner & branch activity tracker.
-                </p>
+                {selectedActivity.rawTx && (
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <p className="text-slate-400">Status</p>
+                      <p className="font-bold text-slate-800">{selectedActivity.rawTx.status}</p>
+                    </div>
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <p className="text-slate-400">Amount</p>
+                      <p className="font-bold text-slate-800">
+                        ₱{Number(selectedActivity.rawTx.total_amount || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <p className="text-slate-400">Service</p>
+                      <p className="font-bold text-slate-800">
+                        {selectedActivity.rawTx.service_name || "—"}
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <p className="text-slate-400">Payment</p>
+                      <p className="font-bold text-slate-800">
+                        {selectedActivity.rawTx.payment_status || "—"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto text-xs">
-                {recentActivities.map((act) => (
-                  <div key={act.id} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex items-center gap-3">
-                    <span className="text-[10px] font-semibold text-slate-400">{act.time}</span>
-                    <div>
-                      <p className="font-bold text-slate-800">{act.title}</p>
-                      <p className="text-[11px] text-slate-500">{act.subtitle}</p>
+                {recentActivities.length === 0 ? (
+                  <div className="py-6 text-center text-slate-400">No activity yet.</div>
+                ) : (
+                  recentActivities.map((act) => (
+                    <div
+                      key={act.id}
+                      className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 flex items-center gap-3 cursor-pointer hover:bg-slate-100"
+                      onClick={() => setSelectedActivity(act)}
+                    >
+                      <span className="text-[10px] font-semibold text-slate-400">{act.time}</span>
+                      <div>
+                        <p className="font-bold text-slate-800">{act.title}</p>
+                        <p className="text-[11px] text-slate-500">{act.subtitle}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
 
             <div className="pt-2 flex justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  setSelectedActivity(null);
-                }}
+                onClick={() => { setActiveModal(null); setSelectedActivity(null); }}
                 className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer shadow-xs"
               >
                 Close
