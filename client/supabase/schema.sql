@@ -142,17 +142,32 @@ create index if not exists idx_transactions_payment_method on public.transaction
 -- 5. Branch Staff Table (Recruited members who can scan only)
 -- ------------------------------------------------------------------------------
 create table if not exists public.branch_staff (
-  id uuid primary key default gen_random_uuid(),
-  shop_id uuid references public.laundry_shops(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  assigned_by uuid references auth.users(id) on delete set null,
-  role_title text default 'Counter Staff',
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  unique (user_id)
+  id uuid not null default gen_random_uuid (),
+  shop_id uuid not null,
+  user_id uuid not null,
+  assigned_by uuid null,
+  role_title text null default 'Counter Staff'::text,
+  birthdate date null,
+  gender text null,
+  profile_picture text null,
+  status text null default 'Active'::text,
+  staff_id_code text null,
+  created_at timestamp with time zone not null default timezone ('utc'::text, now()),
+  constraint branch_staff_pkey primary key (id),
+  constraint branch_staff_user_id_key unique (user_id),
+  constraint branch_staff_assigned_by_fkey foreign key (assigned_by) references auth.users (id) on delete set null,
+  constraint branch_staff_shop_id_fkey foreign key (shop_id) references laundry_shops (id) on delete cascade,
+  constraint branch_staff_user_id_fkey foreign key (user_id) references auth.users (id) on delete cascade
 );
 
-create index if not exists idx_branch_staff_shop on public.branch_staff(shop_id);
-create index if not exists idx_branch_staff_user on public.branch_staff(user_id);
+create index if not exists idx_branch_staff_shop on public.branch_staff using btree (shop_id);
+create index if not exists idx_branch_staff_user on public.branch_staff using btree (user_id);
+
+alter table public.branch_staff add column if not exists birthdate date;
+alter table public.branch_staff add column if not exists gender text;
+alter table public.branch_staff add column if not exists profile_picture text;
+alter table public.branch_staff add column if not exists status text default 'Active';
+alter table public.branch_staff add column if not exists staff_id_code text;
 
 -- ------------------------------------------------------------------------------
 -- 6. Reviews and Ratings

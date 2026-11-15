@@ -104,9 +104,9 @@ export const OwnerAnalyticsDashboard: React.FC<OwnerAnalyticsDashboardProps> = (
     return rev > 0 ? rev : 12450;
   }, [scannedTransactions]);
 
-  const totalStaffCount = staffList.length > 0 ? staffList.length : 8;
-  const activeStaffCount = staffList.filter((s) => s.status === "Active").length || 6;
-  const onLeaveStaffCount = staffList.filter((s) => s.status === "On Leave").length || 2;
+  const totalStaffCount = staffList.length;
+  const activeStaffCount = staffList.filter((s) => s.status === "Active").length;
+  const onLeaveStaffCount = staffList.filter((s) => s.status === "On Leave").length;
 
   // Trend data points for 7 days
   const trendData = useMemo(() => {

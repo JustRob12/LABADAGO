@@ -60,19 +60,19 @@ const CARTO_API_KEY =
   process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_430d_1_0464d8b330e7d05226c320d8";
 
 const withCartoKey = (baseUrl: string) => {
-  if (!CARTO_API_KEY) return baseUrl;
+  if (!CARTO_API_KEY || CARTO_API_KEY.includes("your-carto")) return baseUrl;
   const sep = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${sep}api_key=${CARTO_API_KEY}`;
+  return `${baseUrl}${sep}key=${CARTO_API_KEY}`;
 };
 
 const CARTO_BASEMAPS = {
   voyager: {
     name: "CARTO Voyager",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"),
   },
   positron: {
     name: "CARTO Light (Positron)",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"),
   },
   osm: {
     name: "OpenStreetMap (Standard)",
@@ -80,7 +80,7 @@ const CARTO_BASEMAPS = {
   },
   dark: {
     name: "CARTO Dark Matter",
-    url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"),
+    url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"),
   },
 };
 
@@ -205,6 +205,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
             animate: false,
           });
         }
+        mapInstanceRef.current.invalidateSize({ animate: false });
       } catch (_) {}
     }
   }, [shops, selectedShop, liveLocation]);
@@ -239,7 +240,8 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
 
     async function initMap() {
       try {
-        const L = (await import("leaflet")).default;
+        const leaf = await import("leaflet");
+        const L = (leaf as any).default || leaf;
         if (!isMounted || !mapContainerRef.current) return;
 
         patchLeafletPos(L);
@@ -258,7 +260,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
         const validShop = shops.find((s) => s.latitude && s.longitude);
         const centerCoords: [number, number] = validShop
           ? [validShop.latitude, validShop.longitude]
-          : liveLocation || [14.5800, 121.0350];
+          : liveLocation || [6.948174, 126.228235];
 
         const map = L.map(mapContainerRef.current, {
           center: centerCoords,
@@ -282,7 +284,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           if (e.tile && !e.tile.dataset.fallbackRetried) {
             e.tile.dataset.fallbackRetried = "1";
             const src = e.tile.src || "";
-            const match = src.match(/\/(\d+)\/(\d+)\/(\d+)(?:\.png|\/|\?)/);
+            const match = src.match(/\/(\d+)\/(\d+)\/(\d+)/);
             if (match) {
               e.tile.src = `https://tile.openstreetmap.org/${match[1]}/${match[2]}/${match[3]}.png`;
             }
@@ -306,10 +308,12 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
           }
         };
 
+        triggerInvalidate();
         setTimeout(triggerInvalidate, 50);
         setTimeout(triggerInvalidate, 150);
         setTimeout(triggerInvalidate, 350);
         setTimeout(triggerInvalidate, 700);
+        setTimeout(triggerInvalidate, 1200);
       } catch (err) {
         console.error("Error initializing CARTO Leaflet map:", err);
       }
@@ -918,7 +922,7 @@ export const LaundryMap: React.FC<LaundryMapProps> = ({
       <div
         ref={mapContainerRef}
         className="absolute inset-0 w-full h-full min-h-[440px] z-10 cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "none", minHeight: "440px" }}
+        style={{ touchAction: "none", minHeight: "440px", height: "100%", width: "100%" }}
       />
 
       {/* Floating Control Buttons (Positioned above floating bottom nav on mobile) */}

@@ -8,6 +8,7 @@ import {
   updateStaffMember,
   deleteStaffMember,
 } from "@/lib/supabase/auth";
+import { uploadImageToCloudinary } from "@/lib/cloudinary";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
@@ -39,6 +40,10 @@ import {
   EyeOff,
   UserPlus,
   RefreshCw,
+  Camera,
+  UploadCloud,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 
 interface BranchStaffManagementProps {
@@ -104,7 +109,11 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [newPhone, setNewPhone] = useState("");
-  const [newRole, setNewRole] = useState("Staff");
+  const [newBirthdate, setNewBirthdate] = useState("");
+  const [newGender, setNewGender] = useState("Female");
+  const [newProfilePicture, setNewProfilePicture] = useState("");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [newRole, setNewRole] = useState("Counter Staff");
   const [newStatus, setNewStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
   const [newAssignedShopId, setNewAssignedShopId] = useState(selectedShopId || (shops[0]?.id || ""));
   const [isRegistering, setIsRegistering] = useState(false);
@@ -112,9 +121,13 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   // Modal 2: Edit Staff
   const [editingStaff, setEditingStaff] = useState<BranchStaffMember | null>(null);
   const [editFullName, setEditFullName] = useState("");
-  const [editRole, setEditRole] = useState("Staff");
+  const [editRole, setEditRole] = useState("Counter Staff");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive" | "On Leave">("Active");
   const [editPhone, setEditPhone] = useState("");
+  const [editBirthdate, setEditBirthdate] = useState("");
+  const [editGender, setEditGender] = useState("Female");
+  const [editProfilePicture, setEditProfilePicture] = useState("");
+  const [isUploadingEditPhoto, setIsUploadingEditPhoto] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Modal 3: View Staff
@@ -123,6 +136,26 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   // Modal 4: Delete Confirmation
   const [deletingStaff, setDeletingStaff] = useState<BranchStaffMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Cloudinary Photo Upload Handler
+  const handleUploadPhoto = async (file: File, isEdit: boolean = false) => {
+    if (isEdit) setIsUploadingEditPhoto(true);
+    else setIsUploadingPhoto(true);
+
+    try {
+      const url = await uploadImageToCloudinary(file);
+      if (isEdit) {
+        setEditProfilePicture(url);
+      } else {
+        setNewProfilePicture(url);
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to upload image to Cloudinary.");
+    } finally {
+      if (isEdit) setIsUploadingEditPhoto(false);
+      else setIsUploadingPhoto(false);
+    }
+  };
 
   // Feedback Banners
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -212,11 +245,14 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
     setIsRegistering(true);
     try {
       const res = await registerStaffMember({
-        shopId: newAssignedShopId || selectedShopId || shops[0]?.id || "default-shop-main",
+        shopId: newAssignedShopId || selectedShopId || shops[0]?.id || "",
         fullName: newFullName.trim(),
         email: newEmail.trim(),
         password: newPassword,
         phoneNumber: newPhone.trim(),
+        birthdate: newBirthdate || undefined,
+        gender: newGender,
+        profilePicture: newProfilePicture || undefined,
         roleTitle: newRole,
         status: newStatus,
       });
@@ -233,7 +269,10 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
         setNewEmail("");
         setNewPassword("");
         setNewPhone("");
-        setNewRole("Staff");
+        setNewBirthdate("");
+        setNewGender("Female");
+        setNewProfilePicture("");
+        setNewRole("Counter Staff");
         setNewStatus("Active");
 
         await loadStaffData();
@@ -251,9 +290,12 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
   const handleOpenEdit = (staff: BranchStaffMember) => {
     setEditingStaff(staff);
     setEditFullName(staff.full_name);
-    setEditRole(staff.role_title || "Staff");
+    setEditRole(staff.role_title || "Counter Staff");
     setEditStatus(staff.status || "Active");
     setEditPhone(staff.phone_number);
+    setEditBirthdate(staff.birthdate || "");
+    setEditGender(staff.gender || "Female");
+    setEditProfilePicture(staff.profile_picture || "");
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -266,6 +308,9 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
         role_title: editRole,
         status: editStatus,
         phone_number: editPhone.trim(),
+        birthdate: editBirthdate || null,
+        gender: editGender || null,
+        profile_picture: editProfilePicture || null,
       });
 
       if (res.success) {
@@ -593,20 +638,36 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                         {staffCode}
                       </td>
 
-                      {/* 2. Staff Name with Initials Avatar */}
+                      {/* 2. Staff Name with Cloudinary / Initials Avatar */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${colorClass}`}
-                          >
-                            {initials}
-                          </div>
+                          {staff.profile_picture ? (
+                            <img
+                              src={staff.profile_picture}
+                              alt={staff.full_name}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                            />
+                          ) : (
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${colorClass}`}
+                            >
+                              {initials}
+                            </div>
+                          )}
                           <div>
-                            <div className="font-bold text-slate-900 leading-tight">
-                              {staff.full_name}
+                            <div className="font-bold text-slate-900 leading-tight flex items-center gap-1.5 flex-wrap">
+                              <span>{staff.full_name}</span>
+                              {staff.gender && (
+                                <span className="text-[10px] text-slate-500 font-semibold px-1.5 py-0.2 rounded bg-slate-100">
+                                  {staff.gender}
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
                               {staff.email || "No email specified"}
+                              {staff.birthdate && (
+                                <span className="text-slate-400"> • Born {formatDate(staff.birthdate)}</span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -762,6 +823,61 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
 
             {/* Registration Form */}
             <form onSubmit={handleRegisterStaff} className="space-y-4">
+              {/* Profile Picture Uploader (Cloudinary) */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5 flex items-center justify-between">
+                  <span>Profile Picture (Optional)</span>
+                  <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1">
+                    <Sparkles size={11} /> Cloudinary CDN
+                  </span>
+                </label>
+                <div className="flex items-center gap-3.5 p-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70">
+                  {newProfilePicture ? (
+                    <div className="relative group shrink-0">
+                      <img
+                        src={newProfilePicture}
+                        alt="Staff Preview"
+                        className="w-14 h-14 rounded-full object-cover border-2 border-blue-500 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setNewProfilePicture("")}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-1 shadow-sm hover:bg-rose-600 cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center font-bold text-sm shrink-0 border border-slate-300">
+                      {isUploadingPhoto ? (
+                        <Loader2 size={18} className="animate-spin text-blue-600" />
+                      ) : (
+                        <User size={22} />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs cursor-pointer transition-colors">
+                      <Camera size={13} className="text-blue-600" />
+                      <span>{isUploadingPhoto ? "Uploading to Cloudinary..." : newProfilePicture ? "Change Photo" : "Upload Photo"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingPhoto}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadPhoto(file, false);
+                        }}
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-1">Image uploads directly to Cloudinary.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Branch Assignment */}
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -808,6 +924,39 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                     placeholder="0917 123 4567"
                     className="text-xs h-9"
                   />
+                </div>
+              </div>
+
+              {/* Birthdate & Gender */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Birthdate <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newBirthdate}
+                    onChange={(e) => setNewBirthdate(e.target.value)}
+                    className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 text-slate-800 font-medium cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Gender <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newGender}
+                    onChange={(e) => setNewGender(e.target.value)}
+                    className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                    required
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
                 </div>
               </div>
 
@@ -872,7 +1021,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                     onChange={(e) => setNewRole(e.target.value)}
                     className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    <option value="Staff">Staff (Counter Scanner &amp; Check-In)</option>
+                    <option value="Counter Staff">Counter Staff (Counter Scanner &amp; Check-In)</option>
                     <option value="Manager">Manager (Supervisory &amp; Reports)</option>
                     <option value="Administrator">Administrator (Branch Admin)</option>
                   </select>
@@ -946,6 +1095,60 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              {/* Profile Picture Uploader (Cloudinary) */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1.5 flex items-center justify-between">
+                  <span>Profile Picture</span>
+                  <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1">
+                    <Sparkles size={11} /> Cloudinary
+                  </span>
+                </label>
+                <div className="flex items-center gap-3 p-2.5 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70">
+                  {editProfilePicture ? (
+                    <div className="relative group shrink-0">
+                      <img
+                        src={editProfilePicture}
+                        alt="Staff Preview"
+                        className="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditProfilePicture("")}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 shadow-sm hover:bg-rose-600 cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-300">
+                      {isUploadingEditPhoto ? (
+                        <Loader2 size={16} className="animate-spin text-blue-600" />
+                      ) : (
+                        <User size={18} />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold shadow-2xs cursor-pointer transition-colors">
+                      <Camera size={12} className="text-blue-600" />
+                      <span>{isUploadingEditPhoto ? "Uploading..." : editProfilePicture ? "Change Photo" : "Upload Photo"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingEditPhoto}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadPhoto(file, true);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="text-[11px] font-bold text-slate-700 block mb-1">Full Name</label>
                 <Input
@@ -956,14 +1159,40 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Contact Number</label>
+                  <Input
+                    required
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="text-xs h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Gender</label>
+                  <select
+                    value={editGender}
+                    onChange={(e) => setEditGender(e.target.value)}
+                    className="w-full text-xs h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Contact Number</label>
-                <Input
-                  required
-                  type="tel"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  className="text-xs h-9"
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Birthdate</label>
+                <input
+                  type="date"
+                  value={editBirthdate}
+                  onChange={(e) => setEditBirthdate(e.target.value)}
+                  className="w-full text-xs h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl font-medium cursor-pointer"
                 />
               </div>
 
@@ -975,7 +1204,7 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
                     onChange={(e) => setEditRole(e.target.value)}
                     className="w-full text-xs h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
                   >
-                    <option value="Staff">Staff</option>
+                    <option value="Counter Staff">Counter Staff</option>
                     <option value="Manager">Manager</option>
                     <option value="Administrator">Administrator</option>
                   </select>
@@ -1025,20 +1254,28 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
       {viewingStaff && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in fade-in zoom-in-95 text-center">
-            <div
-              className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-xl shadow-xs ${
-                viewingStaff.avatar_color || "bg-blue-100 text-blue-700"
-              }`}
-            >
-              {getInitials(viewingStaff.full_name)}
-            </div>
+            {viewingStaff.profile_picture ? (
+              <img
+                src={viewingStaff.profile_picture}
+                alt={viewingStaff.full_name}
+                className="w-20 h-20 rounded-2xl mx-auto object-cover border-2 border-blue-500 shadow-md"
+              />
+            ) : (
+              <div
+                className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-xl shadow-xs ${
+                  viewingStaff.avatar_color || "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {getInitials(viewingStaff.full_name)}
+              </div>
+            )}
 
             <div>
               <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                 {viewingStaff.staff_id_code || viewingStaff.id}
               </span>
               <h3 className="text-base font-bold text-slate-900 mt-1.5">{viewingStaff.full_name}</h3>
-              <p className="text-xs text-slate-500">{viewingStaff.email}</p>
+              <p className="text-xs text-slate-500">{viewingStaff.email || "No email"}</p>
             </div>
 
             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-left text-xs space-y-2">
@@ -1048,11 +1285,21 @@ export const BranchStaffManagement: React.FC<BranchStaffManagementProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">System Role:</span>
-                <span className="font-bold text-slate-800">{viewingStaff.role_title || "Staff"}</span>
+                <span className="font-bold text-slate-800">{viewingStaff.role_title || "Counter Staff"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Status:</span>
                 <span className="font-bold text-emerald-700">{viewingStaff.status || "Active"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Gender:</span>
+                <span className="font-bold text-slate-800">{viewingStaff.gender || "Not specified"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Birthdate:</span>
+                <span className="font-bold text-slate-800">
+                  {viewingStaff.birthdate ? formatDate(viewingStaff.birthdate) : "Not specified"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Contact Number:</span>

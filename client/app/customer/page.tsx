@@ -107,7 +107,11 @@ export function CustomerContent() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const profile = await getCurrentUserProfile();
+        // Fetch profile and shops in parallel so shop fetching is never blocked
+        const [profile, shopsList] = await Promise.all([
+          getCurrentUserProfile().catch(() => null),
+          getLaundryShops().catch(() => []),
+        ]);
 
         // Restrict branch staff to staff counter scanner
         if (profile?.role === UserRole.STAFF) {
@@ -117,22 +121,22 @@ export function CustomerContent() {
 
         setUser(profile || null);
 
-        // Fetch all registered laundry shops
-        const shopsList = await getLaundryShops();
-        setShops(shopsList);
+        // Fetch all registered laundry shops, fallback to default seed if empty
+        const finalShops = shopsList && shopsList.length > 0 ? shopsList : await getLaundryShops();
+        setShops(finalShops);
 
         // Match shopId if present in query string
         const urlShopId = searchParams.get("shopId");
-        const foundShop = urlShopId ? shopsList.find((s) => s.id === urlShopId) : null;
+        const foundShop = urlShopId ? finalShops.find((s) => s.id === urlShopId) : null;
         if (foundShop) {
           setSelectedShop(foundShop);
-        } else if (shopsList.length > 0) {
-          setSelectedShop((prev) => (prev ? (shopsList.find((s) => s.id === prev.id) || prev) : shopsList[0]));
+        } else if (finalShops.length > 0) {
+          setSelectedShop((prev) => (prev ? (finalShops.find((s) => s.id === prev.id) || prev) : finalShops[0]));
         }
 
         // Fetch customer transactions (or guest saved orders)
         if (profile) {
-          const txList = await getLaundryTransactions(profile.id);
+          const txList = await getLaundryTransactions(profile.id).catch(() => []);
           setTransactions(txList);
         } else if (typeof window !== "undefined") {
           try {
@@ -140,7 +144,7 @@ export function CustomerContent() {
               localStorage.getItem("labadago_guest_tracking_numbers") || "[]"
             );
             if (guestTrackingNumbers.length > 0) {
-              const txList = await getTransactionsByTrackingNumbers(guestTrackingNumbers);
+              const txList = await getTransactionsByTrackingNumbers(guestTrackingNumbers).catch(() => []);
               setTransactions(txList);
             } else {
               setTransactions([]);
@@ -157,7 +161,7 @@ export function CustomerContent() {
     }
 
     loadData();
-  }, [router]);
+  }, [router, searchParams]);
 
   // Listen for global rating updates from reviews
   useEffect(() => {
@@ -315,18 +319,18 @@ export function CustomerContent() {
         /* VIEW: FULL MAP NAVIGATION (Display All Registered Shops)                  */
         /* ========================================================================= */
         <main className="flex-1 w-full flex flex-col h-[100dvh] lg:h-[calc(100vh)] min-h-0 relative">
-          {/* Top Header Navigation - Hidden on Mobile to give clean full-screen map */}
+          {/* Top Header Navigation - Desktop Only (Hidden on Mobile) */}
           <div className="hidden lg:flex bg-white border-b border-slate-200 px-4 py-2.5 items-center justify-between z-20 shrink-0">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleReturnToHome}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                className="hidden lg:inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 py-1 px-2 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
               >
                 <ChevronLeft size={16} />
                 <span>Return to Home</span>
               </button>
-              <div className="h-4 w-px bg-slate-200" />
+              <div className="h-4 w-px bg-slate-200 hidden lg:block" />
               <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
                 <MapPin size={15} className="text-blue-600" />
                 All Registered Laundry Shops ({shops.length})
@@ -334,14 +338,14 @@ export function CustomerContent() {
             </div>
 
             {/* Quick Switcher - Desktop Only (Hidden on Mobile) */}
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <div className="hidden lg:inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
                 onClick={() => handleSwitchTab("home")}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 <Store size={13} />
-                <span className="hidden sm:inline">Home</span>
+                <span>Home</span>
               </button>
               <button
                 type="button"
@@ -356,7 +360,7 @@ export function CustomerContent() {
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 <QrCode size={13} />
-                <span className="hidden sm:inline">Walk-In QR</span>
+                <span>Walk-In QR</span>
               </button>
               <button
                 type="button"
@@ -364,7 +368,7 @@ export function CustomerContent() {
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 <Package size={13} />
-                <span className="hidden sm:inline">Orders</span>
+                <span>Orders</span>
               </button>
             </div>
           </div>

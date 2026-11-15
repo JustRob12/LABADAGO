@@ -60,6 +60,9 @@ export interface BranchStaffMember {
   full_name: string;
   email: string | null;
   phone_number: string;
+  birthdate?: string | null;
+  gender?: string | null;
+  profile_picture?: string | null;
   role_title?: string;
   status?: "Active" | "Inactive" | "On Leave";
   avatar_color?: string;

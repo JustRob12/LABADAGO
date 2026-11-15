@@ -718,7 +718,9 @@ export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> 
       return data.map((shop) => ({
         ...shop,
         max_kilo_per_load: shop.max_kilo_per_load ? Number(shop.max_kilo_per_load) : 8.0,
-        images: Array.isArray(shop.images) ? shop.images : [],
+        images: Array.isArray(shop.images) && shop.images.length > 0
+          ? shop.images
+          : ["https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80"],
         services: (shop.shop_services || []).map((srv: any) => {
           let kilos: number | null =
             srv.kilos !== undefined && srv.kilos !== null ? Number(srv.kilos) : null;
@@ -738,9 +740,10 @@ export async function getLaundryShops(ownerId?: string): Promise<LaundryShop[]> 
   }
 
   if (ownerId) {
-    return localShopsStore.filter((s) => s.owner_id === ownerId);
+    const ownerShops = localShopsStore.filter((s) => s.owner_id === ownerId);
+    return ownerShops.length > 0 ? ownerShops : DEFAULT_REGISTERED_SHOPS.filter((s) => s.owner_id === ownerId);
   }
-  return localShopsStore;
+  return localShopsStore.length > 0 ? localShopsStore : DEFAULT_REGISTERED_SHOPS;
 }
 
 export async function getShopServices(shopId: string): Promise<ShopService[]> {
@@ -1606,151 +1609,25 @@ export async function searchMembers(query: string): Promise<MemberSearchResult[]
 
 const LOCAL_STORAGE_STAFF_KEY = "labadago_branch_staff_list";
 
-function getInitialStaffSeed(): BranchStaffMember[] {
-  return [
-    {
-      id: "stf-rec-001",
-      staff_id_code: "STF-001",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-001",
-      full_name: "Maria Santos",
-      email: "maria.santos@lavadago.com",
-      phone_number: "0917 123 4567",
-      role_title: "Staff",
-      status: "Active",
-      avatar_color: "bg-blue-100 text-blue-700",
-      created_at: "2024-05-12T08:00:00Z",
-    },
-    {
-      id: "stf-rec-002",
-      staff_id_code: "STF-002",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-002",
-      full_name: "Allan Reyes",
-      email: "allan.reyes@lavadago.com",
-      phone_number: "0918 234 5678",
-      role_title: "Staff",
-      status: "Active",
-      avatar_color: "bg-purple-100 text-purple-700",
-      created_at: "2024-05-15T09:00:00Z",
-    },
-    {
-      id: "stf-rec-003",
-      staff_id_code: "STF-003",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-003",
-      full_name: "Liza Pascual",
-      email: "liza.pascual@lavadago.com",
-      phone_number: "0921 345 6789",
-      role_title: "Manager",
-      status: "Active",
-      avatar_color: "bg-amber-100 text-amber-700",
-      created_at: "2024-05-18T10:00:00Z",
-    },
-    {
-      id: "stf-rec-004",
-      staff_id_code: "STF-004",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-004",
-      full_name: "Kevin Ramirez",
-      email: "kevin.ramirez@lavadago.com",
-      phone_number: "0932 456 7890",
-      role_title: "Staff",
-      status: "Inactive",
-      avatar_color: "bg-rose-100 text-rose-700",
-      created_at: "2024-05-20T11:00:00Z",
-    },
-    {
-      id: "stf-rec-005",
-      staff_id_code: "STF-005",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-005",
-      full_name: "Nicole Rivera",
-      email: "nicole.rivera@lavadago.com",
-      phone_number: "0933 567 8901",
-      role_title: "Staff",
-      status: "Inactive",
-      avatar_color: "bg-slate-100 text-slate-700",
-      created_at: "2024-05-22T12:00:00Z",
-    },
-    {
-      id: "stf-rec-006",
-      staff_id_code: "STF-006",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-006",
-      full_name: "Juan Dela Cruz",
-      email: "juan.delacruz@lavadago.com",
-      phone_number: "0945 678 9012",
-      role_title: "Administrator",
-      status: "Active",
-      avatar_color: "bg-teal-100 text-teal-700",
-      created_at: "2024-05-10T08:00:00Z",
-    },
-    {
-      id: "stf-rec-007",
-      staff_id_code: "STF-007",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-007",
-      full_name: "Mark Lim",
-      email: "mark.lim@lavadago.com",
-      phone_number: "0928 111 2233",
-      role_title: "Staff",
-      status: "On Leave",
-      avatar_color: "bg-pink-100 text-pink-700",
-      created_at: "2024-05-25T13:00:00Z",
-    },
-    {
-      id: "stf-rec-008",
-      staff_id_code: "STF-008",
-      shop_id: "default-shop-main",
-      shop_name: "LabadaGO Laundry - Main Branch",
-      user_id: "usr-staff-008",
-      full_name: "Sofia Cruz",
-      email: "sofia.cruz@lavadago.com",
-      phone_number: "0999 222 3344",
-      role_title: "Staff",
-      status: "On Leave",
-      avatar_color: "bg-orange-100 text-orange-700",
-      created_at: "2024-05-28T14:00:00Z",
-    },
-  ];
-}
-
 function getStoredBranchStaff(): BranchStaffMember[] {
   if (typeof window === "undefined") {
-    if (localStaffStore.length === 0) {
-      localStaffStore = getInitialStaffSeed();
-    }
     return localStaffStore;
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_STAFF_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localStaffStore = parsed;
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Purge any legacy static mock data that starts with 'stf-rec-' or belongs to 'default-shop-main'
+        const cleanList = parsed.filter(
+          (s) => !s.id?.startsWith("stf-rec-") && s.shop_id !== "default-shop-main"
+        );
+        localStaffStore = cleanList;
+        return cleanList;
       }
     }
   } catch {
     // fallback
-  }
-
-  // Seed default staff matching user's screenshot
-  if (localStaffStore.length === 0) {
-    localStaffStore = getInitialStaffSeed();
-    try {
-      localStorage.setItem(LOCAL_STORAGE_STAFF_KEY, JSON.stringify(localStaffStore));
-    } catch {
-      // ignore
-    }
   }
   return localStaffStore;
 }
@@ -1777,7 +1654,7 @@ export async function getBranchStaff(
     let query = supabase
       .from("branch_staff")
       .select(
-        "id, staff_id_code, shop_id, user_id, role_title, status, assigned_by, created_at, laundry_shops(name, owner_id), profiles(full_name, email, phone_number)"
+        "id, staff_id_code, shop_id, user_id, role_title, status, birthdate, gender, profile_picture, assigned_by, created_at, laundry_shops(name, owner_id), profiles(full_name, email, phone_number, date_of_birth, gender, avatar_url)"
       );
 
     if (shopId) {
@@ -1800,7 +1677,10 @@ export async function getBranchStaff(
           full_name: item.profiles?.full_name || item.full_name || "Branch Staff",
           email: item.profiles?.email || item.email || null,
           phone_number: item.profiles?.phone_number || item.phone_number || "",
-          role_title: item.role_title || "Staff",
+          birthdate: item.birthdate || item.profiles?.date_of_birth || null,
+          gender: item.gender || item.profiles?.gender || null,
+          profile_picture: item.profile_picture || item.profiles?.avatar_url || null,
+          role_title: item.role_title || "Counter Staff",
           status: item.status || "Active",
           avatar_color: "bg-blue-100 text-blue-700",
           assigned_by: item.assigned_by,
@@ -1808,15 +1688,44 @@ export async function getBranchStaff(
         }));
       return list;
     }
+
+    // Fallback if custom columns not yet migrated in Supabase
+    if (error && error.message?.includes("column")) {
+      const fallbackQuery = supabase
+        .from("branch_staff")
+        .select(
+          "id, shop_id, user_id, role_title, assigned_by, created_at, laundry_shops(name, owner_id), profiles(full_name, email, phone_number, date_of_birth, gender, avatar_url)"
+        );
+      if (shopId) fallbackQuery.eq("shop_id", shopId);
+      const { data: fbData } = await fallbackQuery;
+      if (fbData && fbData.length > 0) {
+        return fbData.map((item: any, idx: number) => ({
+          id: item.id,
+          staff_id_code: `STF-${String(idx + 1).padStart(3, "0")}`,
+          shop_id: item.shop_id,
+          shop_name: item.laundry_shops?.name || "Laundry Shop",
+          user_id: item.user_id,
+          full_name: item.profiles?.full_name || "Branch Staff",
+          email: item.profiles?.email || null,
+          phone_number: item.profiles?.phone_number || "",
+          birthdate: item.profiles?.date_of_birth || null,
+          gender: item.profiles?.gender || null,
+          profile_picture: item.profiles?.avatar_url || null,
+          role_title: item.role_title || "Counter Staff",
+          status: "Active",
+          avatar_color: "bg-blue-100 text-blue-700",
+          assigned_by: item.assigned_by,
+          created_at: item.created_at,
+        }));
+      }
+    }
   } catch (err) {
     console.warn("Error fetching branch staff from Supabase:", err);
   }
 
   const stored = getStoredBranchStaff();
   if (shopId) {
-    // If filtering by specific shop, include shop-specific or default ones
-    const filtered = stored.filter((s) => s.shop_id === shopId || s.shop_id === "default-shop-main");
-    return filtered.length > 0 ? filtered : stored;
+    return stored.filter((s) => s.shop_id === shopId);
   }
   return stored;
 }
@@ -1827,7 +1736,10 @@ export interface RegisterStaffParams {
   email: string;
   password?: string;
   phoneNumber: string;
-  roleTitle?: string; // "Staff" | "Manager" | "Administrator"
+  birthdate?: string;
+  gender?: string;
+  profilePicture?: string;
+  roleTitle?: string;
   status?: "Active" | "Inactive" | "On Leave";
   staffIdCode?: string;
 }
@@ -1862,6 +1774,9 @@ export async function registerStaffMember(
             data: {
               full_name: params.fullName.trim(),
               phone_number: params.phoneNumber.trim(),
+              date_of_birth: params.birthdate || null,
+              gender: params.gender || "Prefer not to say",
+              avatar_url: params.profilePicture || null,
               role: UserRole.STAFF,
               assigned_shop_id: params.shopId,
               assigned_shop_name: shopName,
@@ -1879,21 +1794,33 @@ export async function registerStaffMember(
 
     // 2. Try inserting into Supabase branch_staff table
     try {
-      await supabase.from("branch_staff").insert([
-        {
-          staff_id_code: staffIdCode,
-          shop_id: params.shopId,
-          user_id: authUserId,
-          full_name: params.fullName.trim(),
-          email: params.email.trim(),
-          phone_number: params.phoneNumber.trim(),
-          role_title: params.roleTitle || "Staff",
-          status: params.status || "Active",
-          assigned_by: user?.id || null,
-        },
-      ]);
+      const staffInsertPayload: any = {
+        shop_id: params.shopId,
+        user_id: authUserId,
+        role_title: params.roleTitle || "Counter Staff",
+        assigned_by: user?.id || null,
+      };
 
-      // Ensure profile role is set to STAFF (3)
+      if (staffIdCode) staffInsertPayload.staff_id_code = staffIdCode;
+      if (params.status) staffInsertPayload.status = params.status;
+      if (params.birthdate) staffInsertPayload.birthdate = params.birthdate;
+      if (params.gender) staffInsertPayload.gender = params.gender;
+      if (params.profilePicture) staffInsertPayload.profile_picture = params.profilePicture;
+
+      const { error: insErr } = await supabase.from("branch_staff").insert([staffInsertPayload]);
+      if (insErr && insErr.message?.includes("column")) {
+        // Fallback for minimal table if custom columns not yet added to DB
+        await supabase.from("branch_staff").insert([
+          {
+            shop_id: params.shopId,
+            user_id: authUserId,
+            role_title: params.roleTitle || "Counter Staff",
+            assigned_by: user?.id || null,
+          },
+        ]);
+      }
+
+      // Ensure profile role is set to STAFF (3) with birthdate, gender, avatar_url
       await supabase.from("profiles").upsert([
         {
           id: authUserId,
@@ -1902,8 +1829,9 @@ export async function registerStaffMember(
           phone_number: params.phoneNumber.trim(),
           role: UserRole.STAFF,
           assigned_shop_id: params.shopId,
-          date_of_birth: "2000-01-01",
-          gender: "Prefer not to say",
+          date_of_birth: params.birthdate || "2000-01-01",
+          gender: params.gender || "Prefer not to say",
+          avatar_url: params.profilePicture || null,
         },
       ]);
     } catch {
@@ -1930,7 +1858,7 @@ export async function registerStaffMember(
     const pickedColor = colors[stored.length % colors.length];
 
     const newStaff: BranchStaffMember = {
-      id: `stf-rec-${Date.now()}`,
+      id: `staff-${Date.now()}`,
       staff_id_code: staffIdCode,
       shop_id: params.shopId,
       shop_name: shopName,
@@ -1938,7 +1866,10 @@ export async function registerStaffMember(
       full_name: params.fullName.trim(),
       email: params.email.trim(),
       phone_number: params.phoneNumber.trim(),
-      role_title: params.roleTitle || "Staff",
+      birthdate: params.birthdate || null,
+      gender: params.gender || null,
+      profile_picture: params.profilePicture || null,
+      role_title: params.roleTitle || "Counter Staff",
       status: params.status || "Active",
       avatar_color: pickedColor,
       assigned_by: user?.id || "owner",
@@ -1973,15 +1904,32 @@ export async function updateStaffMember(
 
     // Update in Supabase if possible
     try {
+      const staffUpdatePayload: any = {
+        role_title: updatedStaff.role_title,
+        status: updatedStaff.status,
+      };
+      if (updatedStaff.birthdate !== undefined) staffUpdatePayload.birthdate = updatedStaff.birthdate;
+      if (updatedStaff.gender !== undefined) staffUpdatePayload.gender = updatedStaff.gender;
+      if (updatedStaff.profile_picture !== undefined) staffUpdatePayload.profile_picture = updatedStaff.profile_picture;
+
       await supabase
         .from("branch_staff")
-        .update({
-          role_title: updatedStaff.role_title,
-          status: updatedStaff.status,
-          phone_number: updatedStaff.phone_number,
-          full_name: updatedStaff.full_name,
-        })
+        .update(staffUpdatePayload)
         .eq("id", staffId);
+
+      // Also update linked profile
+      if (updatedStaff.user_id) {
+        await supabase
+          .from("profiles")
+          .update({
+            full_name: updatedStaff.full_name,
+            phone_number: updatedStaff.phone_number,
+            date_of_birth: updatedStaff.birthdate || undefined,
+            gender: updatedStaff.gender || undefined,
+            avatar_url: updatedStaff.profile_picture || undefined,
+          })
+          .eq("id", updatedStaff.user_id);
+      }
     } catch {
       // ignore
     }

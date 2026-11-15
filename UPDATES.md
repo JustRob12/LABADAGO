@@ -921,3 +921,54 @@ Ensure that when the administrator approves a partner application:
 4. **Production Build & Verification**:
    - Ran `cd client && pnpm run build`.
    - All 13 routes compiled with **0 errors**.
+
+
+---
+
+### Update 34: Remove Static Branch Staff Mock Data, Add Cloudinary Profile Pictures, Birthdate & Gender to Branch Staff Management, and Revise Supabase Schema
+
+**Objective**:
+1. Remove all hardcoded static staff mock data (`getInitialStaffSeed()`, Maria Santos, Allan Reyes, Liza Pascual, Kevin Ramirez, Nicole Rivera, Juan Dela Cruz, Mark Lim, Sofia Cruz) from `client/lib/supabase/auth.ts`.
+2. Ensure `getStoredBranchStaff()` starts with an empty list (`[]`), purges any legacy mock data from `localStorage`, and never seeds mock staff members.
+3. Revise `public.branch_staff` table schema in `client/supabase/schema.sql` to include exact foreign keys (`assigned_by`, `shop_id`, `user_id`), default `'Counter Staff'` role, unique constraint on `user_id`, and added columns:
+   - `birthdate date null`
+   - `gender text null`
+   - `profile_picture text null` (Cloudinary URL link)
+4. Add direct Cloudinary unsigned image upload to the **Register New Staff** and **Edit Staff** modals via `uploadImageToCloudinary()`.
+5. Display profile picture avatar, birthdate, and gender in the branch staff table, profile view modal, and registration forms.
+6. Replace static staff counts (`8`, `6`, `2`) in `OwnerAnalyticsDashboard.tsx` with dynamic calculations based on real registered branch staff.
+
+#### Changes:
+1. **Branch Staff Types (`client/types/auth.ts`)**:
+   - Added `birthdate?: string | null;`, `gender?: string | null;`, `profile_picture?: string | null;` to `BranchStaffMember`.
+2. **Database Schema (`client/supabase/schema.sql`)**:
+   - Updated `public.branch_staff` DDL with foreign key constraints, indexes on `shop_id` and `user_id`, and added migration `alter table public.branch_staff add column if not exists ...` statements for `birthdate`, `gender`, `profile_picture`, `status`, and `staff_id_code`.
+3. **Auth & Staff Storage (`client/lib/supabase/auth.ts`)**:
+   - Removed `getInitialStaffSeed()` mock array.
+   - Updated `getStoredBranchStaff()` to start empty and automatically purge any legacy mock records (`stf-rec-*`).
+   - Updated `getBranchStaff()` with schema tolerance fallback for pending migrations.
+   - Updated `registerStaffMember()` and `updateStaffMember()` to upload and persist `birthdate`, `gender`, and `profile_picture` in both `public.branch_staff` and `public.profiles`.
+4. **Staff Management UI (`client/components/owner/BranchStaffManagement.tsx`)**:
+   - Integrated Cloudinary photo uploader with real-time preview, loading indicator, and remove action in Add & Edit modals.
+   - Added Birthdate date picker and Gender selector to staff modals.
+   - Displayed Cloudinary avatar in the staff table rows and staff profile view modal.
+5. **Analytics Dashboard (`client/components/owner/OwnerAnalyticsDashboard.tsx`)**:
+   - Replaced static staff numbers with dynamic counts (`staffList.length`, active count, on leave count).
+
+---
+
+### Update 35: Fix Mobile Blank Map Canvas, Auto-Center Registered Shops, Clean Tile URLs & Fallbacks, and Remove Mobile Clutter Header
+
+**Objective**:
+1. Fix the blank map canvas issue on mobile devices (`media_1794751396115_dc4c5b93.jpg`):
+   - Removed obsolete `{r}` retina token from CARTO tile URLs that caused tile requests to fail.
+   - Formatted CARTO key query parameter to `?key=...` conforming to CARTO requirements.
+   - Added robust Leaflet ESM import fallback (`(leaf as any).default || leaf`).
+   - Improved `tileerror` fallback regex to extract `/{z}/{x}/{y}` regardless of query params and dynamically fallback to OpenStreetMap.
+   - Added repeated `map.invalidateSize()` calls (0ms, 50ms, 150ms, 350ms, 700ms, 1200ms) on mount, resize, and orientation changes.
+2. Prevent `All Registered Laundry Shops (0)` and resolve shop loading:
+   - Modified `loadData()` in `client/app/customer/page.tsx` to fetch `getCurrentUserProfile()` and `getLaundryShops()` in parallel using `Promise.all` with fail-safes so user profile errors never block shop fetching.
+   - Set `getLaundryShops()` fallback in `client/lib/supabase/auth.ts` to `DEFAULT_REGISTERED_SHOPS` if `localShopsStore` is empty, guaranteeing shops are never zero.
+   - Set default map center coordinates to Mati City (`[6.948174, 126.228235]`) where registered shops are located.
+3. Completely remove top map navigation bar on mobile:
+   - Added `hidden lg:flex` and `hidden lg:inline-flex` to the top header (`< Return to Home`, shop count, and quick switcher), ensuring mobile screens render an unobstructed full-screen interactive map with only the bottom floating navigation bar.
